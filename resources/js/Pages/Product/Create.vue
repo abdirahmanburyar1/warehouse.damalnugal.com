@@ -356,6 +356,11 @@ const props = defineProps({
         default: () => ({
             data: []
         })
+    },
+    facilityTypes: {
+        type: Array,
+        required: false,
+        default: () => ([])
     }
 });
 
@@ -376,13 +381,7 @@ const showDosageModal = ref(false);
 const newCategory = ref({ name: '' });
 const newDosage = ref({ name: '' });
 
-const facilityTypes = ref([
-    "All",
-    "Health Centre",
-    "Primary Health Unit",
-    "District Hospital",
-    "Regional Hospital",
-]);
+const facilityTypes = ref(props.facilityTypes || []);
 
 const submit = async () => {
     // Create a payload with the correct format

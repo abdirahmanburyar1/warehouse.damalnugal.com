@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, computed, onUnmounted } from "vue";
+import { ref, watch, computed, onUnmounted, nextTick } from "vue";
 import { Head, router, Link } from "@inertiajs/vue3";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { useToast } from "vue-toastification";
@@ -52,6 +52,7 @@ const isType = ref({
 // Edit modal state
 const showEditModal = ref(false);
 const isUpdating = ref(false);
+const isInitializingEditModal = ref(false);
 const editForm = ref({
     id: null,
     product_id: null,
@@ -138,7 +139,9 @@ watch(() => editForm.value.warehouse, (newWarehouse) => {
     if (newWarehouse && newWarehouse.id) {
         editForm.value.warehouse_id = newWarehouse.id;
         // Clear location when warehouse changes
-        editForm.value.location = null;
+        if (!isInitializingEditModal.value) {
+            editForm.value.location = null;
+        }
     }
 });
 
@@ -241,28 +244,30 @@ const uploadExcelFile = async () => {
 
         if (data.success) {
             toast.success(data.message);
-            importId.value = data.import_id;
+            if (data.warning) {
+                toast.warning(data.warning);
+            }
             
             // Close modal first
             showUploadModal.value = false;
             uploadFile.value = null;
+            uploadProgress.value = 0;
+            importId.value = null;
             
-            // Start polling for progress after modal is closed
-            startProgressPolling();
+            // If server created a new MOH inventory, select it so user sees imported rows
+            if (data.moh_inventory_id) {
+                selectedInventoryId.value = String(data.moh_inventory_id);
+            }
             
-            // Refresh the page after a short delay to show new data
-            setTimeout(() => {
-                applyFilters();
-            }, 2000);
+            // Refresh the page to show new data
+            applyFilters();
         } else {
             toast.error(data.message);
             // Show detailed error message
-            if (data.message.includes('not found in database')) {
-                toast.error('Import failed: ' + data.message + ' Please add the missing items to the database first.');
-            }
             // Reset upload state on error
             isUploading.value = false;
             uploadProgress.value = 0;
+            importId.value = null;
         }
     } catch (error) {
         console.error('Upload error:', error);
@@ -270,6 +275,9 @@ const uploadExcelFile = async () => {
         // Reset upload state on error
         isUploading.value = false;
         uploadProgress.value = 0;
+        importId.value = null;
+    } finally {
+        isUploading.value = false;
     }
 };
 
@@ -306,6 +314,9 @@ const startProgressPolling = () => {
                     clearInterval(progressInterval.value);
                     progressInterval.value = null;
                     toast.success('Import completed successfully!');
+                    if (data.warning) {
+                        toast.warning(data.warning);
+                    }
                     // Reset upload state after completion
                     isUploading.value = false;
                     uploadProgress.value = 0;
@@ -314,7 +325,7 @@ const startProgressPolling = () => {
                     // Handle import failure
                     clearInterval(progressInterval.value);
                     progressInterval.value = null;
-                    toast.error('Import failed. Please check the logs for details.');
+                    toast.error(data.error || 'Import failed. Please check the logs for details.');
                     // Reset upload state on failure
                     isUploading.value = false;
                     uploadProgress.value = 0;
@@ -487,6 +498,9 @@ const openEditModal = (item) => {
         return;
     }
     
+    // Prevent the warehouse watcher from clearing the location during initialization
+    isInitializingEditModal.value = true;
+
     editForm.value = {
         id: item.id,
         product_id: item.product_id || null,
@@ -513,6 +527,11 @@ const openEditModal = (item) => {
     
     
     showEditModal.value = true;
+
+    // End initialization on next tick so subsequent warehouse changes behave normally
+    nextTick(() => {
+        isInitializingEditModal.value = false;
+    });
 };
 
 // Close edit modal
@@ -1197,10 +1216,10 @@ const filteredInventoryItems = computed(() => {
 
         <!-- Excel Upload Modal -->
         <div v-if="showUploadModal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            class="fixed inset-0 bg-black bg-opacity-50 flex items-stretch justify-stretch z-50 p-0"
             @click="closeUploadModal">
-            <div class="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto" @click.stop>
-                <div class="flex items-center justify-between p-6 border-b border-gray-200">
+            <div class="bg-white shadow-xl w-screen h-screen max-w-none max-h-none overflow-hidden flex flex-col" @click.stop>
+                <div class="flex items-center justify-between p-4 border-b border-gray-200 flex-none">
                     <div>
                         <h3 class="text-lg font-semibold text-gray-900">Upload MOH Inventory</h3>
                         <p class="text-sm text-gray-500 mt-1">Import MOH inventory items from Excel file</p>
@@ -1215,10 +1234,10 @@ const filteredInventoryItems = computed(() => {
                     </button>
                 </div>
 
-                <div class="p-6">
+                <div class="p-4 flex-1 overflow-hidden flex flex-col gap-4">
                     <!-- Download Template Section -->
                     <div
-                        class="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+                        class="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
                         <div class="flex items-start">
                             <div class="flex-shrink-0">
                                 <svg class="h-5 w-5 text-green-400" fill="none" stroke="currentColor"
@@ -1245,9 +1264,12 @@ const filteredInventoryItems = computed(() => {
                         </div>
                     </div>
 
-                    <div class="mb-6">
-                        <h4 class="text-sm font-medium text-gray-900 mb-3">Required Columns</h4>
-                        <div class="bg-gray-50 rounded-lg p-4">
+                    <!-- Collapse long requirements to avoid scrolling in fullscreen modal -->
+                    <details class="bg-gray-50 rounded-lg border border-gray-200">
+                        <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-gray-900 select-none">
+                            Required Columns (click to expand)
+                        </summary>
+                        <div class="px-4 pb-4">
                             <div class="overflow-x-auto">
                                 <table class="min-w-full divide-y divide-gray-200">
                                     <thead class="bg-gray-100">
@@ -1341,15 +1363,15 @@ const filteredInventoryItems = computed(() => {
                                 </div>
                                 <div class="ml-3">
                                     <p class="text-sm text-blue-800">
-                                        <strong>Note:</strong> Products, categories, and dosages will be automatically created if they don't exist. Warehouses must exist in the database before importing.
+                                        <strong>Note:</strong> Products must already exist in the system (otherwise those rows will be skipped). Warehouses must exist in the database before importing.
                                     </p>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </details>
 
-                    <div class="mb-6">
-                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 transition-colors cursor-pointer"
+                    <div class="flex-1 min-h-0">
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors cursor-pointer"
                             @click="triggerFileInput">
                             <input type="file" ref="fileInput" class="hidden" @change="handleFileUpload"
                                 accept=".xlsx,.xls,.csv" />
@@ -1421,7 +1443,7 @@ const filteredInventoryItems = computed(() => {
                     </div>
                 </div>
 
-                <div class="flex justify-end space-x-3 p-6 border-t border-gray-200 bg-gray-50">
+                <div class="flex justify-end space-x-3 p-4 border-t border-gray-200 bg-gray-50 flex-none">
                     <button @click="closeUploadModal"
                         class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200">
                         Cancel

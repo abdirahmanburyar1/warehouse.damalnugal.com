@@ -164,8 +164,10 @@
                                     class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 text-sm">
                                     <option value="">Filter by Status</option>
                                     <option value="pending">Pending</option>
-                                    <option value="Approved">Approved</option>
-                                    <option value="Rejected">Rejected</option>
+                                    <option value="reviewed">Reviewed</option>
+                                    <option value="approved">Approved</option>
+                                    <option value="rejected">Rejected</option>
+                                    <option value="completed">Completed</option>
                                 </select>
                             </div>
                         </div>
@@ -317,26 +319,23 @@
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm border-b border-gray-300">
                                                 <div class="flex items-center space-x-2">
-                                                    <!-- Always show Pending Icon (all statuses start as pending) -->
-                                                    <img src="/assets/images/pending.png" class="w-6 h-6"
-                                                        alt="Pending" />
-
-                                                    <img src="/assets/images/review.png" class="w-8 h-8" v-if="po.status === 'reviewed' || po.status === 'approved' || po.status === 'rejected'"
-                                                    alt="Pending" />
-
-                                                    <!-- Show Approved Icon if status is approved -->
-                                                    <img v-if="po.status === 'approved'"
-                                                        src="/assets/images/approved.png" class="w-6 h-6"
-                                                        alt="Approved" />
-
-                                                    <!-- Show Rejected Icon if status is rejected -->
-                                                    <svg v-if="po.status === 'rejected'"
-                                                        class="w-8 h-8 text-red-600" fill="none"
-                                                        stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                                            stroke-width="2"
-                                                            d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                    </svg>
+                                                    <!-- Completed: show completed only (not workflow icons) -->
+                                                    <template v-if="(po.status || '').toLowerCase() === 'completed'">
+                                                        <svg class="w-6 h-6 text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                        <span class="text-gray-700 font-medium">Completed</span>
+                                                    </template>
+                                                    <!-- Original workflow: pending → reviewed → approved/rejected -->
+                                                    <template v-else>
+                                                        <!-- Pending icon -->
+                                                        <img src="/assets/images/pending.png" class="w-6 h-6" alt="Pending" />
+                                                        <img src="/assets/images/review.png" class="w-8 h-8" v-if="po.status === 'reviewed' || po.status === 'approved' || po.status === 'rejected'" alt="Review" />
+                                                        <img v-if="po.status === 'approved'" src="/assets/images/approved.png" class="w-6 h-6" alt="Approved" />
+                                                        <svg v-if="po.status === 'rejected'" class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                    </template>
                                                 </div>
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium border-b border-gray-300">
@@ -346,7 +345,8 @@
                                                         title="View Purchase Order">
                                                         <EyeIcon class="h-4 w-4" />
                                                     </button>
-                                                    <button @click="router.visit(route('supplies.editPO', po.id))"
+                                                    <button v-if="(po.status || '').toLowerCase() !== 'approved' && (po.status || '').toLowerCase() !== 'completed'"
+                                                        @click="router.visit(route('supplies.editPO', po.id))"
                                                         class="text-blue-600 hover:text-blue-900 transition-colors duration-200 p-1 rounded-md hover:bg-blue-50"
                                                         title="Edit Purchase Order">
                                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4"
@@ -358,7 +358,8 @@
                                                                 clip-rule="evenodd" />
                                                         </svg>
                                                     </button>
-                                                    <button @click="confirmDelete(po.id)"
+                                                    <button v-if="(po.status || '').toLowerCase() !== 'approved' && (po.status || '').toLowerCase() !== 'completed'"
+                                                        @click="confirmDelete(po.id)"
                                                         class="text-red-600 hover:text-red-900 transition-colors duration-200 p-1 rounded-md hover:bg-red-50"
                                                         title="Delete Purchase Order">
                                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4"

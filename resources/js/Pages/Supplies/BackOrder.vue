@@ -1,9 +1,9 @@
 <template>
     <AuthenticatedLayout :title="'Back Order'" description="Track Your Back Orders" img="/assets/images/orders.png">
         <div class="text-gray-900">
-            <div class="mb-4 w-[400px] overflow-auto">
+            <div class="mb-4 w-[400px]">
                 <label for="po" class="block text-sm font-medium text-gray-700">Select Packing List</label>
-                <Multiselect v-model="selectedPo" :options="props.packingList" :searchable="true" :create-option="false"
+                <Multiselect v-model="selectedPo" :options="props.packingList || []" :searchable="true" :create-option="false"
                     class="mt-1" placeholder="Select Packing List" label="packing_list_number" track-by="id"
                     @select="handlePoChange" />
             </div>

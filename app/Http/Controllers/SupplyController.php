@@ -46,7 +46,6 @@ class SupplyController extends Controller
     {
         $purchaseOrders = PurchaseOrder::with('supplier')
             ->withSum('items', 'total_cost')
-            ->where('status', '!=', 'completed')
             ->when($request->filled('search'), function($query) use ($request) {
                 $search = $request->search;
                 $query->where(function($q) use ($search) {
@@ -68,7 +67,6 @@ class SupplyController extends Controller
             ->orderBy('created_at', 'desc');
 
         // Calculate lead times as difference between packing list confirm_at and PO po_date
-        // Only for non-completed purchase orders
         $leadTimes = DB::table('packing_lists as pl')
             ->join('purchase_orders as po', 'po.id', '=', 'pl.purchase_order_id')
             ->select(
@@ -78,14 +76,12 @@ class SupplyController extends Controller
                 DB::raw('COUNT(*) as total_pls')
             )
             ->where('pl.status', '=', 'approved')
-            ->where('po.status', '!=', 'completed')
             ->first();
 
-        // Get statistics for the cards
+        // Get statistics for the cards (all purchase orders)
         $stats = [
             'total_items' => PurchaseOrder::count(),
             'total_cost' => PurchaseOrder::join('purchase_order_items', 'purchase_orders.id', '=', 'purchase_order_items.purchase_order_id')
-                ->where('purchase_orders.status', 'approved')
                 ->sum('purchase_order_items.total_cost'),
             'lead_times' => [
                 'max' => round($leadTimes->max_lead_time ?? 0, 1) . ' Months',
@@ -646,7 +642,12 @@ class SupplyController extends Controller
     }
 
     public function backOrder(Request $request){
-        $packingList = PackingList::where('status', 'approved')->whereHas('items.differences')->select('id','packing_list_number')->with('purchaseOrder:id,po_number')->get();
+        $packingList = PackingList::whereIn('status', ['pending', 'approved'])
+            ->whereHas('items.differences')
+            ->select('id', 'packing_list_number')
+            ->with('purchaseOrder:id,po_number')
+            ->orderBy('created_at', 'desc')
+            ->get();
         return inertia("Supplies/BackOrder", [
             'packingList' => $packingList
         ]);
@@ -972,6 +973,11 @@ class SupplyController extends Controller
             'rejectedBy:id,name'
         ])->findOrFail($id);
 
+        if (in_array(strtolower($po->status ?? ''), ['approved', 'completed'])) {
+            return redirect()->route('supplies.index')
+                ->with('error', 'Approved or completed purchase orders cannot be edited.');
+        }
+
         return inertia('Supplies/EditPo', [
             'po' => $po,
             'products' => Product::select('id', 'name', 'productID')->get(),
@@ -1241,8 +1247,11 @@ class SupplyController extends Controller
         try {
             // Adjust inventory
            $po = PurchaseOrder::find($id);
-           if($po->status != 'pending') {
-            return response()->json("This P.O can be not deleted, becouse its ". $po->status, 500);
+           if (in_array(strtolower($po->status ?? ''), ['approved', 'completed'])) {
+            return response()->json('Approved or completed purchase orders cannot be deleted.', 403);
+           }
+           if ($po->status != 'pending') {
+            return response()->json('This purchase order cannot be deleted because its status is ' . $po->status . '.', 403);
            }
            $po->items()->delete();
            $po->delete();
@@ -1493,10 +1502,9 @@ class SupplyController extends Controller
             return DB::transaction(function () use ($validated, $id) {
                 $po = PurchaseOrder::findOrFail($id);
                 
-                // Allow updates for pending, reviewed, and approved statuses
-                $allowedStatuses = ['pending', 'reviewed', 'approved'];
-                if (!in_array($po->status, $allowedStatuses)) {
-                    throw new \Exception('Purchase order cannot be updated in its current status.');
+                // Approved and completed POs cannot be edited
+                if (in_array(strtolower($po->status ?? ''), ['approved', 'completed'])) {
+                    throw new \Exception('Approved or completed purchase orders cannot be edited.');
                 }
                 
                 // Update PO details

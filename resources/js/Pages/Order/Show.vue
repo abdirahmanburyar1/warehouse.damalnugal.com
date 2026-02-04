@@ -369,8 +369,9 @@
                                         handleQuantityInput(item, 'quantity_to_release', index)" :readonly="props.order.status != 'pending'"
                                         class="w-full rounded-md border border-gray-300 focus:border-orange-500 focus:ring-orange-500 sm:text-sm mb-1" />
                                     <label for="days">No. of Days</label>
-                                    <input type="number" placeholder="0" v-model="item.days"
-                                        @input="handleQuantityInput(item, 'days', index)" :readonly="props.order.status != 'pending'"
+                                    <input type="number" min="1" :value="item.no_of_days ?? 1"
+                                        @input="(e) => { item.no_of_days = Math.max(1, parseInt(e.target.value) || 1); handleQuantityInput(item, 'days', index); }"
+                                        :readonly="props.order.status != 'pending'"
                                         class="w-full rounded-md border border-gray-300 focus:border-orange-500 focus:ring-orange-500 sm:text-sm mb-1" />
                                     <span v-if="isUpading[index]" class="text-green-500 text-md">Updating...</span>
                                     <button @click="showBackOrderModal(item)" v-if="
@@ -425,8 +426,9 @@
                                         handleQuantityInput(item, 'quantity_to_release', index)" :readonly="props.order.status != 'pending'"
                                         class="w-full rounded-md border border-gray-300 focus:border-orange-500 focus:ring-orange-500 sm:text-sm mb-1" />
                                     <label for="days">No. of Days</label>
-                                    <input type="number" placeholder="0" v-model="item.days"
-                                        @input="handleQuantityInput(item, 'days', index)" :readonly="props.order.status != 'pending'"
+                                    <input type="number" min="1" :value="item.no_of_days ?? 1"
+                                        @input="(e) => { item.no_of_days = Math.max(1, parseInt(e.target.value) || 1); handleQuantityInput(item, 'days', index); }"
+                                        :readonly="props.order.status != 'pending'"
                                         class="w-full rounded-md border border-gray-300 focus:border-orange-500 focus:ring-orange-500 sm:text-sm mb-1" />
                                     <span v-if="isUpading[index]" class="text-green-500 text-md">Updating...</span>
                                     <button @click="showBackOrderModal(item)" v-if="
@@ -1421,7 +1423,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onBeforeUnmount, ref, h } from "vue";
+import { computed, onMounted, onBeforeUnmount, ref, watch, h } from "vue";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { router, Link } from "@inertiajs/vue3";
 import {
@@ -1514,12 +1516,24 @@ const statusClasses = {
 const isLoading = ref(false);
 const form = ref([]);
 
+function syncFormFromOrder() {
+    const items = props.order?.items || [];
+    form.value = items.map((item) => ({
+        ...item,
+        no_of_days: Math.max(1, Number(item.no_of_days) || 1),
+    }));
+}
+
 onMounted(() => {
     console.log('Order data:', props.order);
     console.log('Order items:', props.order.items);
-    form.value = props.order.items;
-    console.log('Form value after mount:', form.value);
+    syncFormFromOrder();
 });
+
+// When order items are refreshed (e.g. after update), keep form in sync so column and input show same no_of_days
+watch(() => props.order?.items, (items) => {
+    if (items?.length) syncFormFromOrder();
+}, { deep: true });
 
 const formatDate = (date) => {
     return moment(date).format("DD/MM/YYYY");
@@ -1595,12 +1609,17 @@ const handleQuantityInput = (item, type, index) => {
 };
 
 async function updateQuantity(item, type, index) {
+    const days = item.no_of_days ?? item.days;
+    if (type === 'days' && (!days || Number(days) < 1)) {
+        toast.error('No. of days cannot be 0. Please enter at least 1.');
+        return;
+    }
     isUpading.value[index] = true;
     await axios
         .post(route("orders.update-quantity"), {
             item_id: item.id,
             quantity: item.quantity_to_release,
-            days: item.days,
+            days: type === 'days' ? Math.max(1, Number(days)) : (days || 1),
             type,
         })
         .then(() => {

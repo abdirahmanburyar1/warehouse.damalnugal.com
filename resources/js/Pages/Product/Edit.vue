@@ -365,6 +365,11 @@ const props = defineProps({
             data: []
         })
     },
+    facilityTypes: {
+        type: Array,
+        required: false,
+        default: () => ([])
+    },
     errors: {
         type: Object,
         default: () => ({})
@@ -388,13 +393,7 @@ const showDosageModal = ref(false);
 const newCategory = ref({ name: '' });
 const newDosage = ref({ name: '' });
 
-const facilityTypes = ref([
-    "All",
-    "Health Centre",
-    "Primary Health Unit",
-    "District Hospital",
-    "Regional Hospital",
-]);
+const facilityTypes = ref(props.facilityTypes || []);
 
 // Initialize form with existing data
 onMounted(() => {

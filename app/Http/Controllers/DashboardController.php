@@ -1405,7 +1405,10 @@ class DashboardController extends Controller
         // 6. LMIS REPORTS WORKFLOW TASKS
         
         // LMIS reports awaiting review
-        $lmisReportsPendingReview = \App\Models\FacilityMonthlyReport::where('status', 'submitted')->count();
+        $lmisReportsPendingReview = 0;
+        if (\Illuminate\Support\Facades\Schema::hasTable('facility_monthly_reports')) {
+            $lmisReportsPendingReview = \App\Models\FacilityMonthlyReport::where('status', 'submitted')->count();
+        }
         if ($lmisReportsPendingReview > 0) {
             $tasks[] = [
                 'id' => 'lmis_reports_review',
@@ -1424,7 +1427,10 @@ class DashboardController extends Controller
         }
 
         // LMIS reports awaiting approval
-        $lmisReportsPendingApproval = \App\Models\FacilityMonthlyReport::where('status', 'reviewed')->count();
+        $lmisReportsPendingApproval = 0;
+        if (\Illuminate\Support\Facades\Schema::hasTable('facility_monthly_reports')) {
+            $lmisReportsPendingApproval = \App\Models\FacilityMonthlyReport::where('status', 'reviewed')->count();
+        }
         if ($lmisReportsPendingApproval > 0) {
             $tasks[] = [
                 'id' => 'lmis_reports_approval',

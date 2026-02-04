@@ -23,6 +23,7 @@ use App\Http\Controllers\DispatchController;
 use App\Http\Controllers\FacilityController;
 use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\AssetController;
+use App\Http\Controllers\AssetTypeController;
 use App\Http\Controllers\AssetDocumentController;
 use App\Http\Controllers\AssetMaintenanceController;
 use App\Http\Controllers\InventoryController;
@@ -639,6 +640,7 @@ Route::controller(LocationController::class)
             Route::get('/locations/{location}/sub-locations', 'getSubLocations')->name('assets.locations.sub-locations');
             Route::post('/locations/sub-locations', 'storeSubLocation')->name('assets.locations.sub-locations.store');
             Route::post('/categories/store', 'storeCategory')->name('assets.categories.store');
+            Route::post('/types/store', [AssetTypeController::class, 'store'])->name('assets.types.store');
             Route::post('/locations/store', 'storeAssetLocation')->name('assets.locations.store');
             Route::post('/fund-sources/store', 'storeFundSource')->name('assets.fund-sources.store');
             Route::post('/regions/store', 'storeRegion')->name('assets.regions.store');

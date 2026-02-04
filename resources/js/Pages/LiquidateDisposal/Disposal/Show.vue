@@ -66,24 +66,36 @@
             </div>
 
             <!-- Approval Information -->
-            <div v-if="disposal.reviewed_at || disposal.approved_at || disposal.rejected_at" class="mt-6 pt-6 border-t border-gray-200">
+            <div class="mt-6 pt-6 border-t border-gray-200">
                 <h4 class="text-md font-semibold text-gray-900 mb-3">Approval Information</h4>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div v-if="disposal.reviewed_at">
-                        <p class="text-sm font-medium text-gray-500">Reviewed By</p>
-                        <p class="text-sm text-gray-900">{{ disposal.reviewedBy?.name || 'N/A' }}</p>
-                        <p class="text-xs text-gray-500">{{ formatDate(disposal.reviewed_at) }}</p>
+                    <div v-if="disposal.reviewed_at" class="flex items-center">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Reviewed By</p>
+                            <p class="text-sm text-gray-900">{{ disposal.reviewedBy?.name || 'N/A' }}</p>
+                            <p class="text-xs text-gray-500">Reviewed At: {{ formatDate(disposal.reviewed_at) }}</p>
+                        </div>
                     </div>
-                    <div v-if="disposal.approved_at">
-                        <p class="text-sm font-medium text-gray-500">Approved By</p>
-                        <p class="text-sm text-gray-900">{{ disposal.approvedBy?.name || 'N/A' }}</p>
-                        <p class="text-xs text-gray-500">{{ formatDate(disposal.approved_at) }}</p>
+                    <div v-if="disposal.approved_at" class="flex items-center">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Approved By</p>
+                            <p class="text-sm text-gray-900">{{ disposal.approvedBy?.name || 'N/A' }}</p>
+                            <p class="text-xs text-gray-500">Approved At: {{ formatDate(disposal.approved_at) }}</p>
+                        </div>
                     </div>
-                    <div v-if="disposal.rejected_at">
-                        <p class="text-sm font-medium text-gray-500">Rejected By</p>
-                        <p class="text-sm text-gray-900">{{ disposal.rejectedBy?.name || 'N/A' }}</p>
-                        <p class="text-xs text-gray-500">{{ formatDate(disposal.rejected_at) }}</p>
-                        <p v-if="disposal.rejection_reason" class="text-xs text-red-600 mt-1">{{ disposal.rejection_reason }}</p>
+                    <div v-if="disposal.rejected_at" class="flex items-center">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Rejected By</p>
+                            <p class="text-sm text-gray-900">{{ disposal.rejectedBy?.name || 'N/A' }}</p>
+                            <p class="text-xs text-gray-500">Rejected At: {{ formatDate(disposal.rejected_at) }}</p>
+                            <p v-if="disposal.rejection_reason" class="text-xs text-red-600 mt-1">{{ disposal.rejection_reason }}</p>
+                        </div>
+                    </div>
+                    <div v-if="!disposal.reviewed_at && !disposal.approved_at && !disposal.rejected_at" class="flex items-center">
+                        <svg class="h-4 w-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span class="text-sm text-gray-500">Awaiting approval process</span>
                     </div>
                 </div>
             </div>

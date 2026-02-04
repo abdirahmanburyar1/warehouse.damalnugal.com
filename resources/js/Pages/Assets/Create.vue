@@ -204,7 +204,18 @@ const createType = async () => {
         toast.success("Type created successfully");
     } catch (error) {
         console.error("Error creating type:", error);
-        toast.error(error.response?.data || "Error creating type");
+        const data = error.response?.data;
+        let message = "Error creating type";
+        if (data?.errors && typeof data.errors === "object") {
+            const firstKey = Object.keys(data.errors)[0];
+            const firstMsg = firstKey ? data.errors[firstKey]?.[0] : null;
+            if (firstMsg) message = firstMsg;
+        } else if (data?.message && typeof data.message === "string") {
+            message = data.message;
+        } else if (typeof data === "string") {
+            message = data;
+        }
+        toast.error(message);
     } finally {
         isNewType.value = false;
     }

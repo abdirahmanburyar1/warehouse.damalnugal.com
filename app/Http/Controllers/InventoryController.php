@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
@@ -40,13 +41,19 @@ class InventoryController extends Controller
 		set_time_limit(120);
 		
 		try {
+			$inventoryItemColumns = ['id', 'product_id', 'warehouse_id', 'quantity', 'location', 'batch_number', 'expiry_date', 'uom', 'unit_cost', 'total_cost'];
+			// Newer schema has `source`; older schema may not.
+			if (Schema::hasColumn('inventory_items', 'source')) {
+				$inventoryItemColumns[] = 'source';
+			}
+
 			// Base query with relationships - optimized
 			$productQuery = Product::query()
 				->with([
 					'category:id,name',
 					'dosage:id,name',
-					'items' => function($query) {
-						$query->select('id', 'product_id', 'warehouse_id', 'quantity', 'location', 'batch_number', 'expiry_date', 'uom', 'source', 'unit_cost', 'total_cost')
+					'items' => function($query) use ($inventoryItemColumns) {
+						$query->select($inventoryItemColumns)
 							  ->with('warehouse:id,name');
 					}
 				]);
@@ -221,13 +228,19 @@ class InventoryController extends Controller
 	private function calculateInventoryStatusCounts($request)
 	{
 		try {
+			$inventoryItemColumns = ['id', 'product_id', 'warehouse_id', 'quantity', 'location', 'batch_number', 'expiry_date', 'uom', 'unit_cost', 'total_cost'];
+			// Newer schema has `source`; older schema may not.
+			if (Schema::hasColumn('inventory_items', 'source')) {
+				$inventoryItemColumns[] = 'source';
+			}
+
 			// Use the same query structure as the main index method
 			$productQuery = Product::query()
 				->with([
 					'category:id,name',
 					'dosage:id,name',
-					'items' => function($query) {
-						$query->select('id', 'product_id', 'warehouse_id', 'quantity', 'location', 'batch_number', 'expiry_date', 'uom', 'source', 'unit_cost', 'total_cost')
+					'items' => function($query) use ($inventoryItemColumns) {
+						$query->select($inventoryItemColumns)
 							  ->with('warehouse:id,name');
 					}
 				]);
@@ -481,6 +494,15 @@ class InventoryController extends Controller
 	 */
 	public function import(Request $request)
 	{
+		// Server-side permission enforcement (DB permissions are dash-based)
+		$user = auth()->user();
+		if (!$user || (!$user->can('inventory-manage') && !$user->can('manage-system') && !$user->isAdmin())) {
+			return response()->json([
+				'success' => false,
+				'message' => 'You do not have permission to import inventory'
+			], 403);
+		}
+
 		try {
 			if (!$request->hasFile('file')) {
 				return response()->json([
@@ -507,29 +529,49 @@ class InventoryController extends Controller
 					'message' => 'File size too large. Maximum allowed size is 50MB'
 				], 422);
 			}
-		
-			$importId = (string) Str::uuid();
-		
-			Log::info('Queueing product import with Maatwebsite Excel', [
-				'import_id' => $importId,
-				'original_name' => $file->getClientOriginalName(),
-				'file_size' => $file->getSize(),
-				'extension' => $extension
-			]);
-		
-			// Initialize cache progress to 0
-			Cache::put($importId, 0);
-		
-			// Queue the import job
-			Excel::queueImport(new UploadInventory($importId), $file)->onQueue('imports');
 
-			// broadcast(new UpdateProductUpload($importId, 0));
+			$result = DB::transaction(function () use ($file, $extension) {
+				Log::info('Starting synchronous inventory import with Maatwebsite Excel', [
+					'original_name' => $file->getClientOriginalName(),
+					'file_size' => $file->getSize(),
+					'extension' => $extension
+				]);
 
-		
+				$import = new UploadInventory();
+				Excel::import($import, $file);
+
+				if ($import->createdCount === 0) {
+					$sampleText = count($import->missingProductsSample) ? implode(', ', $import->missingProductsSample) : '';
+					$message = 'No inventory items were imported.';
+					if ($import->missingProductRows > 0) {
+						$message .= ' Some rows were skipped because the product does not exist in the system.';
+						if ($sampleText !== '') {
+							$message .= " Missing (sample): {$sampleText}";
+						}
+					}
+					throw new \Exception($message, 422);
+				}
+
+				$warning = null;
+				if ($import->missingProductRows > 0) {
+					$sampleText = count($import->missingProductsSample) ? implode(', ', $import->missingProductsSample) : '';
+					$warning = 'Some rows were skipped because the product does not exist in the system.';
+					if ($sampleText !== '') {
+						$warning .= " Missing (sample): {$sampleText}";
+					}
+				}
+
+				return [
+					'created_count' => $import->createdCount,
+					'warning' => $warning,
+				];
+			});
+
 			return response()->json([
 				'success' => true,
-				'message' => 'Import has been queued successfully',
-				'import_id' => $importId
+				'message' => "Imported {$result['created_count']} inventory item(s) successfully.",
+				'created_count' => $result['created_count'],
+				'warning' => $result['warning'],
 			]);
 		
 		} catch (\Exception $e) {
@@ -537,6 +579,13 @@ class InventoryController extends Controller
 				'error' => $e->getMessage(),
 				'trace' => $e->getTraceAsString()
 			]);
+
+			if ((int) $e->getCode() === 422) {
+				return response()->json([
+					'success' => false,
+					'message' => $e->getMessage(),
+				], 422);
+			}
 		
 			return response()->json([
 				'success' => false,

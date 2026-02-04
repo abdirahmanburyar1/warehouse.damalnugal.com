@@ -1051,10 +1051,10 @@
                             <div class="relative">
                                 <div class="flex flex-col">
                                     <button @click="openDeliveryForm()"
-                                        :disabled="isType['is_delivering'] || props.transfer?.status != 'dispatched' || (!$page.props.auth.can.transfer_delivery && !$page.props.auth.can.transfer_manage)"
+                                        :disabled="isType['is_deliver'] || props.transfer?.status != 'dispatched' || !canDeliver || !isTransferReceiver"
                                         :class="[
-                                            (!$page.props.auth.can.transfer_delivery && !$page.props.auth.can.transfer_manage)
-                                                ? 'bg-red-200 text-red-800 cursor-not-allowed opacity-75'
+                                            (!canDeliver || !isTransferReceiver)
+                                                ? 'bg-gray-300 cursor-not-allowed opacity-75'
                                                 : props.transfer.status == 'dispatched'
                                                 ? 'bg-yellow-300'
                                                 : statusOrder.indexOf(props.transfer.status) >
@@ -1084,9 +1084,9 @@
                                                         props.transfer.status
                                                     ) > statusOrder.indexOf("delivered")
                                                         ? "Delivered"
-                                                        : isType['is_delivering'] 
+                                                        : isType['is_deliver'] 
                                                             ? 'Please Wait....' 
-                                                            : !canReceive 
+                                                            : (!isTransferReceiver || !canDeliver)
                                                                 ? 'Waiting to be Delivered' 
                                                                 : "Mark as Delivered"
                                                 }}
@@ -2036,6 +2036,14 @@ import "@/Components/multiselect.css";
 const toast = useToast();
 const page = usePage();
 
+// Permission helpers (used by template labels)
+// Note: button enable/disable logic is handled in template via $page.props.auth.can
+const canReview = computed(() => {
+    return Boolean(
+        page.props.auth?.can?.transfer_review || page.props.auth?.can?.transfer_manage
+    );
+});
+
 const props = defineProps({
     transfer: {
         type: Object,
@@ -2049,6 +2057,27 @@ const props = defineProps({
         type: Array,
         required: true,
     },
+});
+
+// Transfer workflow ownership helpers
+// Delivery/Receive actions should be performed by the "to" side (receiver)
+const isTransferReceiver = computed(() => {
+    const user = page.props.auth?.user;
+    if (!user) return false;
+
+    const toWarehouseId = props.transfer?.to_warehouse_id;
+    const toFacilityId = props.transfer?.to_facility_id;
+
+    if (toWarehouseId) return user.warehouse_id === toWarehouseId;
+    if (toFacilityId) return user.facility_id === toFacilityId;
+
+    return false;
+});
+
+const canDeliver = computed(() => {
+    return Boolean(
+        page.props.auth?.can?.transfer_delivery || page.props.auth?.can?.transfer_manage
+    );
 });
 
 const form = ref([]);
@@ -3162,6 +3191,12 @@ const isDeliveryFormValid = computed(() => {
 
 // Delivery modal methods
 const openDeliveryForm = () => {
+    // Safety guard: only the receiver side should be able to mark delivered
+    if (!isTransferReceiver.value || !canDeliver.value) {
+        toast.error("You do not have permission to mark this transfer as delivered.");
+        return;
+    }
+
     showDeliveryModal.value = true;
     // Initialize received cartons with dispatched quantities
     if (props.transfer.dispatch?.length) {

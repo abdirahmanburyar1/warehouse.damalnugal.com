@@ -110,9 +110,16 @@ class ProductController extends Controller
      */
     public function create()
     {
+        $facilityTypes = FacilityType::where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name')
+            ->toArray();
+        array_unshift($facilityTypes, 'All');
+
         return Inertia::render('Product/Create', [
             'categories' => CategoryResource::collection(Category::all()),
-            'dosages' => DosageResource::collection(Dosage::all())
+            'dosages' => DosageResource::collection(Dosage::all()),
+            'facilityTypes' => $facilityTypes,
         ]);
     }
 
@@ -130,11 +137,18 @@ class ProductController extends Controller
         // Add facility_types to the product data
         $productData = $product->toArray();
         $productData['facility_types'] = $facilityTypes;
+
+        $allFacilityTypes = FacilityType::where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name')
+            ->toArray();
+        array_unshift($allFacilityTypes, 'All');
         
         return Inertia::render('Product/Edit', [
             'product' => $productData,
             'categories' => CategoryResource::collection(Category::all()),
-            'dosages' => DosageResource::collection(Dosage::all())
+            'dosages' => DosageResource::collection(Dosage::all()),
+            'facilityTypes' => $allFacilityTypes,
         ]);
     }
 
@@ -171,8 +185,8 @@ class ProductController extends Controller
                 $facilityTypes = $request->facility_types;
     
                 if (in_array('All', $facilityTypes)) {
-                    // Replace "All" with all actual types
-                    $facilityTypes = ['Health Centre', 'Primary Health Unit', 'District Hospital', 'Regional Hospital'];
+                    // Replace "All" with all active facility types from DB
+                    $facilityTypes = FacilityType::where('is_active', true)->pluck('name')->toArray();
                 }
     
                 foreach ($facilityTypes as $type) {
@@ -232,8 +246,8 @@ class ProductController extends Controller
                     $facilityTypes = $request->facility_types;
         
                     if (in_array('All', $facilityTypes)) {
-                        // Replace "All" with all actual types
-                        $facilityTypes = ['Health Centre', 'Primary Health Unit', 'District Hospital', 'Regional Hospital'];
+                        // Replace "All" with all active facility types from DB
+                        $facilityTypes = FacilityType::where('is_active', true)->pluck('name')->toArray();
                     }
         
                     foreach ($facilityTypes as $type) {

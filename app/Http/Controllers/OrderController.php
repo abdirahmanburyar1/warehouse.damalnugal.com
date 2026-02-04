@@ -25,6 +25,7 @@ use App\Models\LogisticCompany;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Carbon\Carbon;
@@ -343,8 +344,10 @@ class OrderController extends Controller
             $request->validate([
                 'item_id'  => 'required|exists:order_items,id',
                 'quantity' => 'required|numeric',
-                'days'     => 'required|numeric',
+                'days'     => 'required|numeric|min:1',
                 'type'     => 'required|in:quantity_to_release,days',
+            ], [
+                'days.min' => 'No. of days cannot be 0. Please enter at least 1.',
             ]);
     
 
@@ -374,15 +377,15 @@ class OrderController extends Controller
             $dailyUsageRate = $originalQuantity / $originalDays;
             
     
-            // Calculate new quantity and days
+            // Calculate new quantity and days (table column is no_of_days)
             if ($request->type === 'days') {
                 $newDays = (int) ceil($request->days);
                 $newQuantityToRelease = (int) ceil($dailyUsageRate * $newDays);
-                $orderItem->days = $newDays;
+                $orderItem->no_of_days = $newDays;
             } else {
                 $newQuantityToRelease = (int) ceil($request->quantity);
                 $newDays = (int) ceil($dailyUsageRate > 0 ? ($newQuantityToRelease / $dailyUsageRate) : 1);
-                $orderItem->days = $newDays;
+                $orderItem->no_of_days = $newDays;
             }
     
             $oldQuantityToRelease = $orderItem->quantity_to_release ?? 0;
@@ -703,8 +706,7 @@ class OrderController extends Controller
         try {
             $search = $request->input('search');
             $products = Product::where('name', 'like', '%' . $search . '%')
-                ->orWhere('barcode', 'like', '%' . $search . '%')
-                ->select('id', 'name', 'barcode')
+                ->select('id', 'name')
                 ->get()
                 ->map(function ($product) {
                     return [
@@ -778,20 +780,39 @@ class OrderController extends Controller
                     // issued quantity - history
                    foreach($order->items as $item){
                         foreach($item['inventory_allocations'] as $allocation){
-                            IssuedQuantity::create([
-                                'order_id' => $order->id,
+                            // Barcode is required in issued_quantities; fall back to inventory item if allocation barcode is missing (products table has no barcode column)
+                            $barcode = $allocation['barcode'] ?? null;
+                            if (empty($barcode)) {
+                                $barcode = InventoryItem::where('product_id', $allocation['product_id'])
+                                    ->where('warehouse_id', $allocation['warehouse_id'])
+                                    ->where('batch_number', $allocation['batch_number'])
+                                    ->where('expiry_date', $allocation['expiry_date'])
+                                    ->value('barcode');
+                            }
+
+                            $issuedPayload = [
                                 'product_id' => $allocation['product_id'],
                                 'warehouse_id' => $allocation['warehouse_id'],
                                 'quantity' => $allocation['allocated_quantity'],
                                 'batch_number' => $allocation['batch_number'],
-                                'barcode' => $allocation['barcode'],
+                                'barcode' => $barcode ?: '',
                                 'uom' => $allocation['uom'],
                                 'expiry_date' => $allocation['expiry_date'],
                                 'issued_by' => $userId,
                                 'issued_date' => $now,
                                 'unit_cost' => $allocation['unit_cost'] ?? 0,
                                 'total_cost' => $allocation['total_cost'] ?? 0,
-                            ]);
+                            ];
+
+                            // Only include foreign keys if columns exist in DB schema
+                            if (Schema::hasColumn('issued_quantities', 'order_id')) {
+                                $issuedPayload['order_id'] = $order->id;
+                            }
+                            if (Schema::hasColumn('issued_quantities', 'transfer_id')) {
+                                $issuedPayload['transfer_id'] = null;
+                            }
+
+                            IssuedQuantity::create($issuedPayload);
                         }
                     }
                     break;

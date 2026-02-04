@@ -407,6 +407,9 @@ const uploadFile = async () => {
             uploadResults.value = response.data;
             toast.dismiss(loadingToast);
             toast.success(response.data.message || "File uploaded successfully!");
+            if (response.data.warning) {
+                toast.warning(response.data.warning);
+            }
 
             // Refresh inventory data
             applyFilters();
@@ -423,10 +426,15 @@ const uploadFile = async () => {
 // Download template function
 const downloadTemplate = () => {
     // Create a CSV format that Excel can open properly
-    const headers = ['Item', 'Category', 'UoM', 'Quantity', 'Batch No', 'Expiry Date', 'Location'];
+    const headers = ['Item', 'Category', 'UoM', 'Source', 'Quantity', 'Batch No', 'Expiry Date', 'Location', 'Warehouse', 'Unit Cost'];
+    const sampleData = [
+        ['Acetylsalicylic acid (aspirin)75mg tab', 'Drugs', 'Pcs', 'UNICEF', '2300', 'ADF345342', '20/02/2028', 'W1-R1-C1-R1', 'Nugal Regional Main Warehouse', '0.4']
+    ];
 
-    // Create CSV content with headers
-    const csvContent = headers.join(',') + '\n';
+    // Create CSV content with headers + sample row
+    const csvContent = [headers, ...sampleData]
+        .map(row => row.map(field => `"${field}"`).join(','))
+        .join('\n');
 
     // Create blob with CSV MIME type
     const blob = new Blob([csvContent], {
@@ -1389,6 +1397,11 @@ onUnmounted(() => {
                                 </li>
                                 <li class="flex items-center">
                                     <span class="w-2 h-2 bg-indigo-500 rounded-full mr-3"></span>
+                                    <span class="font-medium">Source</span>
+                                    <span class="text-gray-400 ml-2">(optional)</span>
+                                </li>
+                                <li class="flex items-center">
+                                    <span class="w-2 h-2 bg-indigo-500 rounded-full mr-3"></span>
                                     <span class="font-medium">Quantity</span>
                                     <span class="text-gray-400 ml-2">(required)</span>
                                 </li>
@@ -1406,6 +1419,16 @@ onUnmounted(() => {
                                     <span class="w-2 h-2 bg-indigo-500 rounded-full mr-3"></span>
                                     <span class="font-medium">Location</span>
                                     <span class="text-gray-400 ml-2">(required)</span>
+                                </li>
+                                <li class="flex items-center">
+                                    <span class="w-2 h-2 bg-indigo-500 rounded-full mr-3"></span>
+                                    <span class="font-medium">Warehouse</span>
+                                    <span class="text-gray-400 ml-2">(recommended)</span>
+                                </li>
+                                <li class="flex items-center">
+                                    <span class="w-2 h-2 bg-indigo-500 rounded-full mr-3"></span>
+                                    <span class="font-medium">Unit Cost</span>
+                                    <span class="text-gray-400 ml-2">(optional)</span>
                                 </li>
                             </ul>
                         </div>
@@ -1473,12 +1496,9 @@ onUnmounted(() => {
                         <div class="bg-green-50 border border-green-200 rounded-md p-4">
                             <h3 class="text-sm font-medium text-green-800">Upload Results</h3>
                             <p class="text-sm text-green-700 mt-1">{{ uploadResults.message }}</p>
-                            <div v-if="uploadResults.import_id" class="mt-2 text-xs text-gray-600">
-                                <p>Import ID: {{ uploadResults.import_id }}</p>
-                                <p v-if="uploadResults.status">Status: {{ uploadResults.status }}</p>
-                                <p v-if="uploadResults.completed_at">Completed at: {{
-                                    formatDate(uploadResults.completed_at) }}
-                                </p>
+                            <div class="mt-2 text-xs text-gray-600">
+                                <p v-if="uploadResults.created_count !== undefined">Created: {{ uploadResults.created_count }}</p>
+                                <p v-if="uploadResults.warning" class="text-amber-700 mt-1">{{ uploadResults.warning }}</p>
                             </div>
                         </div>
                     </div>

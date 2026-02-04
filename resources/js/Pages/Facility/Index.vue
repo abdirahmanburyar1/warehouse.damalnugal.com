@@ -31,6 +31,18 @@
                             </svg>
                             Import Excel
                         </button>
+
+                        <!-- Add Facility Type Button -->
+                        <button
+                            v-if="$page.props.auth.can.facility_manage || $page.props.auth.isAdmin"
+                            @click="openFacilityTypeModal"
+                            class="inline-flex items-center px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                        >
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            Add Facility Type
+                        </button>
                         
                         <!-- Add Facility Button -->
                         <Link v-if="$page.props.auth.can.facility_manage || $page.props.auth.isAdmin" :href="route('facilities.create')"
@@ -84,13 +96,26 @@
                         <label class="block text-sm font-semibold text-gray-700 mb-3">Filter by Type</label>
                         <Multiselect
                             v-model="facilityType"
-                            :options="props.facilityTypes"
+                            :options="[...facilityTypes, ADD_NEW_FACILITY_TYPE_OPTION]"
                             placeholder="All Types"
                             :searchable="true"
                             :allow-empty="true"
                             :show-labels="false"
+                            @select="handleFacilityTypeSelect"
                             class="multiselect-professional"
-                        />
+                        >
+                            <template v-slot:option="{ option }">
+                                <div>
+                                    <span
+                                        v-if="option === ADD_NEW_FACILITY_TYPE_OPTION"
+                                        class="text-indigo-600 font-medium"
+                                    >
+                                        + Add New Facility Type
+                                    </span>
+                                    <span v-else>{{ option }}</span>
+                                </div>
+                            </template>
+                        </Multiselect>
                     </div>
                     
                     <!-- Per Page Selection -->
@@ -122,6 +147,7 @@
                     <p class="text-gray-500 mb-6">Get started by creating your first facility or upload an Excel file.</p>
                     <div class="flex flex-col sm:flex-row gap-3 justify-center">
                         <Link
+                            v-if="$page.props.auth.can.facility_manage || $page.props.auth.isAdmin"
                             :href="route('facilities.create')"
                             class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 border border-transparent rounded-lg font-medium text-sm text-white hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-200 shadow-sm"
                         >
@@ -237,7 +263,10 @@
                                     </button>
                                     
                                     <!-- View-only message for users without edit permissions -->
-                                    <span v-if="!$page.props.auth.can.facility_manage || $page.props.auth.isAdmin" class="text-xs text-gray-500 italic">
+                                    <span
+                                        v-if="!$page.props.auth.can.facility_manage && !$page.props.auth.isAdmin"
+                                        class="text-xs text-gray-500 italic"
+                                    >
                                         View Only
                                     </span>
                                 </div>
@@ -261,6 +290,65 @@
                         class="flex items-center space-x-2"
                         @pagination-change-page="getResults"
                     />
+                </div>
+            </div>
+        </div>
+
+        <!-- New Facility Type Modal -->
+        <div
+            v-if="showFacilityTypeModal"
+            class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            @click="closeFacilityTypeModal"
+        >
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-lg" @click.stop>
+                <div class="flex items-center justify-between p-6 border-b border-gray-200">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">Add Facility Type</h3>
+                        <p class="text-sm text-gray-500 mt-1">Create a new facility type</p>
+                    </div>
+                    <button
+                        @click="closeFacilityTypeModal"
+                        class="text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                        :disabled="isCreatingFacilityType"
+                    >
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="p-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Facility Type Name</label>
+                    <input
+                        v-model="newFacilityType"
+                        type="text"
+                        class="block w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white shadow-sm transition-all duration-200"
+                        placeholder="Enter facility type name"
+                        :disabled="isCreatingFacilityType"
+                        @keyup.enter="createFacilityType"
+                    />
+                </div>
+
+                <div class="flex justify-end space-x-3 p-6 border-t border-gray-200 bg-gray-50">
+                    <button
+                        @click="closeFacilityTypeModal"
+                        class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200"
+                        :disabled="isCreatingFacilityType"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        v-if="$page.props.auth.can.facility_manage || $page.props.auth.isAdmin"
+                        @click="createFacilityType"
+                        class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 border border-transparent rounded-lg font-medium text-sm text-white hover:from-amber-600 hover:to-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        :disabled="!newFacilityType || isCreatingFacilityType"
+                    >
+                        <svg v-if="isCreatingFacilityType" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        {{ isCreatingFacilityType ? 'Creating...' : 'Create Facility Type' }}
+                    </button>
                 </div>
             </div>
         </div>
@@ -506,6 +594,11 @@ const uploadResults = ref(null)
 const importId = ref(null)
 const isDownloadingTemplate = ref(false)
 
+// Facility type creation modal
+const showFacilityTypeModal = ref(false)
+const newFacilityType = ref('')
+const isCreatingFacilityType = ref(false)
+
 const props = defineProps({
     facilities: {
         type: Object,
@@ -538,6 +631,10 @@ const props = defineProps({
     }
 })
 
+// Local, reactive list of facility types (strings)
+const facilityTypes = ref([...(props.facilityTypes || [])])
+const ADD_NEW_FACILITY_TYPE_OPTION = '+ Add New Facility Type'
+
 // Computed properties for statistics - now using independent counts from controller
 const activeCount = computed(() => {
     return props.facilityCounts?.active || 0
@@ -556,6 +653,55 @@ const search = ref(props.filters.search)
 const district = ref(props.filters.district)
 const facilityType = ref(props.filters.facility_type)
 const loadingProducts = ref(new Set());
+
+const openFacilityTypeModal = () => {
+    showFacilityTypeModal.value = true
+}
+
+const closeFacilityTypeModal = () => {
+    if (isCreatingFacilityType.value) return
+    showFacilityTypeModal.value = false
+    newFacilityType.value = ''
+}
+
+async function handleFacilityTypeSelect(option) {
+    if (option === ADD_NEW_FACILITY_TYPE_OPTION) {
+        facilityType.value = null
+        openFacilityTypeModal()
+    } else {
+        facilityType.value = option
+    }
+}
+
+const createFacilityType = async () => {
+    if (!newFacilityType.value) {
+        toast.error('Please enter a facility type name')
+        return
+    }
+
+    isCreatingFacilityType.value = true
+    try {
+        const response = await axios.post(route('products.facility-types.store'), {
+            name: newFacilityType.value
+        })
+
+        const createdName = response?.data
+        if (typeof createdName === 'string' && createdName.length) {
+            if (!facilityTypes.value.includes(createdName)) {
+                facilityTypes.value.push(createdName)
+            }
+            facilityType.value = createdName
+        }
+
+        toast.success('Facility type created successfully')
+        closeFacilityTypeModal()
+    } catch (error) {
+        toast.error(error?.response?.data?.message || error?.response?.data || 'Failed to create facility type')
+        console.error(error)
+    } finally {
+        isCreatingFacilityType.value = false
+    }
+}
 
 // Handle file selection
 const handleFileUpload = (event) => {

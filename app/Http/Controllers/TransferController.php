@@ -1577,7 +1577,9 @@ class TransferController extends Controller
             // Permission checks based on status
             switch ($newStatus) {
                 case 'reviewed':
-                    if (!$user->can('transfer_review')) {
+                    // Allow either specific action permission or full transfer management
+                    // NOTE: permissions in DB are dash-based (e.g. transfer-review), while Vue uses underscores.
+                    if (!$user->can('transfer-review') && !$user->can('transfer-manage')) {
                         DB::rollBack();
                         return response()->json('You do not have permission to review transfers', 403);
                     }
@@ -1590,7 +1592,7 @@ class TransferController extends Controller
                     break;
 
                 case 'approved':
-                    if (!$user->can('transfer_approve')) {
+                    if (!$user->can('transfer-approve') && !$user->can('transfer-manage')) {
                         DB::rollBack();
                         return response()->json('You do not have permission to approve transfers', 403);
                     }
@@ -1604,7 +1606,7 @@ class TransferController extends Controller
 
                 case 'in_process':
                     // Can be done by from warehouse/facility staff
-                    if (!$user->can('transfer_process') && $transfer->status == 'approved') {
+                    if (!$user->can('transfer-processing') && !$user->can('transfer-manage') && $transfer->status == 'approved') {
                         DB::rollBack();
                         return response()->json('You do not have permission to process transfers', 403);
                     }
@@ -1614,7 +1616,7 @@ class TransferController extends Controller
 
                 case 'dispatched':
                     // Can be done by from warehouse/facility staff
-                    if (!$user->can('transfer_dispatch')) {
+                    if (!$user->can('transfer-dispatch') && !$user->can('transfer-manage')) {
                         DB::rollBack();
                         return response()->json('You do not have permission to dispatch transfers', 403);
                     }
@@ -1628,6 +1630,10 @@ class TransferController extends Controller
 
                 case 'delivered':
                     // Can be done by to warehouse/facility staff
+                    if (!$user->can('transfer-delivery') && !$user->can('transfer-manage')) {
+                        DB::rollBack();
+                        return response()->json('You do not have permission to mark transfers as delivered', 403);
+                    }
                     if ($user->warehouse_id !== $transfer->to_warehouse_id && 
                         $user->facility_id !== $transfer->to_facility_id) {
                         DB::rollBack();
@@ -1642,6 +1648,10 @@ class TransferController extends Controller
                     break;
 
                 case 'rejected':
+                    if (!$user->can('transfer-reject') && !$user->can('transfer-manage')) {
+                        DB::rollBack();
+                        return response()->json('You do not have permission to reject transfers', 403);
+                    }
                     if ($transfer->status !== 'reviewed') {
                         DB::rollBack();
                         return response()->json('Transfer must be reviewed to reject', 400);
@@ -1740,6 +1750,10 @@ class TransferController extends Controller
 
                 case 'received':
                     // Can be done by to warehouse/facility staff
+                    if (!$user->can('transfer-receive') && !$user->can('transfer-manage')) {
+                        DB::rollBack();
+                        return response()->json('You do not have permission to receive transfers', 403);
+                    }
                     if ($user->warehouse_id !== $transfer->to_warehouse_id && 
                         $user->facility_id !== $transfer->to_facility_id) {
                         DB::rollBack();

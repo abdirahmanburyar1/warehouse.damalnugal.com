@@ -487,6 +487,319 @@ class PermissionSeeder extends Seeder
                 'module' => 'System Administration',
                 'guard_name' => 'web',
             ],
+
+            // Dashboard
+            [
+                'name' => 'dashboard-view',
+                'display_name' => 'View Dashboard',
+                'description' => 'Can access and view the dashboard',
+                'module' => 'Dashboard',
+                'guard_name' => 'web',
+            ],
+
+            // Category / Role (used by route middleware)
+            [
+                'name' => 'category.view',
+                'display_name' => 'View Categories',
+                'description' => 'Can view categories list and details',
+                'module' => 'Category Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'category.create',
+                'display_name' => 'Create Categories',
+                'description' => 'Can create categories',
+                'module' => 'Category Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'category.edit',
+                'display_name' => 'Edit Categories',
+                'description' => 'Can edit categories',
+                'module' => 'Category Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'category.delete',
+                'display_name' => 'Delete Categories',
+                'description' => 'Can delete categories',
+                'module' => 'Category Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'role.view',
+                'display_name' => 'View Roles',
+                'description' => 'Can view roles and role management screens',
+                'module' => 'Role Management',
+                'guard_name' => 'web',
+            ],
+
+            // Product (frontend uses product_manage)
+            [
+                'name' => 'product-manage',
+                'display_name' => 'Manage Products',
+                'description' => 'Can create/edit/delete/import products (module-level)',
+                'module' => 'Product Management',
+                'guard_name' => 'web',
+            ],
+
+            // Inventory (frontend uses inventory_manage)
+            [
+                'name' => 'inventory-manage',
+                'display_name' => 'Manage Inventory',
+                'description' => 'Can manage inventory actions (module-level)',
+                'module' => 'Inventory Management',
+                'guard_name' => 'web',
+            ],
+
+            // Orders (workflow permissions used in UI)
+            [
+                'name' => 'order-manage',
+                'display_name' => 'Manage Orders',
+                'description' => 'Can manage order workflow actions (module-level)',
+                'module' => 'Order Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'order-review',
+                'display_name' => 'Review Orders',
+                'description' => 'Can review orders',
+                'module' => 'Order Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'order-approve',
+                'display_name' => 'Approve Orders',
+                'description' => 'Can approve orders',
+                'module' => 'Order Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'order-reject',
+                'display_name' => 'Reject Orders',
+                'description' => 'Can reject orders',
+                'module' => 'Order Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'order-processing',
+                'display_name' => 'Process Orders',
+                'description' => 'Can mark orders as processing / in-progress',
+                'module' => 'Order Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'order-dispatch',
+                'display_name' => 'Dispatch Orders',
+                'description' => 'Can dispatch orders',
+                'module' => 'Order Management',
+                'guard_name' => 'web',
+            ],
+
+            // Transfers (workflow permissions used in UI)
+            [
+                'name' => 'transfer-manage',
+                'display_name' => 'Manage Transfers',
+                'description' => 'Can manage transfer workflow actions (module-level)',
+                'module' => 'Transfer Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'transfer-review',
+                'display_name' => 'Review Transfers',
+                'description' => 'Can review transfers',
+                'module' => 'Transfer Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'transfer-approve',
+                'display_name' => 'Approve Transfers',
+                'description' => 'Can approve transfers',
+                'module' => 'Transfer Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'transfer-reject',
+                'display_name' => 'Reject Transfers',
+                'description' => 'Can reject transfers',
+                'module' => 'Transfer Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'transfer-processing',
+                'display_name' => 'Process Transfers',
+                'description' => 'Can mark transfers as processing / in-progress',
+                'module' => 'Transfer Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'transfer-dispatch',
+                'display_name' => 'Dispatch Transfers',
+                'description' => 'Can dispatch transfers',
+                'module' => 'Transfer Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'transfer-receive',
+                'display_name' => 'Receive Transfers',
+                'description' => 'Can receive transfers',
+                'module' => 'Transfer Management',
+                'guard_name' => 'web',
+            ],
+
+            // Wastage (sidebar uses wastage_view)
+            [
+                'name' => 'wastage-view',
+                'display_name' => 'View Wastages',
+                'description' => 'Can view wastage / liquidate / disposal records',
+                'module' => 'Wastage Management',
+                'guard_name' => 'web',
+            ],
+
+            // MOH Inventory (permissions used in UI)
+            [
+                'name' => 'moh-inventory-view',
+                'display_name' => 'View MOH Inventory',
+                'description' => 'Can view MOH inventory records',
+                'module' => 'MOH Inventory',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'moh-inventory-create',
+                'display_name' => 'Create MOH Inventory',
+                'description' => 'Can create/import MOH inventory records',
+                'module' => 'MOH Inventory',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'moh-inventory-review',
+                'display_name' => 'Review MOH Inventory',
+                'description' => 'Can review MOH inventory records',
+                'module' => 'MOH Inventory',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'moh-inventory-approve',
+                'display_name' => 'Approve MOH Inventory',
+                'description' => 'Can approve MOH inventory records',
+                'module' => 'MOH Inventory',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'moh-inventory-reject',
+                'display_name' => 'Reject MOH Inventory',
+                'description' => 'Can reject MOH inventory records',
+                'module' => 'MOH Inventory',
+                'guard_name' => 'web',
+            ],
+
+            // Packing List (UI uses packing_list_update)
+            [
+                'name' => 'packing-list-update',
+                'display_name' => 'Update Packing Lists',
+                'description' => 'Can update packing lists after creation',
+                'module' => 'Packing List Management',
+                'guard_name' => 'web',
+            ],
+
+            // Received Backorders (UI uses received_backorder_review/approve)
+            [
+                'name' => 'received-backorder-view',
+                'display_name' => 'View Received Backorders',
+                'description' => 'Can view received backorders',
+                'module' => 'Supply Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'received-backorder-create',
+                'display_name' => 'Create Received Backorders',
+                'description' => 'Can create received backorders',
+                'module' => 'Supply Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'received-backorder-review',
+                'display_name' => 'Review Received Backorders',
+                'description' => 'Can review received backorders',
+                'module' => 'Supply Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'received-backorder-approve',
+                'display_name' => 'Approve Received Backorders',
+                'description' => 'Can approve received backorders',
+                'module' => 'Supply Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'received-backorder-reject',
+                'display_name' => 'Reject Received Backorders',
+                'description' => 'Can reject received backorders',
+                'module' => 'Supply Management',
+                'guard_name' => 'web',
+            ],
+
+            // Reports (some parts of the app use report-view/report-export keys)
+            [
+                'name' => 'report-view',
+                'display_name' => 'View Reports (Legacy)',
+                'description' => 'Can view reports (legacy key used in UI/backend)',
+                'module' => 'Reports',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'report-export',
+                'display_name' => 'Export Reports (Legacy)',
+                'description' => 'Can export reports (legacy key used in UI/backend)',
+                'module' => 'Reports',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'report-physical-count-view',
+                'display_name' => 'View Physical Count Report',
+                'description' => 'Can view physical count reports',
+                'module' => 'Reports',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'report-physical-count-generate',
+                'display_name' => 'Generate Physical Count Report',
+                'description' => 'Can generate physical count reports',
+                'module' => 'Reports',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'report-physical-count-review',
+                'display_name' => 'Review Physical Count Report',
+                'description' => 'Can review physical count reports',
+                'module' => 'Reports',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'report-physical-count-approve',
+                'display_name' => 'Approve Physical Count Report',
+                'description' => 'Can approve physical count reports',
+                'module' => 'Reports',
+                'guard_name' => 'web',
+            ],
+
+            // Settings (view-only seeder expects setting-view)
+            [
+                'name' => 'setting-view',
+                'display_name' => 'View Settings',
+                'description' => 'Can view settings screens (read-only)',
+                'module' => 'System Administration',
+                'guard_name' => 'web',
+            ],
+
+            // Suppliers (view-only seeder expects supplier-view)
+            [
+                'name' => 'supplier-view',
+                'display_name' => 'View Suppliers',
+                'description' => 'Can view suppliers',
+                'module' => 'Supply Management',
+                'guard_name' => 'web',
+            ],
         ];
 
         foreach ($permissions as $permission) {

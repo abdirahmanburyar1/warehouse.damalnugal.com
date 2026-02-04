@@ -73,13 +73,26 @@
                         <InputLabel for="facility_type" value="Facility Type" />
                         <Multiselect
                             v-model="form.facility_type"
-                            :options="props.facilityTypes"
+                            :options="[...facilityTypes, ADD_NEW_FACILITY_TYPE_OPTION]"
                             :searchable="true"
                             :close-on-select="true"
                             :show-labels="false"
                             :allow-empty="true"
                             placeholder="Select Facility Type"
-                        ></Multiselect>
+                            @select="handleFacilityTypeSelect"
+                        >
+                            <template v-slot:option="{ option }">
+                                <div>
+                                    <span
+                                        v-if="option === ADD_NEW_FACILITY_TYPE_OPTION"
+                                        class="text-indigo-600 font-medium"
+                                    >
+                                        + Add New Facility Type
+                                    </span>
+                                    <span v-else>{{ option }}</span>
+                                </div>
+                            </template>
+                        </Multiselect>
                         <InputError
                             :message="errors.facility_type"
                             class="mt-2"
@@ -216,7 +229,12 @@
                             >Cancel</SecondaryButton
                         >
                     </Link>
-                    <PrimaryButton :disabled="isSubmitting || !$page.props.auth.can.facility-manage || $page.props.auth.isAdmin">
+                    <PrimaryButton
+                        :disabled="
+                            isSubmitting ||
+                            !($page.props.auth?.can?.['facility-manage'] || $page.props.auth?.isAdmin)
+                        "
+                    >
                         {{ isSubmitting ? "Creating..." : "Create Facility" }}
                     </PrimaryButton>
                 </div>
@@ -250,10 +268,54 @@
                         Cancel
                     </SecondaryButton>
                     <PrimaryButton
-                        :disabled="isNewRegion || !$page.props.auth.can.facility-manage || $page.props.auth.isAdmin"
+                        :disabled="
+                            isNewRegion ||
+                            !($page.props.auth?.can?.['facility-manage'] || $page.props.auth?.isAdmin)
+                        "
                         @click="createRegion"
                     >
                         {{ isNewRegion ? "Waiting..." : "Create Region" }}
+                    </PrimaryButton>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- New Facility Type Modal -->
+        <Modal :show="showFacilityTypeModal" @close="closeFacilityTypeModal">
+            <div class="p-6">
+                <h2 class="text-lg font-medium text-gray-900">
+                    Add New Facility Type
+                </h2>
+
+                <div class="mt-6">
+                    <InputLabel for="new_facility_type" value="Facility Type Name" />
+                    <input
+                        id="new_facility_type"
+                        type="text"
+                        class="mt-1 block w-full"
+                        placeholder="Enter facility type name"
+                        v-model="newFacilityType"
+                        :disabled="isCreatingFacilityType"
+                        required
+                    />
+                </div>
+
+                <div class="mt-6 flex justify-end space-x-3">
+                    <SecondaryButton
+                        @click="closeFacilityTypeModal"
+                        :disabled="isCreatingFacilityType"
+                    >
+                        Cancel
+                    </SecondaryButton>
+                    <PrimaryButton
+                        :disabled="
+                            isCreatingFacilityType ||
+                            !newFacilityType ||
+                            !($page.props.auth?.can?.['facility-manage'] || $page.props.auth?.isAdmin)
+                        "
+                        @click="createFacilityType"
+                    >
+                        {{ isCreatingFacilityType ? "Waiting..." : "Create Facility Type" }}
                     </PrimaryButton>
                 </div>
             </div>
@@ -286,7 +348,10 @@
                         Cancel
                     </SecondaryButton>
                     <PrimaryButton
-                        :disabled="isNewDistrict || !$page.props.auth.can.facility-manage || $page.props.auth.isAdmin"
+                        :disabled="
+                            isNewDistrict ||
+                            !($page.props.auth?.can?.['facility-manage'] || $page.props.auth?.isAdmin)
+                        "
                         @click="createDistrict"
                     >
                         {{ isNewDistrict ? "Waiting..." : "Create District" }}
@@ -329,6 +394,7 @@ const props = defineProps({
 // Create reactive arrays (regions starts with props data, districts starts empty)
 const regions = ref([...props.regions]);
 const districts = ref([]);
+const facilityTypes = ref([...(props.facilityTypes || [])]);
 
 const showRegionModal = ref(false);
 const newRegion = ref("");
@@ -337,10 +403,15 @@ const showDistrictModal = ref(false);
 const newDistrict = ref("");
 const isNewDistrict = ref(false);
 
+const showFacilityTypeModal = ref(false);
+const newFacilityType = ref("");
+const isCreatingFacilityType = ref(false);
+
 const handledBy = ref(null);
 
 const ADD_NEW_REGION_OPTION = "+ Add New Region";
 const ADD_NEW_DISTRICT_OPTION = "+ Add New District";
+const ADD_NEW_FACILITY_TYPE_OPTION = "+ Add New Facility Type";
 
 const isSubmitting = ref(false);
 const errors = ref({});
@@ -378,6 +449,55 @@ async function handleDistrictSelect(option) {
     }
 }
 
+async function handleFacilityTypeSelect(option) {
+    if (option === ADD_NEW_FACILITY_TYPE_OPTION) {
+        form.value.facility_type = null;
+        showFacilityTypeModal.value = true;
+    } else {
+        form.value.facility_type = option;
+    }
+}
+
+const closeFacilityTypeModal = () => {
+    if (isCreatingFacilityType.value) return;
+    showFacilityTypeModal.value = false;
+    newFacilityType.value = "";
+};
+
+const createFacilityType = async () => {
+    if (!newFacilityType.value) {
+        toast.error("Please enter a facility type name");
+        return;
+    }
+
+    isCreatingFacilityType.value = true;
+    try {
+        const response = await axios.post(route("products.facility-types.store"), {
+            name: newFacilityType.value,
+        });
+
+        const createdName = response?.data;
+        if (typeof createdName === "string" && createdName.length) {
+            if (!facilityTypes.value.includes(createdName)) {
+                facilityTypes.value.push(createdName);
+            }
+            form.value.facility_type = createdName;
+        }
+
+        toast.success("Facility type created successfully");
+        closeFacilityTypeModal();
+    } catch (error) {
+        toast.error(
+            error?.response?.data?.message ||
+                error?.response?.data ||
+                "Failed to create facility type"
+        );
+        console.log(error);
+    } finally {
+        isCreatingFacilityType.value = false;
+    }
+};
+
 const createRegion = async () => {
     if (!newRegion.value) {
         toast.error("Please enter a region name");
@@ -399,6 +519,11 @@ const createRegion = async () => {
         })
         .catch((error) => {
             isNewRegion.value = false;
+            toast.error(
+                error?.response?.data?.message ||
+                    error?.response?.data ||
+                    "Failed to create region"
+            );
             console.log(error);
         });
 };
@@ -425,6 +550,11 @@ const createDistrict = async () => {
         })
         .catch((error) => {
             isNewDistrict.value = false;
+            toast.error(
+                error?.response?.data?.message ||
+                    error?.response?.data ||
+                    "Failed to create district"
+            );
             console.log(error);
         });
 };
@@ -436,6 +566,11 @@ async function loadDistrict() {
             districts.value = response.data;
         })
         .catch((error) => {
+            toast.error(
+                error?.response?.data?.message ||
+                    error?.response?.data ||
+                    "Failed to load districts"
+            );
             console.log(error);
         });
 }

@@ -101,6 +101,8 @@
                         :close-on-select="true"
                         :allow-empty="true"
                         placeholder="Select Source"
+                        track-by="value"
+                        label="label"
                     >
                     </Multiselect>
                 </div>
@@ -319,7 +321,8 @@ const dateTo = ref(props.filters?.date_to || '');
 
 const sourceOptions = [
     { value: '', label: 'All Sources' },
-    { value: 'packing_list', label: 'Packing List' },
+    { value: 'Packing List', label: 'Packing List' },
+    { value: 'Missing', label: 'Missing' },
     { value: 'expiry', label: 'Expiry' },
     { value: 'audit_adjustment', label: 'Audit Adjustment' },
 ];
@@ -348,7 +351,7 @@ function getResult(page = 1) {
     const query = {};
     if (search.value) query.search = search.value;
     if (per_page.value) query.per_page = per_page.value;
-    if (source.value) query.source = source.value;
+    if (source) query.source = typeof source === 'object' && source !== null && 'value' in source ? source.value : source;
     if (dateFrom.value) query.date_from = dateFrom.value;
     if (dateTo.value) query.date_to = dateTo.value;
     if (currentStatus.value !== 'all') query.status = currentStatus.value;

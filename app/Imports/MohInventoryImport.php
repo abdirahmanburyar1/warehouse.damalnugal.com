@@ -4,22 +4,14 @@ namespace App\Imports;
 
 use App\Models\Product;
 use App\Models\Warehouse;
-use App\Models\MohInventory;
 use App\Models\MohInventoryItem;
-use Illuminate\Support\Facades\Cache;
+use App\Models\Location;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Queue\InteractsWithQueue;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
 use Maatwebsite\Excel\Concerns\WithBatchInserts;
 use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
-use Maatwebsite\Excel\Concerns\WithEvents;
-use Maatwebsite\Excel\Events\AfterImport;
-use Maatwebsite\Excel\Events\BeforeImport;
-use Maatwebsite\Excel\Events\ImportFailed;
 use Carbon\Carbon;
 
 class MohInventoryImport implements 
@@ -27,47 +19,34 @@ class MohInventoryImport implements
     WithHeadingRow, 
     WithChunkReading, 
     WithBatchInserts, 
-    SkipsEmptyRows, 
-    WithEvents,
-    ShouldQueue
+    SkipsEmptyRows
 {
-    use Queueable, InteractsWithQueue;
-
-    public $importId;
     public $mohInventoryId;
-    private $totalRows = 0;
-    private $processedRows = 0;
+    public int $createdCount = 0;
+    public int $missingProductRows = 0;
+    /** @var array<string,true> */
+    private array $missingProductsSet = [];
+    /** @var string[] */
+    public array $missingProductsSample = [];
 
-    public function __construct(string $importId, int $mohInventoryId)
+    public function __construct(int $mohInventoryId)
     {
-        $this->importId = $importId;
         $this->mohInventoryId = $mohInventoryId;
-        
     }
 
     public function model(array $row)
     {
-        // Increment processed rows counter
-        $this->processedRows++;
-        
-        // Update progress every 10 rows or at the end
-        if ($this->processedRows % 10 == 0 || $this->processedRows == $this->totalRows) {
-            $progress = $this->totalRows > 0 ? min(100, round(($this->processedRows / $this->totalRows) * 100)) : 0;
-            Cache::put($this->importId, $progress);
-
-        }
-        
-        
         // Check if required fields are present - try different column name variations
-        $itemName = $row['item'] ?? $row['Item'];
-        $quantity = $row['quantity'] ?? $row['Quantity'];
+        $itemName = $row['item'] ?? $row['Item'] ?? null;
+        $quantity = $row['quantity'] ?? $row['Quantity'] ?? null;
         
-        if (empty($itemName) || empty($quantity)) {
+        // Quantity may be "0" which empty() treats as falsey; allow 0.
+        if (empty($itemName) || $quantity === null || $quantity === '') {
             return null;
         }
 
         // Get product (will return null if not found, causing row to be skipped)
-        $product = $this->getOrCreateProduct($row, $itemName);
+        $product = $this->getOrCreateProduct($row, (string) $itemName);
         
         // If product doesn't exist, skip this row
         if (!$product) {
@@ -82,24 +61,46 @@ class MohInventoryImport implements
 
         // Parse expiry date - try different column name variations
         $expiryDateValue = $row['expiry_date'] ?? $row['Expiry Date'] ?? $row['EXPIRY_DATE'] ?? $row['expiry'] ?? null;
-        $expiryDate = $this->parseExpiryDate($row['expiry_date']);
+        $expiryDate = $this->parseExpiryDate($expiryDateValue);
 
-        // Create MOH inventory item with flexible column mapping and data cleaning
-        $item = MohInventoryItem::create([
-            'moh_inventory_id' => $this->mohInventoryId,
-            'product_id' => $product->id,
-            'warehouse_id' => $warehouse->id,
-            'quantity' => (int) $quantity,
-            'expiry_date' => $expiryDate,
-            'batch_number' => trim($row['batch_no'] ?? $row['Batch No'] ?? $row['BATCH_NO'] ?? $row['batch_number'] ?? '') ?: null,
-            'barcode' => trim($row['barcode'] ?? $row['Barcode'] ?? $row['BARCODE'] ?? '') ?: null,
-            'location' => trim($row['location'] ?? $row['Location'] ?? $row['LOCATION'] ?? '') ?: null,
-            'notes' => trim($row['notes'] ?? $row['Notes'] ?? $row['NOTES'] ?? '') ?: null,
-            'uom' => trim($row['uom'] ?? $row['UoM'] ?? $row['UOM'] ?? $row['unit'] ?? '') ?: null,
-            'source' => trim($row['source'] ?? $row['Source'] ?? $row['SOURCE'] ?? '') ?: 'Excel Import',
-            'unit_cost' => (float) ($row['unit_cost'] ?? $row['Unit Cost'] ?? $row['UNIT_COST'] ?? $row['unit_cost'] ?? $row['UnitCost'] ?? 0),
-            'total_cost' => (float) ($row['unit_cost'] ?? $row['Unit Cost'] ?? $row['UNIT_COST'] ?? $row['unit_cost'] ?? $row['UnitCost'] ?? 0) * (float) $quantity,
-        ]);
+        // Location is stored as a STRING (not an id) across inventory tables.
+        // Ensure the (warehouse name + location string) exists in locations table; create it if missing.
+        // Wrap the entire row write in a transaction to avoid partial writes.
+        DB::transaction(function () use ($row, $warehouse, $product, $quantity, $expiryDate) {
+            $locationValue = $row['location'] ?? $row['Location'] ?? $row['LOCATION'] ?? null;
+            $locationValue = is_string($locationValue) ? trim(preg_replace('/\s+/', ' ', $locationValue)) : null;
+            if (!empty($locationValue)) {
+                Location::firstOrCreate(
+                    [
+                        'location' => $locationValue,
+                        'warehouse' => $warehouse->name,
+                    ],
+                    [
+                        'location' => $locationValue,
+                        'warehouse' => $warehouse->name,
+                    ]
+                );
+            }
+
+            // Create MOH inventory item with flexible column mapping and data cleaning
+            MohInventoryItem::create([
+                'moh_inventory_id' => $this->mohInventoryId,
+                'product_id' => $product->id,
+                'warehouse_id' => $warehouse->id,
+                'quantity' => (int) $quantity,
+                'expiry_date' => $expiryDate,
+                'batch_number' => trim($row['batch_no'] ?? $row['Batch No'] ?? $row['BATCH_NO'] ?? $row['batch_number'] ?? '') ?: null,
+                'barcode' => trim($row['barcode'] ?? $row['Barcode'] ?? $row['BARCODE'] ?? '') ?: null,
+                'location' => $locationValue ?: null,
+                'notes' => trim($row['notes'] ?? $row['Notes'] ?? $row['NOTES'] ?? '') ?: null,
+                'uom' => trim($row['uom'] ?? $row['UoM'] ?? $row['UOM'] ?? $row['unit'] ?? '') ?: null,
+                'source' => trim($row['source'] ?? $row['Source'] ?? $row['SOURCE'] ?? '') ?: 'Excel Import',
+                'unit_cost' => (float) ($row['unit_cost'] ?? $row['Unit Cost'] ?? $row['UNIT_COST'] ?? $row['unit_cost'] ?? $row['UnitCost'] ?? 0),
+                'total_cost' => (float) ($row['unit_cost'] ?? $row['Unit Cost'] ?? $row['UNIT_COST'] ?? $row['unit_cost'] ?? $row['UnitCost'] ?? 0) * (float) $quantity,
+            ]);
+
+            $this->createdCount++;
+        });
         return null;
     }
 
@@ -112,8 +113,29 @@ class MohInventoryImport implements
             return $product;
         }
 
-        // If product doesn't exist, return null to skip this row
+        // If product doesn't exist, record for user feedback and skip this row
+        $this->recordMissingProduct($itemName);
         return null;
+    }
+
+    protected function recordMissingProduct(string $itemName): void
+    {
+        $cleanName = trim(preg_replace('/\s+/', ' ', $itemName));
+        if ($cleanName === '') {
+            return;
+        }
+
+        $this->missingProductRows++;
+
+        // Keep unique list in-memory (per import)
+        if (!isset($this->missingProductsSet[$cleanName])) {
+            $this->missingProductsSet[$cleanName] = true;
+
+            // Avoid unbounded growth: keep first 25 unique names
+            if (count($this->missingProductsSample) < 25) {
+                $this->missingProductsSample[] = $cleanName;
+            }
+        }
     }
 
 
@@ -197,28 +219,5 @@ class MohInventoryImport implements
     public function batchSize(): int
     {
         return 100;
-    }
-
-    public function registerEvents(): array
-    {
-        return [
-            BeforeImport::class => function(BeforeImport $event) {
-                // Get total row count for progress tracking
-                $this->totalRows = $event->getReader()->getTotalRows();
-                
-                // Initialize progress to 0
-                Cache::put($this->importId, 0);
-            },
-            AfterImport::class => function(AfterImport $event) {
-                
-                // Update cache to indicate completion
-                Cache::put($this->importId, 100);
-            },
-            ImportFailed::class => function(ImportFailed $event) {
-                                
-                // Update cache to indicate failure
-                Cache::put($this->importId, -1);
-            },
-        ];
     }
 }

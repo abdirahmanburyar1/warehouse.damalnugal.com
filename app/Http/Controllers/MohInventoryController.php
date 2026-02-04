@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
@@ -30,6 +31,20 @@ class MohInventoryController extends Controller
     public function index(Request $request)
     {
         try {
+            // If migrations haven't been run yet, don't crash the whole app.
+            if (!Schema::hasTable('moh_inventories')) {
+                return Inertia::render('MohInventory/Index', [
+                    'nonApprovedInventories' => [],
+                    'selectedInventory' => null,
+                    'categories' => [],
+                    'dosages' => [],
+                    'products' => [],
+                    'warehouses' => [],
+                    'locations' => [],
+                    'filters' => $request->only(['inventory_id', 'search', 'category_id', 'dosage_id']),
+                ])->with('error', 'MOH Inventory tables are missing. Please run the MOH inventory migrations.');
+            }
+
             // Get non-approved MOH inventories for the select dropdown
             $nonApprovedInventories = MohInventory::whereNull('approved_at')
                 ->with([
@@ -89,6 +104,27 @@ class MohInventoryController extends Controller
      */
     public function import(Request $request)
     {
+        // Server-side permission enforcement (frontend uses underscore keys; DB uses dash names)
+        $user = auth()->user();
+        if (!$user || (!$user->can('moh-inventory-create') && !$user->can('manage-system') && !$user->isAdmin())) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You do not have permission to import MOH inventory'
+            ], 403);
+        }
+
+        // If migrations haven't been run yet, return a friendly error instead of a SQL exception.
+        if (!Schema::hasTable('moh_inventories') || !Schema::hasTable('moh_inventory_items')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'MOH Inventory tables are missing. Please run the MOH inventory migrations first.',
+                'missing_tables' => [
+                    'moh_inventories' => Schema::hasTable('moh_inventories'),
+                    'moh_inventory_items' => Schema::hasTable('moh_inventory_items'),
+                ],
+            ], 500);
+        }
+
         try {
             if (!$request->hasFile('file')) {
                 return response()->json([
@@ -116,30 +152,84 @@ class MohInventoryController extends Controller
                 ], 422);
             }
 
-            // Get or create MOH inventory
-            $mohInventory = $this->getOrCreateMohInventory($request);
+            $result = DB::transaction(function () use ($request, $file, $extension) {
+                // Resolve target MOH inventory (existing or new). Create inside txn so we can rollback on 0 imported.
+                $mohInventory = null;
+                $usedExisting = false;
 
-            $importId = (string) Str::uuid();
+                if ($request->filled('moh_inventory_id')) {
+                    $mohInventory = MohInventory::find($request->moh_inventory_id);
+                    if (!$mohInventory) {
+                        throw new \Exception('MOH inventory not found', 422);
+                    }
+                    $usedExisting = true;
+                } else {
+                    $mohInventory = MohInventory::create([
+                        'uuid' => 'MOH-' . strtoupper(uniqid()),
+                        'date' => now()->toDateString(),
+                        'reviewed_at' => null,
+                        'reviewed_by' => null,
+                        'approved_by' => null,
+                        'approved_at' => null,
+                    ]);
+                }
 
-            Log::info('Queueing MOH inventory import with Maatwebsite Excel', [
-                'import_id' => $importId,
-                'moh_inventory_id' => $mohInventory->id,
-                'original_name' => $file->getClientOriginalName(),
-                'file_size' => $file->getSize(),
-                'extension' => $extension
-            ]);
+                if ($mohInventory->approved_at) {
+                    throw new \Exception('Cannot import into an approved MOH inventory', 422);
+                }
 
-            // Initialize cache progress to 0
-            Cache::put($importId, 0);
+                Log::info('Starting synchronous MOH inventory import', [
+                    'moh_inventory_id' => $mohInventory->id,
+                    'used_existing' => $usedExisting,
+                    'original_name' => $file->getClientOriginalName(),
+                    'file_size' => $file->getSize(),
+                    'extension' => $extension,
+                ]);
 
-            // Queue the import job
-            Excel::queueImport(new MohInventoryImport($importId, $mohInventory->id), $file)->onQueue('imports');
+                $import = new MohInventoryImport($mohInventory->id);
+                Excel::import($import, $file);
+
+                if ($import->createdCount === 0) {
+                    $sample = $import->missingProductsSample;
+                    $sampleText = count($sample) ? implode(', ', $sample) : '';
+
+                    $message = 'No items were imported.';
+                    if ($import->missingProductRows > 0) {
+                        $message .= ' Some rows were skipped because the product does not exist in the system.';
+                        if ($sampleText !== '') {
+                            $message .= " Missing (sample): {$sampleText}";
+                        }
+                    }
+
+                    // Force rollback so we do not leave an empty newly-created MOH inventory behind
+                    throw new \Exception($message, 422);
+                }
+
+                $warning = null;
+                if ($import->missingProductRows > 0) {
+                    $sample = $import->missingProductsSample;
+                    $sampleText = count($sample) ? implode(', ', $sample) : '';
+                    $warning = 'Some rows were skipped because the product does not exist in the system.';
+                    if ($sampleText !== '') {
+                        $warning .= " Missing (sample): {$sampleText}";
+                    }
+                }
+
+                return [
+                    'moh_inventory_id' => $mohInventory->id,
+                    'created_count' => $import->createdCount,
+                    'missing_product_rows' => $import->missingProductRows,
+                    'missing_products_sample' => $import->missingProductsSample,
+                    'warning' => $warning,
+                ];
+            });
 
             return response()->json([
                 'success' => true,
-                'message' => 'MOH inventory import has been queued successfully',
-                'import_id' => $importId,
-                'moh_inventory_id' => $mohInventory->id
+                'message' => "Imported {$result['created_count']} MOH inventory item(s) successfully.",
+                'moh_inventory_id' => $result['moh_inventory_id'],
+                'created_count' => $result['created_count'],
+                'warning' => $result['warning'],
             ]);
 
         } catch (\Exception $e) {
@@ -147,6 +237,13 @@ class MohInventoryController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
+
+            if ((int) $e->getCode() === 422) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                ], 422);
+            }
 
             return response()->json([
                 'success' => false,
@@ -201,11 +298,17 @@ class MohInventoryController extends Controller
         }
 
         $progress = Cache::get($importId, 0);
+        $error = Cache::get($importId . ':error');
+        $warning = Cache::get($importId . ':warning');
+        $missingProductsCount = (int) Cache::get($importId . ':missing_products_count', 0);
 
         return response()->json([
             'success' => true,
             'progress' => $progress,
-            'completed' => $progress >= 100
+            'completed' => $progress >= 100,
+            'error' => $error,
+            'warning' => $warning,
+            'missing_products_count' => $missingProductsCount,
         ]);
     }
 
@@ -576,7 +679,8 @@ class MohInventoryController extends Controller
 
             // Create MOH inventory
             $mohInventory = MohInventory::create([
-                'uuid' => Str::uuid(),
+                // Keep consistent with Excel-imported MOH inventories (MOH-xxxxx format)
+                'uuid' => 'MOH-' . strtoupper(uniqid()),
                 'date' => $request->date,
                 'created_by' => auth()->id(),
             ]);
