@@ -1,367 +1,392 @@
 <template>
     <UserAuthTab>
-        <div class="flex items-center justify-between mb-6">
-            <h2 class="text-2xl font-semibold text-gray-900">Edit User</h2>
+        <Head title="Edit User" />
+
+        <!-- Header -->
+        <div class="mb-8">
             <Link
                 :href="route('settings.users.index')"
-                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg flex items-center"
+                class="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 mb-4 transition-colors"
             >
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
-                Back to Users
+                Back to users
             </Link>
+            <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Edit user</h1>
+            <p class="mt-1 text-sm text-slate-500">Update user details, access and permissions.</p>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm">
-            <form @submit.prevent="submit" class="p-6 space-y-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Left Column -->
-                    <div class="space-y-6">
-                        <!-- Name -->
-                        <div>
-                            <InputLabel for="name" value="Name" />
-                            <input
-                                id="name"
-                                type="text"
-                                v-model="form.name"
-                                class="mt-1 block w-full rounded-md border-gray-300 mt-1 block w-full shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                required
-                            />
-                        </div>
-                        <!-- Title -->
-                        <div>
-                            <InputLabel for="title" value="Title" />
-                            <input
-                                id="title"
-                                type="text"
-                                v-model="form.title"
-                                class="mt-1 block w-full rounded-md border-gray-300 mt-1 block w-full shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                placeholder="e.g., Manager, Supervisor, etc."
-                            />
-                        </div>
-                        <!-- Organization -->
-                        <div>
-                            <InputLabel for="organization" value="Organization" />
-                            <select
-                                id="organization"
-                                v-model="form.organization"
-                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                                required
-                            >
-                                <option value="">Select Organization</option>
-                                <option value="PSI">PSI</option>
-                                <option value="MoH">MoH</option>
-                            </select>
-                        </div>
-                        <!-- Username -->
-                        <div>
-                            <InputLabel for="username" value="Username" />
-                            <input
-                                id="username"
-                                type="text"
-                                v-model="form.username"
-                                class="mt-1 block w-full rounded-md border-gray-300 mt-1 block w-full shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                required
-                            />
-                        </div>
+        <form @submit.prevent="submit" class="space-y-6">
+            <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+                <div class="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <InputLabel for="name" value="Full name" />
+                        <input
+                            id="name"
+                            v-model="form.name"
+                            type="text"
+                            required
+                            placeholder="e.g. Ahmed Hassan"
+                            class="mt-1.5 block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400 transition-colors"
+                        />
                     </div>
-
-                    <!-- Right Column -->
-                    <div class="space-y-6">
-                        <!-- Email -->
-                        <div>
-                            <InputLabel for="email" value="Email" />
-                            <input
-                                id="email"
-                                type="email"
-                                v-model="form.email"
-                                class="mt-1 block w-full rounded-md border-gray-300 mt-1 block w-full shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                required
-                            />
-                        </div>
-                        <!-- Password -->
-                        <div>
-                            <InputLabel for="password" value="New Password (leave blank to keep current)" />
-                            <input
-                                id="password"
-                                type="password"
-                                v-model="form.password"
-                                class="mt-1 block w-full rounded-md border-gray-300 mt-1 block w-full shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            />
-                        </div>
-                        <!-- Password Confirmation -->
-                        <div>
-                            <InputLabel for="password_confirmation" value="Confirm New Password" />
-                            <input
-                                id="password_confirmation"
-                                type="password"
-                                v-model="form.password_confirmation"
-                                class="mt-1 block w-full rounded-md border-gray-300 mt-1 block w-full shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            />
-                        </div>
+                    <div>
+                        <InputLabel for="title" value="Title" />
+                        <input
+                            id="title"
+                            v-model="form.title"
+                            type="text"
+                            placeholder="e.g. Warehouse Manager"
+                            class="mt-1.5 block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400 transition-colors"
+                        />
                     </div>
-                </div>
-
-                <!-- Warehouse and Facility in one row -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Warehouse -->
+                    <div>
+                        <InputLabel for="organization" value="Organization" />
+                        <select
+                            id="organization"
+                            v-model="form.organization"
+                            required
+                            class="mt-1.5 block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400"
+                        >
+                            <option value="">Select organization</option>
+                            <option value="PSI">PSI</option>
+                            <option value="MoH">MoH</option>
+                        </select>
+                    </div>
+                    <div>
+                        <InputLabel for="username" value="Username" />
+                        <input
+                            id="username"
+                            v-model="form.username"
+                            type="text"
+                            required
+                            placeholder="Unique login name"
+                            class="mt-1.5 block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400 transition-colors"
+                        />
+                    </div>
+                    <div>
+                        <InputLabel for="email" value="Email" />
+                        <input
+                            id="email"
+                            v-model="form.email"
+                            type="email"
+                            required
+                            placeholder="user@example.com"
+                            class="mt-1.5 block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400 transition-colors"
+                        />
+                    </div>
+                    <div>
+                        <InputLabel for="password" value="New password (leave blank to keep current)" />
+                        <input
+                            id="password"
+                            v-model="form.password"
+                            type="password"
+                            placeholder="••••••••"
+                            class="mt-1.5 block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400 transition-colors"
+                        />
+                    </div>
+                    <div>
+                        <InputLabel for="password_confirmation" value="Confirm new password" />
+                        <input
+                            id="password_confirmation"
+                            v-model="form.password_confirmation"
+                            type="password"
+                            placeholder="••••••••"
+                            class="mt-1.5 block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400 transition-colors"
+                        />
+                    </div>
                     <div>
                         <InputLabel value="Warehouse" />
-                        <Multiselect
+                        <SearchableSelect
                             v-model="form.warehouse"
-                            :options="props.warehouses"
-                            track-by="id"
-                            label="name"
+                            :options="warehouses"
                             placeholder="Select warehouse"
-                            :searchable="true"
-                            :allow-empty="true"
+                            class="mt-1.5"
                             @select="handleSelectWarehouse"
-                            class="mt-1"
                         />
                     </div>
-                    
-                    <!-- Facility -->
                     <div>
                         <InputLabel value="Facility" />
-                        <Multiselect
+                        <SearchableSelect
                             v-model="form.facility"
-                            :options="props.facilities"
-                            track-by="id"
-                            label="name"
+                            :options="facilities"
                             placeholder="Select facility"
-                            :searchable="true"
-                            :allow-empty="true"
+                            class="mt-1.5"
                             @select="handleSelectFacility"
-                            class="mt-1"
                         />
                     </div>
                 </div>
 
-                <!-- User Permissions -->
-                <div v-if="!hasFacility">
-                    <div class="flex items-center justify-between">
-                        <InputLabel value="User Permissions" />
-                        <button 
-                            type="button" 
-                            @click="toggleAllPermissions" 
-                            class="text-sm text-blue-600 hover:text-blue-800"
-                        >
-                            {{ allPermissionsSelected ? 'Deselect All' : 'Select All' }}
-                        </button>
-                    </div>
-                    
-                    <div class="mt-2 border border-gray-200 rounded-lg p-4 max-h-60 overflow-y-auto">
-                        <div v-if="!props.permissions.length" class="text-gray-500 text-center py-4">
+                <!-- Permissions (when no facility) -->
+                <div v-if="!hasFacility" class="px-4 sm:px-6 pb-4 sm:pb-6 border-t border-slate-100 pt-4 sm:pt-6">
+                    <InputLabel value="Permissions" />
+                    <button
+                        type="button"
+                        @click="showPermissionsModal = true"
+                        class="mt-1.5 inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400 transition-colors"
+                    >
+                        <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                        </svg>
+                        {{ form.permissions.length ? `${form.permissions.length} permission${form.permissions.length === 1 ? '' : 's'} selected` : 'Select permissions' }}
+                    </button>
+                </div>
+
+                <!-- Permissions modal -->
+                <Modal :show="showPermissionsModal" max-width="full" @close="showPermissionsModal = false">
+                    <div class="p-4 sm:p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-slate-900">Select permissions</h3>
+                            <button
+                                type="button"
+                                @click="showPermissionsModal = false"
+                                class="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                aria-label="Close"
+                            >
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between gap-2 mb-4">
+                            <p class="text-sm text-slate-500">
+                                {{ form.permissions.length }} of {{ permissions.length }} selected
+                            </p>
+                            <button
+                                type="button"
+                                @click="toggleAllPermissions"
+                                class="text-sm font-medium text-slate-600 hover:text-slate-900 underline"
+                            >
+                                {{ allPermissionsSelected ? 'Deselect all' : 'Select all' }}
+                            </button>
+                        </div>
+                        <div class="mb-4">
+                            <input
+                                v-model="permissionSearch"
+                                type="search"
+                                placeholder="Search permissions by name or description..."
+                                class="block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400 placeholder-slate-400"
+                                autocomplete="off"
+                            />
+                        </div>
+                        <div v-if="!permissions.length" class="text-sm text-slate-500 text-center py-8">
                             No permissions available
                         </div>
-                        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            <div v-for="permission in props.permissions" :key="permission.id" class="flex items-start">
-                                <div class="flex items-center h-5">
-                                    <input
-                                        :id="`permission-${permission.id}`"
-                                        type="checkbox"
-                                        :value="permission.id"
-                                        v-model="form.permissions"
-                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                                    />
-                                </div>
-                                <div class="ml-3 text-sm">
-                                    <label :for="`permission-${permission.id}`" class="font-medium text-gray-700">
+                        <div v-else-if="!filteredPermissions.length" class="text-sm text-slate-500 text-center py-8">
+                            No permissions match "{{ permissionSearch }}"
+                        </div>
+                        <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-2 max-h-[calc(100vh-14rem)] overflow-y-auto pr-1 border border-slate-200 rounded-lg p-2">
+                            <label
+                                v-for="permission in filteredPermissions"
+                                :key="permission.id"
+                                class="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
+                            >
+                                <input
+                                    :id="`modal-permission-${permission.id}`"
+                                    v-model="form.permissions"
+                                    type="checkbox"
+                                    :value="permission.id"
+                                    class="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-600 focus:ring-slate-400/50"
+                                />
+                                <div class="min-w-0">
+                                    <span class="text-sm font-medium text-slate-800">
                                         {{ permission.display_name || permission.name }}
-                                    </label>
-                                    <p v-if="permission.description" class="text-xs text-gray-500">
+                                    </span>
+                                    <p v-if="permission.description" class="text-xs text-slate-500 mt-0.5">
                                         {{ permission.description }}
                                     </p>
                                 </div>
-                            </div>
+                            </label>
+                        </div>
+                        <div class="mt-4 flex justify-end">
+                            <button
+                                type="button"
+                                @click="showPermissionsModal = false"
+                                class="px-4 py-2.5 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
+                            >
+                                Done
+                            </button>
                         </div>
                     </div>
-                </div>
+                </Modal>
 
-                <!-- Facility Notice -->
-                <div v-if="hasFacility" class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div class="flex items-center">
-                        <svg class="w-5 h-5 text-blue-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                <!-- Facility notice -->
+                <div v-if="hasFacility" class="mx-4 sm:mx-6 mb-4 sm:mb-6 pt-4 sm:pt-6 border-t border-slate-100 rounded-lg bg-slate-50/80 p-4 flex items-start gap-3">
+                    <div class="shrink-0 w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-slate-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span class="text-sm text-blue-700">
-                            Permissions are automatically managed for facility users. No manual permission assignment is needed.
-                        </span>
+                    </div>
+                    <div class="text-sm text-slate-700">
+                        <span class="font-medium">Facility user</span> — Permissions are managed automatically for facility users.
                     </div>
                 </div>
 
-                <!-- Status -->
-                <div>
-                    <InputLabel value="Status" />
-                    <div class="mt-2">
-                        <label class="inline-flex items-center">
-                            <input
-                                type="checkbox"
-                                v-model="form.is_active"
-                                class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500"
-                            />
-                            <span class="ml-2 text-sm text-gray-600">Active</span>
-                        </label>
+                <!-- Status & actions -->
+                <div class="px-4 sm:px-6 py-4 sm:py-6 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <label class="inline-flex items-center gap-2 cursor-pointer">
+                        <input
+                            v-model="form.is_active"
+                            type="checkbox"
+                            class="h-4 w-4 rounded border-slate-300 text-slate-600 focus:ring-slate-400/50"
+                        />
+                        <span class="text-sm font-medium text-slate-700">Active</span>
+                    </label>
+                    <div class="flex items-center gap-3">
+                        <Link
+                            :href="route('settings.users.index')"
+                            :disabled="processing"
+                            class="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 disabled:opacity-50"
+                        >
+                            Cancel
+                        </Link>
+                        <button
+                            type="submit"
+                            :disabled="processing"
+                            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 disabled:opacity-50 transition-colors"
+                        >
+                            <span v-if="processing" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            {{ processing ? 'Updating…' : 'Update user' }}
+                        </button>
                     </div>
                 </div>
-
-                <div class="flex items-center justify-end mt-6 gap-4">
-                    <Link :href="route('settings.users.index')" :disabled="processing" class="px-4 py-2 text-gray-700">
-                        Exit
-                    </Link>
-                    <PrimaryButton :disabled="processing">
-                        {{ processing ? 'Updating...' : 'Update User' }}
-                    </PrimaryButton>
-                </div>
-            </form>
-        </div>
+            </div>
+        </form>
     </UserAuthTab>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
 import UserAuthTab from '@/Layouts/UserAuthTab.vue';
 import InputLabel from '@/Components/InputLabel.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
-import { Link, router } from '@inertiajs/vue3';
-import Multiselect from 'vue-multiselect';
-import 'vue-multiselect/dist/vue-multiselect.css';
-import '@/Components/multiselect.css';
+import Modal from '@/Components/Modal.vue';
+import SearchableSelect from '@/Components/SearchableSelect.vue';
 import { useToast } from 'vue-toastification';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 
 const toast = useToast();
 const processing = ref(false);
+const showPermissionsModal = ref(false);
+const permissionSearch = ref('');
 
 const props = defineProps({
     user: Object,
     warehouses: Array,
     facilities: Array,
-    permissions: Array,
+    permissions: {
+        type: Array,
+        default: () => [],
+    },
 });
 
 const form = ref({
-    id: props.user?.id || null,
-    name: props.user?.name || '',
-    title: props.user?.title || '',
-    organization: props.user?.organization || '',
-    email: props.user?.email || '',
-    username: props.user?.username || '',
+    id: props.user?.id ?? null,
+    name: props.user?.name ?? '',
+    title: props.user?.title ?? '',
+    organization: props.user?.organization ?? '',
+    username: props.user?.username ?? '',
+    email: props.user?.email ?? '',
     password: '',
     password_confirmation: '',
-    warehouse: props.user?.warehouse || null,
-    warehouse_id: props.user?.warehouse_id || null,
-    facility: props.user?.facility || null,
-    facility_id: props.user?.facility_id || null,
-    permissions: props.user?.permissions?.map(p => p.id) || [],
-    is_active: props.user?.is_active || false,
+    warehouse_id: props.user?.warehouse_id ?? null,
+    warehouse: props.user?.warehouse ?? null,
+    facility_id: props.user?.facility_id ?? null,
+    facility: props.user?.facility ?? null,
+    permissions: Array.isArray(props.user?.permissions) ? props.user.permissions.map((p) => p.id) : [],
+    is_active: props.user?.is_active ?? true,
 });
 
-// Computed properties for permissions
 const allPermissionsSelected = computed(() => {
-    if (!Array.isArray(props.permissions) || props.permissions.length === 0) return false;
+    if (!props.permissions?.length) return false;
     return form.value.permissions.length === props.permissions.length;
 });
 
-// Check if user has a facility assigned
-const hasFacility = computed(() => form.value.facility_id !== null);
-
-// Watch for facility changes and manage permissions accordingly
-watch(() => form.value.facility_id, (newValue) => {
-    if (newValue !== null) {
-        // Clear permissions when facility is assigned
-        form.value.permissions = [];
-    }
+const filteredPermissions = computed(() => {
+    const list = props.permissions ?? [];
+    const q = (permissionSearch.value || '').trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((p) => {
+        const name = (p.name || '').toLowerCase();
+        const display = (p.display_name || '').toLowerCase();
+        const desc = (p.description || '').toLowerCase();
+        return name.includes(q) || display.includes(q) || desc.includes(q);
+    });
 });
 
-// Also watch the facility object itself
-watch(() => form.value.facility, (newValue) => {
-    if (!newValue) {
-        form.value.facility_id = null;
-    }
+const hasFacility = computed(() => form.value.facility_id !== null && form.value.facility_id !== '');
+
+watch(() => form.value.facility, (newVal) => {
+    if (!newVal) form.value.facility_id = null;
 });
 
-// Keep warehouse_id in sync with warehouse object
-watch(() => form.value.warehouse, (newValue) => {
-    if (newValue && newValue.id) {
-        form.value.warehouse_id = newValue.id;
-    } else {
-        form.value.warehouse_id = null;
-    }
+watch(() => form.value.facility_id, (newVal) => {
+    if (newVal != null) form.value.permissions = [];
 });
 
-// Toggle all permissions
+watch(() => form.value.warehouse, (newVal) => {
+    form.value.warehouse_id = newVal?.id ?? null;
+});
+
 function toggleAllPermissions() {
     if (allPermissionsSelected.value) {
         form.value.permissions = [];
     } else {
-        form.value.permissions = props.permissions.map(p => p.id);
+        form.value.permissions = props.permissions.map((p) => p.id);
     }
 }
 
-// Handle warehouse selection
 function handleSelectWarehouse(selected) {
-    if (selected) {
-        form.value.warehouse_id = selected.id;
-    } else {
-        form.value.warehouse_id = null;
-    }
+    form.value.warehouse_id = selected?.id ?? null;
 }
 
-// Handle facility selection
 function handleSelectFacility(selected) {
-    console.log('handleSelectFacility called with:', selected);
-    if (selected && selected.id) {
+    if (selected?.id) {
         form.value.facility_id = selected.id;
         form.value.facility = selected;
-        // Clear permissions when facility is selected
         form.value.permissions = [];
-        console.log('Facility selected:', selected.id);
     } else {
         form.value.facility_id = null;
         form.value.facility = null;
-        console.log('Facility deselected - permissions should show');
     }
 }
 
-const submit = async () => {
+async function submit() {
     processing.value = true;
-
-    // Prepare form data for submission
     const formData = {
-        id: form.value.id,
         name: form.value.name,
         title: form.value.title,
         organization: form.value.organization,
         username: form.value.username,
         email: form.value.email,
-        password: form.value.password,
-        password_confirmation: form.value.password_confirmation,
         warehouse_id: form.value.warehouse_id,
         facility_id: form.value.facility_id,
-        permissions: hasFacility.value ? [] : form.value.permissions, // Clear permissions if facility is assigned
-        is_active: form.value.is_active
+        permissions: hasFacility.value ? [] : form.value.permissions,
+        is_active: form.value.is_active,
     };
+    if (form.value.password) {
+        formData.password = form.value.password;
+        formData.password_confirmation = form.value.password_confirmation;
+    }
 
-    await axios.post(route('settings.users.store'), formData)
-        .then((response) => {
-            processing.value = false;
-            Swal.fire({
-                title: 'Success!',
-                text: response.data.message || 'User updated successfully',
-                icon: 'success',
-                confirmButtonText: 'OK'
-            }).then(() => {
-                toast.success('User updated successfully');
-                router.visit(route('settings.users.index'));
-            });
-        })
-        .catch((error) => {
-            processing.value = false;
-            const errorMessage = error.response?.data?.message || error.response?.data || 'An error occurred';
-            toast.error(errorMessage);
+    try {
+        const response = await axios.put(route('settings.users.update', form.value.id), formData);
+        Swal.fire({
+            title: 'User updated',
+            text: response.data?.message ?? 'User updated successfully.',
+            icon: 'success',
+            confirmButtonColor: '#0f172a',
+        }).then(() => {
+            toast.success('User updated successfully');
+            router.visit(route('settings.users.index'));
         });
-};
+    } catch (error) {
+        const msg = error.response?.data?.message ?? error.response?.data ?? 'Something went wrong.';
+        toast.error(msg);
+    } finally {
+        processing.value = false;
+    }
+}
 </script>

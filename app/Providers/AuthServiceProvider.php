@@ -160,7 +160,10 @@ class AuthServiceProvider extends ServiceProvider
         });
 
         Gate::define('supply-management', function ($user) {
-            return $user->hasPermissionTo('supply-view') || $user->hasPermissionTo('manage-system') || $user->hasPermissionTo('view-system');
+            return $user->hasPermissionTo('purchase-order-view')
+                || $user->hasPermissionTo('packing-list-view')
+                || $user->hasPermissionTo('manage-system')
+                || $user->hasPermissionTo('view-system');
         });
 
         Gate::define('report-management', function ($user) {

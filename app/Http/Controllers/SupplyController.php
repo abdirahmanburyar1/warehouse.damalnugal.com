@@ -35,6 +35,8 @@ use App\Models\Liquidate;
 use App\Models\LiquidateItem;
 use App\Models\DisposalItem;
 use App\Http\Resources\SupplierResource;
+use App\Models\User;
+use App\Notifications\PurchaseOrderActionRequired;
 use Inertia\Inertia;
 
 class SupplyController extends Controller
@@ -118,7 +120,9 @@ class SupplyController extends Controller
 
     // showPackingList
     public function showPackingList(Request $request, $id){
-        
+        if (!auth()->user()->hasPermission('packing-list-view')) {
+            abort(403, 'Unauthorized: You do not have permission to view packing lists.');
+        }
         $packingList = PackingList::with('purchaseOrder.supplier','items.product.category','items.product.dosage','documents.uploader','confirmedBy','approvedBy','rejectedBy','reviewedBy','backOrder')
         ->where('id', $id)
         ->first();
@@ -128,6 +132,9 @@ class SupplyController extends Controller
     }
 
     public function newPackingList(Request $request){
+        if (!auth()->user()->hasPermission('packing-list-create')) {
+            abort(403, 'Unauthorized: You do not have permission to create packing lists.');
+        }
         $purchaseOrders = PurchaseOrder::where('status', 'approved')
             ->whereDoesntHave('packingLists')
             ->select('id','po_number','supplier_id','po_date','po_number','status')
@@ -821,6 +828,9 @@ class SupplyController extends Controller
     
     public function storePK(Request $request)
     {
+        if (!auth()->user()->hasPermission('packing-list-create')) {
+            return response()->json('Unauthorized: You do not have permission to create packing lists', 403);
+        }
         try {
             return DB::transaction(function() use ($request){
                 $validated = $request->validate([
@@ -1099,6 +1109,19 @@ class SupplyController extends Controller
                         $poItem = PurchaseOrderItem::create($itemData);
                     }
                 }
+
+                // Notify users with "review" permission when a new PO is created (next action = review)
+                if (!$request->id) {
+                    $po->load('supplier');
+                    $reviewers = User::withPermission('purchase-order-review')
+                        ->where('is_active', true)
+                        ->whereNotNull('email')
+                        ->where('id', '!=', auth()->id())
+                        ->get();
+                    foreach ($reviewers as $user) {
+                        $user->notify(new PurchaseOrderActionRequired($po, PurchaseOrderActionRequired::ACTION_NEEDS_REVIEW));
+                    }
+                }
                 
                 return response()->json($request->id ? 'Purchase order updated successfully' : 'Purchase order created successfully', 200);
             });
@@ -1151,6 +1174,23 @@ class SupplyController extends Controller
             $po->reviewed_at = now();
             $po->status = "reviewed";
             $po->save();
+
+            // Notify users with "approve" or "reject" permission (next action = approve/reject)
+            $po->load('supplier');
+            $approvers = User::withPermission('purchase-order-approve')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', auth()->id())
+                ->get();
+            $rejectors = User::withPermission('purchase-order-reject')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', auth()->id())
+                ->get();
+            $recipients = $approvers->merge($rejectors)->unique('id');
+            foreach ($recipients as $user) {
+                $user->notify(new PurchaseOrderActionRequired($po, PurchaseOrderActionRequired::ACTION_READY_FOR_APPROVAL));
+            }
 
             return response()->json('Purchase order has been marked for review');
         } catch (\Exception $e) {
@@ -1645,6 +1685,9 @@ class SupplyController extends Controller
     }
 
     public function showPK(Request $request){
+        if (!auth()->user()->hasPermission('packing-list-view')) {
+            abort(403, 'Unauthorized: You do not have permission to view packing lists.');
+        }
         $query = PackingList::with([
             'items.product.category',
             'items.product.dosage', 
@@ -1797,9 +1840,8 @@ class SupplyController extends Controller
 
     public function editPK($id)
     {
-        // Check if user has permission to edit packing lists
-        if (!auth()->user()->hasPermission('packing-list-edit')) {
-            abort(403, 'You do not have permission to edit packing lists.');
+        if (!auth()->user()->hasPermission('packing-list-edit') && !auth()->user()->hasPermission('packing-list-update') && !auth()->user()->hasPermission('packing-list-view')) {
+            abort(403, 'You do not have permission to view or edit packing lists.');
         }
 
         $packing_list = PackingList::with([
@@ -1850,9 +1892,8 @@ class SupplyController extends Controller
 
     public function updatePK(Request $request)
     {
-        // Check if user has permission to edit packing lists
-        if (!auth()->user()->hasPermission('packing-list-edit')) {
-            return response()->json('Unauthorized: You do not have permission to edit packing lists', 403);
+        if (!auth()->user()->hasPermission('packing-list-edit') && !auth()->user()->hasPermission('packing-list-update')) {
+            return response()->json('Unauthorized: You do not have permission to edit or update packing lists', 403);
         }
 
         try {
@@ -2207,6 +2248,9 @@ class SupplyController extends Controller
 
     public function deletePackingListDiff($id)
     {
+        if (!auth()->user()->hasPermission('packing-list-delete')) {
+            return response()->json('Unauthorized: You do not have permission to delete packing list items', 403);
+        }
         try {
             // Get the difference record first to get its packing_list_id
             $difference = DB::table('packing_list_differences')->where('id', $id)->first();

@@ -46,7 +46,7 @@
                             </div>
                         </transition>
                     </div>
-                    <div class="relative inline-block text-left z-20" ref="supplyDropdownRef">
+                    <div v-if="$page.props.auth.can.packing_list_view || $page.props.auth.can.packing_list_create" class="relative inline-block text-left z-20" ref="supplyDropdownRef">
                         <button type="button"
                             class="inline-flex items-center px-4 py-2.5 bg-purple-600 border border-transparent rounded-lg font-medium text-sm text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors duration-200 shadow-sm"
                             id="supply-menu" :aria-expanded="showSupplyDropdown" aria-haspopup="true"
@@ -67,12 +67,12 @@
                                 class="origin-top-right absolute right-0 mt-2 w-56 rounded-lg shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none border border-gray-200"
                                 role="menu" aria-orientation="vertical" aria-labelledby="supply-menu">
                                 <div class="py-1" role="none">
-                                    <a @click="router.get(route('supplies.packing-list'))"
+                                    <a v-if="$page.props.auth.can.packing_list_create" @click="router.get(route('supplies.packing-list'))"
                                         class="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 cursor-pointer transition-colors duration-150"
                                         role="menuitem">
                                         Receive New PL
                                     </a>
-                                    <a @click="router.get(route('supplies.packing-list.showPK'))"
+                                    <a v-if="$page.props.auth.can.packing_list_view" @click="router.get(route('supplies.packing-list.showPK'))"
                                         class="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 cursor-pointer transition-colors duration-150"
                                         role="menuitem">
                                         View PL Lists
@@ -82,7 +82,7 @@
                         </transition>
                     </div>
 
-                    <button @click="router.get(route('supplies.purchase_order'))"
+                    <button v-if="$page.props.auth.can.purchase_order_create" @click="router.get(route('supplies.purchase_order'))"
                         class="inline-flex items-center px-4 py-2.5 bg-orange-600 border border-transparent rounded-lg font-medium text-sm text-white hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors duration-200 shadow-sm">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor" stroke-width="2">

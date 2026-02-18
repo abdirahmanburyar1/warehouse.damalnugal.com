@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Warehouse;
 use App\Models\Facility;
 use App\Notifications\UserRegistered;
+use App\Notifications\PermissionsChanged;
 use App\Services\PermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -175,20 +176,30 @@ class UserController extends Controller
             );
             
             // Handle permissions - if user has facility_id, don't assign permissions
+            $oldPermissionIds = $request->id ? $user->permissions()->pluck('permissions.id')->toArray() : [];
+
             if ($request->facility_id) {
                 // User has facility, so no permissions should be assigned
                 $user->permissions()->sync([]);
+                $newPermissionIds = [];
             } else {
                 // User has no facility, so assign permissions if provided
-                $newPermissions = $request->has('permissions') && is_array($request->permissions) 
-                    ? $request->permissions 
+                $newPermissionIds = $request->has('permissions') && is_array($request->permissions)
+                    ? $request->permissions
                     : [];
-                    
-                // Sync permissions using the custom User-Permission pivot table
-                $user->permissions()->sync($newPermissions);
+                $user->permissions()->sync($newPermissionIds);
             }
 
-            // event(new GlobalPermissionChanged($user));
+            // Notify user by email when permissions were added or removed (updates only)
+            if ($request->id) {
+                $addedIds = array_values(array_diff($newPermissionIds, $oldPermissionIds));
+                $removedIds = array_values(array_diff($oldPermissionIds, $newPermissionIds));
+                if (!empty($addedIds) || !empty($removedIds)) {
+                    $addedNames = Permission::whereIn('id', $addedIds)->get()->map(fn ($p) => $p->display_name ?: $p->name)->toArray();
+                    $removedNames = Permission::whereIn('id', $removedIds)->get()->map(fn ($p) => $p->display_name ?: $p->name)->toArray();
+                    $user->notify(new PermissionsChanged($user, $addedNames, $removedNames));
+                }
+            }
                         
             // Reload the user with relationships for the email
             $user->load(['warehouse', 'facility']);
@@ -225,6 +236,15 @@ class UserController extends Controller
         ]);
     }
     
+    /**
+     * Update the specified user.
+     */
+    public function update(Request $request, User $user)
+    {
+        $request->merge(['id' => $user->id]);
+        return $this->store($request);
+    }
+
     /**
      * Show the form for editing the specified user.
      */

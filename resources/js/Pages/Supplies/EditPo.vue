@@ -252,13 +252,16 @@
                                     </div>
                                 </td>
                                 <td class="px-4 py-3 border-r border-gray-200 w-20">
-                                    <Multiselect v-model="item.uom" :value="item.uom"
-                                        :options="['Add new UoM',...props.uom]"
-                                        :searchable="true" :close-on-select="true" :show-labels="false" required
-                                        :allow-empty="true" placeholder="Search and select UoM..." 
-                                        class="multiselect-modern text-sm"
-                                        @select="handleUomSelect(index, $event)">
-                                    </Multiselect>
+                                    <SearchableSelect
+                                        :model-value="getUomModel(item.uom)"
+                                        :options="uomOptions"
+                                        placeholder="Search and select UoM..."
+                                        options-max-height-class="max-h-24"
+                                        keep-first-option-in-filter
+                                        :option-id-to-hide-from-input="UOM_ADD_OPTION_ID"
+                                        @focus="loadUomList"
+                                        @update:model-value="(val) => onUomSelect(index, val)"
+                                    />
                                     <div v-if="item.original_uom" class="text-xs mt-1 text-red-500 line-through">
                                         Original: {{ item.original_uom }}
                                     </div>
@@ -565,6 +568,7 @@ import Swal from "sweetalert2";
 import Multiselect from "vue-multiselect";
 import "vue-multiselect/dist/vue-multiselect.css";
 import "@/Components/multiselect.css";
+import SearchableSelect from "@/Components/SearchableSelect.vue";
 
 import { useToast } from "vue-toastification";
 
@@ -579,6 +583,30 @@ const props = defineProps({
     uom: Array
 });
 
+// UOM list loaded when UOM input is focused; new UOMs from modal are pushed here
+const uomList = ref([]);
+const uomLoading = ref(false);
+async function loadUomList() {
+    if (uomLoading.value) return;
+    uomLoading.value = true;
+    try {
+        const { data } = await axios.get(route('products.uom.list'));
+        uomList.value = Array.isArray(data) ? data : [];
+    } catch (_) {
+        uomList.value = [];
+    } finally {
+        uomLoading.value = false;
+    }
+}
+const UOM_ADD_OPTION_ID = '+ Add new UOM';
+const uomOptions = computed(() => [
+    { id: UOM_ADD_OPTION_ID, name: '+ Add new UOM' },
+    ...uomList.value.map((s) => ({ id: s, name: s })),
+]);
+function getUomModel(uomStr) {
+    if (!uomStr) return null;
+    return { id: uomStr, name: uomStr };
+}
 const form = ref({
     id: props.po?.id,
     supplier_id: props.po?.supplier_id,
@@ -612,15 +640,16 @@ const uomForm = ref({
 });
 const isUomSubmitting = ref(false);
 
- async function handleUomSelect(index, selected){
-     form.value.items[index].uom = selected;
-     // calculateTotal(index);
-     if(selected === 'Add new UoM'){
-         form.value.items[index].uom = '';
-         showUomModal.value = true;
-         currentUomIndex.value = index;
-     }
- }
+function onUomSelect(index, selected) {
+    const name = selected?.name ?? selected;
+    if (name === '+ Add new UOM' || name === UOM_ADD_OPTION_ID) {
+        form.value.items[index].uom = '';
+        showUomModal.value = true;
+        currentUomIndex.value = index;
+    } else {
+        form.value.items[index].uom = name;
+    }
+}
 
 function addItem() {
     // Check if there are existing items and if the last item has no product_id
@@ -691,9 +720,8 @@ async function createUom() {
         
         // Update the form item with the new UOM name
         form.value.items[currentUomIndex.value].uom = response.data;
-        
-        // Update the props.uom array to include the new UOM
-        props.uom.push(response.data);
+        // Add to preloaded UOM list so it appears in the dropdown
+        uomList.value.push(response.data);
         
         // Close modal and reset form
         showUomModal.value = false;

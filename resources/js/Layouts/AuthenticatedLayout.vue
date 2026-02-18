@@ -5,6 +5,7 @@
         <div :class="['sidebar', { 'sidebar-open': sidebarOpen }]" class="p-0">
             <div class="sidebar-menu">
                 <Link
+                    v-if="can('dashboard_view')"
                     :href="route('dashboard')"
                     class="menu-item"
                     :class="{ active: route().current('dashboard') }"
@@ -30,7 +31,7 @@
                     </div>
                 </Link>
                 <Link
-                    v-if="$page.props.auth.can.order_view || $page.props.auth.isAdmin"
+                    v-if="can('order_view')"
                     :href="route('orders.index')"
                     class="menu-item"
                     :class="{ active: route().current('orders.*') }"
@@ -55,7 +56,7 @@
                     </div>
                 </Link>
                 <Link
-                    v-if="$page.props.auth.can.transfer_view || $page.props.auth.isAdmin"
+                    v-if="can('transfer_view')"
                     :href="route('transfers.index')"
                     class="menu-item"
                     :class="{ active: route().current('transfers.*') }"
@@ -80,7 +81,7 @@
                     </div>
                 </Link>
                 <Link
-                    v-if="$page.props.auth.can.product_view || $page.props.auth.isAdmin"
+                    v-if="can('product_view')"
                     :href="route('products.index')"
                     class="menu-item"
                     :class="{ active: route().current('products.*') }"
@@ -105,7 +106,7 @@
                     </div>
                 </Link>
                 <Link
-                    v-if="$page.props.auth.can.inventory_view || $page.props.auth.isAdmin"
+                    v-if="can('inventory_view')"
                     :href="route('inventories.index')"
                     class="menu-item"
                     :class="{ active: route().current('inventories.*') }"
@@ -130,7 +131,7 @@
                     </div>
                 </Link>
                 <Link
-                    v-if="$page.props.auth.can.inventory_view || $page.props.auth.isAdmin"
+                    v-if="can('inventory_view')"
                     :href="route('expired.index')"
                     class="menu-item"
                     :class="{ active: route().current('expired.*') }"
@@ -156,7 +157,7 @@
                 </Link>
                 <!-- Liquidate and disposals -->
                 <Link
-                    v-if="$page.props.auth.can.wastage_view || $page.props.auth.isAdmin"
+                    v-if="can('wastage_view')"
                     :href="route('liquidate-disposal.index')"
                     class="menu-item"
                     :class="{ active: route().current('liquidate-disposal.*') }"
@@ -181,7 +182,7 @@
                     </div>
                 </Link>
                 <Link
-                    v-if="$page.props.auth.can.supply_view || $page.props.auth.isAdmin"
+                    v-if="can('purchase_order_view') || can('packing_list_view')"
                     :href="route('supplies.index')"
                     class="menu-item"
                     :class="{ active: route().current('supplies.*') }"
@@ -206,7 +207,7 @@
                     </div>
                 </Link>
                 <Link
-                    v-if="$page.props.auth.can.reports_view || $page.props.auth.isAdmin"
+                    v-if="can('reports_view')"
                     :href="route('reports.index')"
                     class="menu-item"
                     :class="{ active: route().current('reports.*') }"
@@ -231,7 +232,7 @@
                     </div>
                 </Link>
                 <Link
-                    v-if="$page.props.auth.can.facility_view || $page.props.auth.isAdmin"
+                    v-if="can('facility_view')"
                     :href="route('facilities.index')"
                     class="menu-item"
                     :class="{ active: route().current('facilities.*') }"
@@ -257,7 +258,7 @@
                 </Link>
                 <!-- Assets Menu -->
                 <Link
-                    v-if="page.props.auth.can.asset_view || page.props.auth.isAdmin"
+                    v-if="can('asset_view')"
                     :href="route('assets.index')"
                     class="menu-item"
                     :class="{ active: route().current('assets.*') }"
@@ -284,7 +285,7 @@
                 
                 <!-- Settings Menu -->
                 <Link
-                    v-if="page.props.auth.can.system_settings || page.props.auth.isAdmin"
+                    v-if="can('system_settings')"
                     :href="route('settings.index')"
                     class="menu-item"
                     :class="{ active: route().current('settings.*') }"
@@ -471,6 +472,15 @@ const props = defineProps({
 });
 
 const page = usePage();
+
+/** Permission-based access: true if user has the permission or is admin. Keys use underscore (e.g. order_view, system_settings). */
+const can = (permissionKey) => {
+    const auth = page.props.auth;
+    if (!auth) return false;
+    if (auth.isAdmin) return true;
+    return Boolean(auth.can?.[permissionKey]);
+};
+
 const debug = ref(false); // Set to true to see permissions debug info
 const sidebarOpen = ref(true);
 const currentPage = ref("dashboard");

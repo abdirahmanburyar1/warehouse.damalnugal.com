@@ -22,7 +22,7 @@
                         <p class="text-blue-100">Manage and track all packing list activities</p>
                     </div>
                 </div>
-                <div class="flex items-center space-x-3">
+                <div v-if="$page.props.auth.can.packing_list_create" class="flex items-center space-x-3">
                     <Link
                         :href="route('supplies.packing-list.create')"
                         class="inline-flex items-center px-4 py-2 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors duration-200"
@@ -164,14 +164,24 @@
                     <tbody class="bg-white">
                         <tr v-for="packingList in props.packingLists.data" :key="packingList.id" class="hover:bg-gray-50 border-b" style="border-bottom: 1px solid #B7C6E6;">
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                <Link
+                                <Link v-if="$page.props.auth.can.packing_list_edit"
                                     :href="route('supplies.packing-list.edit', packingList.id)"
                                     class="flex flex-col text-blue-600 hover:text-blue-500"
                                 >
                                     <div class="text-sm font-medium text-blue-600">{{ packingList.packing_list_number }}</div>
                                     <div class="text-sm text-blue-500">{{ packingList.ref_no }}</div>
-                                
                                 </Link>
+                                <Link v-else-if="$page.props.auth.can.packing_list_view"
+                                    :href="route('supplies.packing-list.show', packingList.id)"
+                                    class="flex flex-col text-blue-600 hover:text-blue-500"
+                                >
+                                    <div class="text-sm font-medium text-blue-600">{{ packingList.packing_list_number }}</div>
+                                    <div class="text-sm text-blue-500">{{ packingList.ref_no }}</div>
+                                </Link>
+                                <span v-else class="flex flex-col">
+                                    <div class="text-sm font-medium text-gray-900">{{ packingList.packing_list_number }}</div>
+                                    <div class="text-sm text-gray-500">{{ packingList.ref_no }}</div>
+                                </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 <div class="text-sm text-gray-900">{{ packingList.purchase_order?.supplier?.name }}</div>
@@ -195,7 +205,7 @@
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                <div class="flex items-center space-x-2">
+                                <div v-if="$page.props.auth.can.packing_list_view" class="flex items-center space-x-2">
                                     <Link
                                         :href="route('supplies.packing-list.show', packingList.id)"
                                         class="text-blue-600 hover:text-blue-900 inline-flex items-center"

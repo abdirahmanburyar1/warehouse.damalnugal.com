@@ -223,4 +223,20 @@ class User extends Authenticatable
         
         return false;
     }
+
+    /**
+     * Scope: users who have the given permission or are admins (so they can receive "next action" emails).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  string  $permissionName  e.g. 'purchase-order-review', 'purchase-order-approve'
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeWithPermission(Builder $query, string $permissionName): Builder
+    {
+        return $query->where(function (Builder $q) use ($permissionName) {
+            $q->whereHas('permissions', fn (Builder $p) => $p->where('name', $permissionName))
+                ->orWhereHas('permissions', fn (Builder $p) => $p->whereIn('name', ['manage-system', 'manager-system', 'admin-access']))
+                ->orWhereIn('username', ['admin', 'administrator']);
+        });
+    }
 }

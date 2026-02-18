@@ -257,6 +257,7 @@ Route::controller(LocationController::class)
 
     // UOM Management Routes
     Route::prefix('uom')->group(function () {
+            Route::get('/list', [\App\Http\Controllers\UomController::class, 'list'])->name('products.uom.list');
             Route::get('/', [\App\Http\Controllers\UomController::class, 'index'])->name('products.uom.index');
             Route::get('/create', [\App\Http\Controllers\UomController::class, 'create'])->name('products.uom.create');
             Route::post('/store', [\App\Http\Controllers\UomController::class, 'store'])->name('products.uom.store');
@@ -278,7 +279,7 @@ Route::controller(LocationController::class)
 
     // Supply Management Routes
     Route::prefix('supplies')->group(function () {
-        // View routes - require supply-view permission
+        // View routes - require purchase-order-view permission
         Route::get('/', [SupplyController::class, 'index'])->name('supplies.index');
         Route::get('/show', [SupplyController::class, 'show'])->name('supplies.show');
         Route::get('/{id}/showPO', [SupplyController::class, 'showPO'])->name('supplies.po-show');

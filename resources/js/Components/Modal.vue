@@ -70,6 +70,7 @@ const maxWidthClass = computed(() => {
         lg: 'sm:max-w-lg',
         xl: 'sm:max-w-xl',
         '2xl': 'sm:max-w-2xl',
+        full: 'w-full max-w-full min-h-screen sm:min-h-[100dvh] sm:max-w-full sm:rounded-none',
     }[props.maxWidth];
 });
 </script>

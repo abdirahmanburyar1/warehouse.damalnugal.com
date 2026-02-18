@@ -38,6 +38,20 @@ class UomController extends Controller
     }
 
     /**
+     * Return UOM names as JSON (for dropdowns / lazy load on focus).
+     */
+    public function list(Request $request)
+    {
+        $names = Uom::query()
+            ->when($request->boolean('active_only', true), fn ($q) => $q->where('is_active', true))
+            ->orderBy('name')
+            ->pluck('name')
+            ->values()
+            ->toArray();
+        return response()->json($names);
+    }
+
+    /**
      * Show the form for creating a new UOM.
      */
     public function create()
