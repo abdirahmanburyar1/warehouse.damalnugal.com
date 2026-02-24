@@ -35,6 +35,14 @@
                         </p>
                         
                         <div class="space-y-2">
+                            <Link :href="route('reports.inventoryReportsUnified')"
+                                class="flex items-center justify-between p-3 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg transition-colors border border-blue-200 hover:bg-blue-100"
+                            >
+                                <span>Inventory Reports (unified)</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </Link>
                             <Link :href="route('reports.receivedQuantities')"
                                 class="flex items-center justify-between p-3 text-sm text-gray-700 hover:bg-blue-50 rounded-lg transition-colors">
                                 <span>QTY Received Report</span>

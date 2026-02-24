@@ -21,6 +21,8 @@ use App\Models\User;
 use App\Models\Order;
 use Illuminate\Support\Collection;
 use App\Models\Facility;
+use App\Models\FacilityInventory;
+use App\Models\FacilityInventoryItem;
 use App\Models\Inventory;
 use App\Models\InventoryItem;
 use App\Models\InventoryReport;
@@ -48,6 +50,7 @@ use App\Models\ReceivedQuantityItem;
 use App\Models\IssuedQuantity;
 use App\Models\ReceivedQuantity;
 use App\Models\District;
+use App\Models\Region;
 use App\Models\Reason;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -234,6 +237,421 @@ class ReportController extends Controller
                 'message' => 'Failed to fetch inventory report data: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Consolidated Inventory Reports page: single view with Report Type filter that combines
+     * QTY Received, QTY Issued, Physical Count, Warehouse Inventory, Warehouse AMC, Facility Monthly Consumption.
+     */
+    public function inventoryReportsUnified(Request $request)
+    {
+        $regions = Region::orderBy('name')->get(['id', 'name']);
+        $districts = District::orderBy('name')->get(['id', 'name', 'region']);
+        $warehouses = Warehouse::orderBy('name')->get(['id', 'name', 'region', 'district']);
+        $facilities = Facility::orderBy('name')->get(['id', 'name', 'region', 'district']);
+        $reportTypes = [
+            ['value' => 'warehouse_inventory', 'label' => 'Warehouse Inventory Report'],
+            ['value' => 'qty_received', 'label' => 'QTY Received Report'],
+            ['value' => 'qty_issued', 'label' => 'QTY Issued Report'],
+            ['value' => 'physical_count', 'label' => 'Physical Count Report'],
+            ['value' => 'warehouse_amc', 'label' => 'Warehouse AMC Report'],
+            ['value' => 'facility_monthly_consumption', 'label' => 'Facility Monthly Consumption'],
+        ];
+        return Inertia::render('Report/InventoryReportsUnified', [
+            'regions' => $regions,
+            'districts' => $districts,
+            'warehouses' => $warehouses,
+            'facilities' => $facilities,
+            'reportTypes' => $reportTypes,
+            'filters' => $request->only(['region_id', 'district_id', 'warehouse_id', 'facility_id', 'report_type', 'year', 'month']),
+        ]);
+    }
+
+    /**
+     * Data endpoint for consolidated inventory reports. Returns unified rows based on report_type and filters.
+     */
+    public function inventoryReportsUnifiedData(Request $request)
+    {
+        $request->validate([
+            'report_type' => 'required|in:warehouse_inventory,qty_received,qty_issued,physical_count,warehouse_amc,facility_monthly_consumption',
+            'region_id' => 'nullable|exists:regions,id',
+            'district_id' => 'nullable|exists:districts,id',
+            'warehouse_id' => 'nullable|exists:warehouses,id',
+            'facility_id' => 'nullable|exists:facilities,id',
+            'year' => 'nullable|integer|min:2000|max:2100',
+            'month' => 'nullable|integer|min:1|max:12',
+        ]);
+
+        $hasLocationFilter = $request->filled('region_id')
+            || $request->filled('district_id')
+            || $request->filled('warehouse_id')
+            || $request->filled('facility_id');
+        if (!$hasLocationFilter) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+                'message' => 'Please select at least one filter (Region, District, Warehouse or Facility).',
+            ]);
+        }
+
+        $reportType = $request->report_type;
+        $monthYear = null;
+        if ($request->filled('year') && $request->filled('month')) {
+            $monthYear = sprintf('%04d-%02d', (int) $request->year, (int) $request->month);
+        } elseif ($request->filled('year')) {
+            $monthYear = (string) $request->year;
+        }
+        $warehouseIds = $this->resolveWarehouseIdsFromFilters($request);
+        $facilityIds = $this->resolveFacilityIdsFromFilters($request);
+        $data = $this->getUnifiedInventoryReportRows($reportType, $monthYear, $request->warehouse_id, $request->facility_id, $warehouseIds, $facilityIds, $request);
+        return response()->json(['success' => true, 'data' => $data]);
+    }
+
+    /**
+     * Resolve warehouse IDs for filtering (by region, district, or single warehouse).
+     * Returns [] when no filter is applied (show all).
+     */
+    private function resolveWarehouseIdsFromFilters(Request $request): array
+    {
+        if ($request->filled('warehouse_id')) {
+            return [(int) $request->warehouse_id];
+        }
+        if (!$request->filled('region_id') && !$request->filled('district_id')) {
+            return [];
+        }
+        $query = Warehouse::query();
+        if ($request->filled('region_id')) {
+            $regionName = Region::find($request->region_id)?->name;
+            if ($regionName) {
+                $query->where('region', $regionName);
+            }
+        }
+        if ($request->filled('district_id')) {
+            $districtName = District::find($request->district_id)?->name;
+            if ($districtName) {
+                $query->where('district', $districtName);
+            }
+        }
+        return $query->pluck('id')->toArray();
+    }
+
+    /**
+     * Resolve facility IDs for filtering. Returns [] when no filter (show all).
+     */
+    private function resolveFacilityIdsFromFilters(Request $request): array
+    {
+        if ($request->filled('facility_id')) {
+            return [(int) $request->facility_id];
+        }
+        if (!$request->filled('region_id') && !$request->filled('district_id')) {
+            return [];
+        }
+        $query = Facility::query();
+        if ($request->filled('region_id')) {
+            $regionName = Region::find($request->region_id)?->name;
+            if ($regionName) {
+                $query->where('region', $regionName);
+            }
+        }
+        if ($request->filled('district_id')) {
+            $districtName = District::find($request->district_id)?->name;
+            if ($districtName) {
+                $query->where('district', $districtName);
+            }
+        }
+        return $query->pluck('id')->toArray();
+    }
+
+    /**
+     * Build unified report rows for the consolidated inventory report table.
+     */
+    private function getUnifiedInventoryReportRows(
+        string $reportType,
+        ?string $monthYear,
+        $warehouseId,
+        $facilityId,
+        array $warehouseIds,
+        array $facilityIds,
+        Request $request
+    ): array {
+        $rows = [];
+        switch ($reportType) {
+            case 'warehouse_inventory':
+                $rows = $this->unifiedRowsFromWarehouseInventory($monthYear, $warehouseIds);
+                break;
+            case 'qty_received':
+                $rows = $this->unifiedRowsFromQtyReceived($monthYear, $warehouseIds);
+                break;
+            case 'qty_issued':
+                $rows = $this->unifiedRowsFromQtyIssued($monthYear, $warehouseIds);
+                break;
+            case 'physical_count':
+                $rows = $this->unifiedRowsFromPhysicalCount($monthYear, $warehouseIds);
+                break;
+            case 'warehouse_amc':
+                $rows = $this->unifiedRowsFromWarehouseAmc($monthYear);
+                break;
+            case 'facility_monthly_consumption':
+                $rows = $this->unifiedRowsFromFacilityMonthlyConsumption($monthYear, $facilityIds, $request);
+                break;
+        }
+        return $rows;
+    }
+
+    private function unifiedRowsFromWarehouseInventory(?string $monthYear, array $warehouseIds): array
+    {
+        if (!$monthYear) {
+            return [];
+        }
+        $report = InventoryReport::where('month_year', $monthYear)->first();
+        if (!$report) {
+            return [];
+        }
+        $query = $report->items()->with([
+            'product' => fn ($q) => $q->select('id', 'name', 'category_id', 'dosage_id')->with(['category:id,name', 'dosage:id,name']),
+            'warehouse:id,name',
+        ]);
+        if (!empty($warehouseIds)) {
+            $query->whereIn('warehouse_id', $warehouseIds);
+        }
+        $items = $query->get();
+        $rows = [];
+        foreach ($items as $item) {
+            $rows[] = [
+                'item' => $item->product->name ?? '',
+                'category' => $item->product->category->name ?? '',
+                'uom' => $item->product->dosage->name ?? '',
+                'batch_no' => null,
+                'expiry_date' => null,
+                'beginning_balance' => (int) $item->beginning_balance,
+                'qty_received' => (int) $item->received_quantity,
+                'qty_issued' => (int) $item->issued_quantity,
+                'adjustment_neg' => (int) $item->negative_adjustment,
+                'adjustment_pos' => (int) $item->positive_adjustment,
+                'closing_balance' => (int) $item->closing_balance,
+                'total_closing_balance' => (int) $item->total_closing_balance,
+                'amc' => (int) ($item->average_monthly_consumption ?? 0),
+                'mos' => $item->months_of_stock ?? '',
+                'stockout_days' => 0,
+                'unit_cost' => (float) ($item->unit_cost ?? 0),
+                'total_cost' => (float) ($item->total_cost ?? 0),
+                'warehouse_name' => $item->warehouse->name ?? '',
+                'facility_name' => null,
+            ];
+        }
+        return $rows;
+    }
+
+    private function unifiedRowsFromQtyReceived(?string $monthYear, array $warehouseIds): array
+    {
+        if (!$monthYear) {
+            return [];
+        }
+        $query = MonthlyQuantityReceived::with([
+            'items.product' => fn ($q) => $q->select('id', 'name', 'category_id', 'dosage_id')->with(['category:id,name', 'dosage:id,name']),
+            'items.warehouse:id,name',
+        ])->where('month_year', 'like', $monthYear . '%');
+        $reports = $query->get();
+        $rows = [];
+        foreach ($reports as $report) {
+            foreach ($report->items as $item) {
+                if (!empty($warehouseIds) && !in_array($item->warehouse_id, $warehouseIds)) {
+                    continue;
+                }
+                $rows[] = [
+                    'item' => $item->product->name ?? '',
+                    'category' => $item->product->category->name ?? '',
+                    'uom' => $item->product->dosage->name ?? '',
+                    'batch_no' => null,
+                    'expiry_date' => null,
+                    'beginning_balance' => 0,
+                    'qty_received' => (int) $item->quantity,
+                    'qty_issued' => 0,
+                    'adjustment_neg' => 0,
+                    'adjustment_pos' => 0,
+                    'closing_balance' => 0,
+                    'total_closing_balance' => 0,
+                    'amc' => 0,
+                    'mos' => null,
+                    'stockout_days' => 0,
+                    'unit_cost' => 0,
+                    'total_cost' => 0,
+                    'warehouse_name' => $item->warehouse->name ?? '',
+                    'facility_name' => null,
+                ];
+            }
+        }
+        return $rows;
+    }
+
+    private function unifiedRowsFromQtyIssued(?string $monthYear, array $warehouseIds): array
+    {
+        if (!$monthYear) {
+            return [];
+        }
+        $query = IssueQuantityReport::with([
+            'items.product' => fn ($q) => $q->select('id', 'name', 'category_id', 'dosage_id')->with(['category:id,name', 'dosage:id,name']),
+            'items.warehouse:id,name',
+        ])->where('month_year', 'like', $monthYear . '%');
+        $reports = $query->get();
+        $rows = [];
+        foreach ($reports as $report) {
+            foreach ($report->items as $item) {
+                if (!empty($warehouseIds) && !in_array($item->warehouse_id, $warehouseIds)) {
+                    continue;
+                }
+                $rows[] = [
+                    'item' => $item->product->name ?? '',
+                    'category' => $item->product->category->name ?? '',
+                    'uom' => $item->product->dosage->name ?? '',
+                    'batch_no' => null,
+                    'expiry_date' => null,
+                    'beginning_balance' => 0,
+                    'qty_received' => 0,
+                    'qty_issued' => (int) $item->quantity,
+                    'adjustment_neg' => 0,
+                    'adjustment_pos' => 0,
+                    'closing_balance' => 0,
+                    'total_closing_balance' => 0,
+                    'amc' => 0,
+                    'mos' => null,
+                    'stockout_days' => 0,
+                    'unit_cost' => 0,
+                    'total_cost' => 0,
+                    'warehouse_name' => $item->warehouse->name ?? '',
+                    'facility_name' => null,
+                ];
+            }
+        }
+        return $rows;
+    }
+
+    private function unifiedRowsFromPhysicalCount(?string $monthYear, array $warehouseIds): array
+    {
+        if (!$monthYear) {
+            return [];
+        }
+        $adjustment = InventoryAdjustment::where('month_year', 'like', $monthYear . '%')
+            ->whereIn('status', ['pending', 'reviewed', 'submitted'])
+            ->first();
+        if (!$adjustment) {
+            return [];
+        }
+        $items = $adjustment->items()
+            ->with([
+                'product' => fn ($q) => $q->select('id', 'name', 'category_id', 'dosage_id')->with(['category:id,name', 'dosage:id,name']),
+                'warehouse:id,name',
+            ])
+            ->get();
+        $rows = [];
+        foreach ($items as $item) {
+            if (!empty($warehouseIds) && $item->warehouse_id && !in_array($item->warehouse_id, $warehouseIds)) {
+                continue;
+            }
+            $rows[] = [
+                'item' => $item->product->name ?? '',
+                'category' => $item->product->category->name ?? '',
+                'uom' => $item->uom ?? ($item->product->dosage->name ?? ''),
+                'batch_no' => $item->batch_number ?? null,
+                'expiry_date' => $item->expiry_date ? $item->expiry_date->format('Y-m-d') : null,
+                'beginning_balance' => 0,
+                'qty_received' => 0,
+                'qty_issued' => 0,
+                'adjustment_neg' => 0,
+                'adjustment_pos' => 0,
+                'closing_balance' => (int) ($item->physical_count ?? 0),
+                'total_closing_balance' => (int) ($item->physical_count ?? 0),
+                'amc' => 0,
+                'mos' => null,
+                'stockout_days' => 0,
+                'unit_cost' => (float) ($item->unit_cost ?? 0),
+                'total_cost' => (float) ($item->total_cost ?? 0),
+                'warehouse_name' => $item->warehouse->name ?? '',
+                'facility_name' => null,
+            ];
+        }
+        return $rows;
+    }
+
+    private function unifiedRowsFromWarehouseAmc(?string $monthYear): array
+    {
+        if (!$monthYear) {
+            return [];
+        }
+        $query = WarehouseAmc::with([
+            'product' => fn ($q) => $q->select('id', 'name', 'category_id', 'dosage_id')->with(['category:id,name', 'dosage:id,name']),
+        ])->where('month_year', 'like', $monthYear . '%');
+        $items = $query->get();
+        $rows = [];
+        foreach ($items as $item) {
+            $rows[] = [
+                'item' => $item->product->name ?? '',
+                'category' => $item->product->category->name ?? '',
+                'uom' => $item->product->dosage->name ?? '',
+                'batch_no' => null,
+                'expiry_date' => null,
+                'beginning_balance' => 0,
+                'qty_received' => 0,
+                'qty_issued' => 0,
+                'adjustment_neg' => 0,
+                'adjustment_pos' => 0,
+                'closing_balance' => 0,
+                'total_closing_balance' => 0,
+                'amc' => (int) $item->quantity,
+                'mos' => null,
+                'stockout_days' => 0,
+                'unit_cost' => 0,
+                'total_cost' => 0,
+                'warehouse_name' => '',
+                'facility_name' => null,
+            ];
+        }
+        return $rows;
+    }
+
+    /**
+     * Facility (monthly) consumption / inventory: uses facility_inventory and facility_inventory_items.
+     */
+    private function unifiedRowsFromFacilityMonthlyConsumption(?string $monthYear, array $facilityIds, Request $request): array
+    {
+        if (empty($facilityIds)) {
+            $facilityId = $request->facility_id;
+            if (!$facilityId) {
+                return [];
+            }
+            $facilityIds = [(int) $facilityId];
+        }
+        $query = FacilityInventoryItem::with([
+            'product' => fn ($q) => $q->select('id', 'name', 'category_id', 'dosage_id')->with(['category:id,name', 'dosage:id,name']),
+            'inventory.facility:id,name',
+        ])->whereHas('inventory', fn ($q) => $q->whereIn('facility_id', $facilityIds));
+        $items = $query->get();
+        $rows = [];
+        foreach ($items as $item) {
+            $facilityName = $item->inventory->facility->name ?? null;
+            $rows[] = [
+                'item' => $item->product->name ?? '',
+                'category' => $item->product->category->name ?? '',
+                'uom' => $item->uom ?? ($item->product->dosage->name ?? ''),
+                'batch_no' => $item->batch_number ?? null,
+                'expiry_date' => $item->expiry_date ? $item->expiry_date->format('Y-m-d') : null,
+                'beginning_balance' => 0,
+                'qty_received' => 0,
+                'qty_issued' => 0,
+                'adjustment_neg' => 0,
+                'adjustment_pos' => 0,
+                'closing_balance' => (int) ($item->quantity ?? 0),
+                'total_closing_balance' => (int) ($item->quantity ?? 0),
+                'amc' => 0,
+                'mos' => null,
+                'stockout_days' => 0,
+                'unit_cost' => (float) ($item->unit_cost ?? 0),
+                'total_cost' => (float) ($item->total_cost ?? 0),
+                'warehouse_name' => null,
+                'facility_name' => $facilityName,
+            ];
+        }
+        return $rows;
     }
     
     public function physicalCountReport(Request $request){

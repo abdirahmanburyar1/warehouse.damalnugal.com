@@ -33,8 +33,9 @@ Schedule::command('orders:generate-quarterly')
         return ($m === 3 && $d === 31) || ($m === 6 && $d === 30) || ($m === 9 && $d === 30) || ($m === 12 && $d === 31);
     });
 
+// Monthly received quantities: run every minute; command exits unless scheduled day/time matches (configurable in Settings > Report Schedules)
 Schedule::command('report:monthly-received-quantities')
-    ->monthlyOn(1, '01:00')
+    ->everyMinute()
     ->appendOutputTo(storage_path('logs/monthly-reports.log'))
     ->emailOutputOnFailure(config('mail.admin_address'));
 

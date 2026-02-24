@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\EmailNotificationSetting;
 use App\Models\MonthlyQuantityReceived;
 use App\Models\ReceivedQuantity;
 use App\Models\ReceivedQuantityItem;
@@ -31,12 +32,29 @@ class GenerateMonthlyReceivedReport extends Command
      */
     public function handle()
     {
-        $this->info('Starting monthly received quantities report generation...');
-
-        // Get the month to process (either from argument or previous month)
         $monthArg = $this->option('month');
         $force = $this->option('force');
         $today = Carbon::now();
+
+        if (!$monthArg && !$force) {
+            $setting = EmailNotificationSetting::monthlyReceivedReportSchedule();
+            if (!$setting || !$setting->enabled) {
+                $this->info('Monthly received quantities report schedule is disabled or not configured.');
+                return 0;
+            }
+            $config = $setting->config ?? [];
+            $dayOfMonth = (int) ($config['day_of_month'] ?? 1);
+            $time = $config['time'] ?? '01:00';
+            $time = $this->normalizeTime($time);
+            $currentTime = $today->format('H:i');
+            if ($today->day != $dayOfMonth || $currentTime !== $time) {
+                $this->info("Skipping: scheduled for day {$dayOfMonth} at {$time}. Today: {$today->day}, time: {$currentTime}. Use --force to run now.");
+                return 0;
+            }
+        }
+
+        $this->info('Starting monthly received quantities report generation...');
+
         $isFirstDayOfMonth = $today->day === 1;
 
         if ($monthArg) {
@@ -172,6 +190,15 @@ class GenerateMonthlyReceivedReport extends Command
 
             return 1;
         }
+    }
+
+    private function normalizeTime(string $time): string
+    {
+        if (preg_match('/^\d{1,2}:\d{2}$/', $time)) {
+            $parts = explode(':', $time);
+            return sprintf('%02d:%02d', (int) $parts[0], (int) ($parts[1] ?? 0));
+        }
+        return '01:00';
     }
 
     /**

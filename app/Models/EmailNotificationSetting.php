@@ -31,4 +31,10 @@ class EmailNotificationSetting extends Model
     {
         return static::getForKey('expiry_items');
     }
+
+    /** Schedule for monthly received quantities report (day_of_month, time in config). */
+    public static function monthlyReceivedReportSchedule(): ?self
+    {
+        return static::getForKey('monthly_received_report_schedule');
+    }
 }

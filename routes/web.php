@@ -47,6 +47,7 @@ use App\Http\Controllers\WarehouseAmcController;
 use App\Http\Controllers\AssetDepreciationSettingsController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\EmailNotificationSettingController;
+use App\Http\Controllers\ReportScheduleController;
 use Maatwebsite\Excel\Facades\Excel;
 
 // Welcome route - accessible without authentication
@@ -724,6 +725,10 @@ Route::controller(LocationController::class)
             Route::get('/inventory-report/data', [ReportController::class, 'inventoryReportData'])->name('reports.inventoryReport.data');
             Route::post('/inventory-report/generate', [ReportController::class, 'generateInventoryReport'])->name('reports.generateInventoryReport');
 
+        // Consolidated Inventory Reports (unified view with report type filter)
+            Route::get('/inventory-reports', [ReportController::class, 'inventoryReportsUnified'])->name('reports.inventoryReportsUnified');
+            Route::get('/inventory-reports/data', [ReportController::class, 'inventoryReportsUnifiedData'])->name('reports.inventoryReportsUnified.data');
+
         // Physical count report routes
             Route::post('/physical-count/generate', [ReportController::class, 'generatePhysicalCountReport'])->name('reports.physicalCountReport');
 
@@ -837,6 +842,10 @@ Route::controller(LocationController::class)
         // Email notifications (programmable)
         Route::get('/email-notifications', [EmailNotificationSettingController::class, 'index'])->name('settings.email-notifications.index');
         Route::put('/email-notifications', [EmailNotificationSettingController::class, 'update'])->name('settings.email-notifications.update');
+
+        // Report schedules (programmable; use Laravel schedule:run in cron)
+        Route::get('/report-schedules', [ReportScheduleController::class, 'index'])->name('settings.report-schedules.index');
+        Route::put('/report-schedules', [ReportScheduleController::class, 'update'])->name('settings.report-schedules.update');
         
         // Logistic Companies
         Route::get('/logistics/companies', [LogisticCompanyController::class, 'index'])->name('settings.logistics.companies.index');
