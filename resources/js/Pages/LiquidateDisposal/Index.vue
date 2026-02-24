@@ -1,16 +1,17 @@
 <template>
-    <Head title="Liquidate & Disposal" />
+    <Head title="Wastage – Liquidate & Disposal" />
     <AuthenticatedLayout
-        title="Liquidate & Disposal"
-        description="Manage liquidations and disposals"
+        title="Wastage"
+        description="Manage liquidate and disposal"
         img="/assets/images/orders.png"
     >
-        <!-- Category Tabs -->
+        <!-- Category Tabs: Liquidate, Disposal -->
         <div class="bg-white mb-6 rounded-lg shadow-sm border border-gray-200">
             <div class="border-b border-gray-200">
                 <div class="flex items-center justify-between px-6">
                     <nav class="-mb-px flex space-x-8">
                         <button
+                            v-if="showLiquidateTab"
                             @click="activeTab = 'liquidate'"
                             class="whitespace-nowrap py-4 px-1 font-bold text-sm flex items-center space-x-2"
                             :class="[
@@ -22,7 +23,7 @@
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                             </svg>
-                            <span>Liquidations</span>
+                            <span>Liquidate</span>
                             <span
                                 v-if="props.stats?.liquidate"
                                 class="px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-800"
@@ -31,6 +32,7 @@
                             </span>
                         </button>
                         <button
+                            v-if="showDisposalTab"
                             @click="activeTab = 'disposal'"
                             class="whitespace-nowrap py-4 px-1 font-bold text-sm flex items-center space-x-2"
                             :class="[
@@ -42,7 +44,7 @@
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                             </svg>
-                            <span>Disposals</span>
+                            <span>Disposal</span>
                             <span
                                 v-if="props.stats?.disposal"
                                 class="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800"
@@ -274,14 +276,14 @@
         <!-- Main Content -->
         <div class="mb-[80px]">
             <!-- Tab Content -->
-            <div v-if="activeTab === 'liquidate'">
+            <div v-if="showLiquidateTab && activeTab === 'liquidate'">
                 <LiquidateTab 
                     :liquidates="props.liquidates" 
                     :filters="props.filters"
                     @pagination-change="getResult"
                 />
             </div>
-            <div v-else-if="activeTab === 'disposal'">
+            <div v-else-if="showDisposalTab && activeTab === 'disposal'">
                 <DisposalTab 
                     :disposals="props.disposals" 
                     :filters="props.filters"
@@ -294,7 +296,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Multiselect from 'vue-multiselect';
 import 'vue-multiselect/dist/vue-multiselect.css';
@@ -302,6 +304,7 @@ import '@/Components/multiselect.css';
 import LiquidateTab from './LiquidateTab.vue';
 import DisposalTab from './DisposalTab.vue';
 
+const page = usePage();
 const props = defineProps({
     liquidates: Object,
     disposals: Object,
@@ -309,7 +312,20 @@ const props = defineProps({
     stats: Object,
 });
 
+const can = computed(() => page.props.auth?.can ?? {});
+
+const showLiquidateTab = computed(() => !!(can.value.wastage_view || can.value.liquidation_view));
+const showDisposalTab = computed(() => !!(can.value.wastage_view || can.value.disposal_view));
+
 const activeTab = ref('liquidate');
+
+watch([showLiquidateTab, showDisposalTab], () => {
+    if (showDisposalTab.value && !showLiquidateTab.value) {
+        activeTab.value = 'disposal';
+    } else if (showLiquidateTab.value) {
+        activeTab.value = 'liquidate';
+    }
+}, { immediate: true });
 const showIconLegend = ref(false);
 const currentStatus = ref('all');
 

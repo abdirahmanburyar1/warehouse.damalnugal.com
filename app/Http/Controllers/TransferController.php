@@ -35,8 +35,10 @@ use App\Events\FacilityInventoryUpdated;
 use App\Events\FacilityInventoryTestEvent;
 use App\Models\Driver;
 use App\Models\LogisticCompany;
+use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use App\Http\Resources\TransferResource;
+use App\Notifications\TransferActionRequired;
 
 class TransferController extends Controller
 {
@@ -532,6 +534,9 @@ class TransferController extends Controller
 
     public function store(Request $request)
     {
+        if (!auth()->user()->hasPermission('transfer-create') && !auth()->user()->isAdmin) {
+            abort(403, 'You do not have permission to create transfers.');
+        }
         DB::beginTransaction();
         try {
             $request->validate([
@@ -653,6 +658,16 @@ class TransferController extends Controller
                 Notification::route('mail', $transfer->toFacility->email)
                     ->notify(new TransferCreated($transfer));
             }
+
+            // Workflow: notify users with transfer-review permission (next action = review)
+            $reviewers = User::withPermission('transfer-review')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', auth()->id())
+                ->get();
+            foreach ($reviewers as $user) {
+                $user->notify(new TransferActionRequired($transfer, TransferActionRequired::ACTION_NEEDS_REVIEW));
+            }
     
             DB::commit();
             return response()->json('Transfer created successfully', 200);
@@ -725,6 +740,9 @@ class TransferController extends Controller
     }
     
     public function create(Request $request){
+        if (!auth()->user()->hasPermission('transfer-create') && !auth()->user()->isAdmin) {
+            abort(403, 'You do not have permission to create transfers.');
+        }
         $warehouses = Warehouse::select('id','name')->get();
         $facilities = Facility::select('id','name')->get();
         $transferID = Transfer::generateTransferId();
@@ -1888,8 +1906,36 @@ class TransferController extends Controller
             $transfer->status = $newStatus;
             $transfer->save();
 
-            // Dispatch event for real-time updates
-            //// event(new TransferStatusChanged($transfer, $oldStatus, $newStatus, $user->id));
+            // Workflow: notify eligible users (by permission) for each next action
+            $notifyRecipients = function (string $permission, string $actionConstant) use ($user, $transfer) {
+                User::withPermission($permission)
+                    ->where('is_active', true)
+                    ->whereNotNull('email')
+                    ->where('id', '!=', $user->id)
+                    ->get()
+                    ->each(fn ($u) => $u->notify(new TransferActionRequired($transfer, $actionConstant)));
+            };
+            $notifyRecipientsMultiple = function (array $permissions, string $actionConstant) use ($user, $transfer) {
+                $recipients = collect();
+                foreach ($permissions as $perm) {
+                    $recipients = $recipients->merge(
+                        User::withPermission($perm)->where('is_active', true)->whereNotNull('email')->where('id', '!=', $user->id)->get()
+                    );
+                }
+                $recipients->unique('id')->each(fn ($u) => $u->notify(new TransferActionRequired($transfer, $actionConstant)));
+            };
+
+            if ($newStatus === 'reviewed') {
+                $notifyRecipientsMultiple(['transfer-approve', 'transfer-reject'], TransferActionRequired::ACTION_READY_FOR_APPROVAL);
+            } elseif ($newStatus === 'approved') {
+                $notifyRecipients('transfer-processing', TransferActionRequired::ACTION_READY_FOR_PROCESSING);
+            } elseif ($newStatus === 'in_process') {
+                $notifyRecipients('transfer-dispatch', TransferActionRequired::ACTION_READY_FOR_DISPATCH);
+            } elseif ($newStatus === 'dispatched') {
+                $notifyRecipients('transfer-delivery', TransferActionRequired::ACTION_READY_FOR_DELIVERY);
+            } elseif ($newStatus === 'delivered') {
+                $notifyRecipients('transfer-receive', TransferActionRequired::ACTION_READY_FOR_RECEIVE);
+            }
 
             DB::commit();
             return response()->json('Transfer status updated successfully', 200);

@@ -37,6 +37,9 @@ class InventoryController extends Controller
 {
 	public function index(Request $request)
 	{
+		if (!auth()->user()->hasPermission('inventory-view') && !auth()->user()->hasPermission('inventory-manage') && !auth()->user()->isAdmin()) {
+			abort(403, 'You do not have permission to access the inventory module.');
+		}
 		// Increase execution time limit to prevent timeout
 		set_time_limit(120);
 		
@@ -372,6 +375,9 @@ class InventoryController extends Controller
 	 */
 	public function store(Request $request)
 	{
+		if (!auth()->user()->hasPermission('inventory-manage') && !auth()->user()->isAdmin()) {
+			return response()->json(['success' => false, 'message' => 'You do not have permission to create or update inventory.'], 403);
+		}
 		try {
 		   
 		$validated = $request->validate([
@@ -408,6 +414,9 @@ class InventoryController extends Controller
 	 */
 	public function show(Inventory $inventory)
 	{
+		if (!auth()->user()->hasPermission('inventory-view') && !auth()->user()->hasPermission('inventory-manage') && !auth()->user()->isAdmin()) {
+			return response()->json(['success' => false, 'message' => 'You do not have permission to view inventory.'], 403);
+		}
 		$inventory->load(['product.category', 'product.dosage']);
 		return response()->json([
 			'success' => true,
@@ -419,7 +428,10 @@ class InventoryController extends Controller
 	 * Remove the specified resource from storage.
 	 */
 	public function destroy(Inventory $inventory)
-	{        
+	{
+		if (!auth()->user()->hasPermission('inventory-manage') && !auth()->user()->isAdmin()) {
+			return response()->json(['success' => false, 'message' => 'You do not have permission to delete inventory.'], 403);
+		}
 		try {
 			$inventory->delete();
 			event(new InventoryEvent());
@@ -434,6 +446,9 @@ class InventoryController extends Controller
 	}
 	
 	public function getLocations(Request $request){
+		if (!auth()->user()->hasPermission('inventory-view') && !auth()->user()->hasPermission('inventory-manage') && !auth()->user()->isAdmin()) {
+			return response()->json([], 403);
+		}
 		try {
 			$warehouse = $request->input('warehouse');
 			
@@ -460,6 +475,9 @@ class InventoryController extends Controller
 
 	public function updateLocation(Request $request)
 	{
+		if (!auth()->user()->hasPermission('inventory-adjust') && !auth()->user()->hasPermission('inventory-manage') && !auth()->user()->isAdmin()) {
+			return response()->json(['success' => false, 'message' => 'You do not have permission to adjust inventory.'], 403);
+		}
 		$request->validate([
 			'inventory_item_id' => 'required|exists:inventory_items,id',
 			'location' => 'required|string|max:255'
@@ -494,9 +512,7 @@ class InventoryController extends Controller
 	 */
 	public function import(Request $request)
 	{
-		// Server-side permission enforcement (DB permissions are dash-based)
-		$user = auth()->user();
-		if (!$user || (!$user->can('inventory-manage') && !$user->can('manage-system') && !$user->isAdmin())) {
+		if (!auth()->user()->hasPermission('inventory-manage') && !auth()->user()->isAdmin()) {
 			return response()->json([
 				'success' => false,
 				'message' => 'You do not have permission to import inventory'

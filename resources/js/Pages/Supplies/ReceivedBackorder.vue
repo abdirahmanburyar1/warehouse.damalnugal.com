@@ -1,18 +1,13 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
-import { useToast } from 'vue-toastification';
 import moment from 'moment';
-import Swal from 'sweetalert2';
-import axios from 'axios';
 import { TailwindPagination } from 'laravel-vue-pagination';
 import Multiselect from "vue-multiselect";
 import "vue-multiselect/dist/vue-multiselect.css";
 import "@/Components/multiselect.css";
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Link } from '@inertiajs/vue3';
-
-const toast = useToast();
 
 const props = defineProps({
     receivedBackorders: Object,
@@ -21,135 +16,6 @@ const props = defineProps({
     warehouses: Array,
     facilities: Array,
 });
-
-const isReviewing = ref([]);
-const reviewReceivedBackorder = (id, index) => {
-    if (!id) return;
-    isReviewing.value[index] = true;
-    Swal.fire({
-        title: 'Review Received Back Order?',
-        text: 'Are you sure you want to review this received back order?',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#3B82F6',
-        cancelButtonColor: '#6B7280',
-        confirmButtonText: 'Yes, review it!'
-    }).then(async (result) => {
-        if (result.isConfirmed) {
-            isReviewing.value[index] = true;
-            await axios.post(route('supplies.received-backorder.review', id))
-                .then((response) => {
-                    isReviewing.value[index] = false;
-                    Swal.fire({
-                        title: 'Success!',
-                        text: 'Received back order reviewed successfully',
-                        icon: 'success',
-                        confirmButtonText: 'OK'
-                    }).then(() => {
-                        reloadReceivedBackorders();
-                    });
-                })
-                .catch((error) => {
-                    isReviewing.value[index] = false;
-                    console.error('Error reviewing received back order:', error);
-                    toast.error('An error occurred while reviewing the received back order');
-                });
-        } else {
-            isReviewing.value[index] = false;
-        }
-    });
-};
-
-const isApproving = ref([]);
-const approveReceivedBackorder = async (id, index) => {
-    if (!id) return;
-    isApproving.value[index] = true;
-    Swal.fire({
-        title: 'Approve Received Back Order?',
-        text: 'Are you sure you want to approve this received back order?',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#10B981',
-        cancelButtonColor: '#6B7280',
-        confirmButtonText: 'Yes, approve it!'
-    }).then(async (result) => {
-        if (result.isConfirmed) {
-            isApproving.value[index] = true;
-            await axios.post(route('supplies.received-backorder.approve', id))
-                .then((response) => {
-                    isApproving.value[index] = false;
-                    Swal.fire({
-                        title: 'Success!',
-                        text: 'Received back order approved successfully',
-                        icon: 'success',
-                        confirmButtonText: 'OK'
-                    }).then(() => {
-                        reloadReceivedBackorders();
-                    });
-                })
-                .catch((error) => {
-                    isApproving.value[index] = false;
-                    console.error('Error approving received back order:', error);
-                    toast.error('An error occurred while approving the received back order');
-                });
-        } else {
-            isApproving.value[index] = false;
-        }
-    });
-};
-
-const isRejecting = ref([]);
-const rejectReceivedBackorder = async (id, index) => {
-    if (!id) return;
-
-    try {
-        const result = await Swal.fire({
-            title: 'Reject Received Back Order',
-            icon: 'warning',
-            html: '<div class="mb-3 flex flex-col"><label class="form-label">Reason for rejection</label><textarea id="rejection-reason" class="form-control" rows="3" placeholder="Enter your reason here..."></textarea></div>',
-            showCancelButton: true,
-            confirmButtonColor: '#EF4444',
-            cancelButtonColor: '#6B7280',
-            confirmButtonText: 'Reject',
-            cancelButtonText: 'Cancel',
-            showLoaderOnConfirm: true,
-            preConfirm: () => {
-                const reason = document.getElementById('rejection-reason').value;
-                if (!reason.trim()) {
-                    Swal.showValidationMessage('Please provide a reason for rejection');
-                    return false;
-                }
-                return reason;
-            },
-            allowOutsideClick: () => !Swal.isLoading()
-        });
-
-        if (result.isConfirmed && result.value) {
-            isRejecting.value[index] = true;
-            await axios.post(route('supplies.received-backorder.reject', id), {
-                rejection_reason: result.value
-            });
-
-            await Swal.fire({
-                title: 'Success!',
-                text: 'Received back order rejected successfully',
-                icon: 'success',
-                confirmButtonText: 'OK'
-            });
-
-            reloadReceivedBackorders();
-        }
-    } catch (error) {
-        console.error('Error rejecting received back order:', error);
-        Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: error.response?.data?.message || 'Failed to reject received back order'
-        });
-    } finally {
-        isRejecting.value[index] = false;
-    }
-};
 
 const parseAttachments = (attachments) => {
     console.log('parseAttachments called with:', attachments);
@@ -248,10 +114,6 @@ function reloadPage() {
         preserveScroll: true,
         only: ['receivedBackorders']
     });
-}
-
-function reloadReceivedBackorders() {
-    router.reload({ only: ['receivedBackorders'] });
 }
 
 function getResults(page = 1) {
@@ -428,14 +290,13 @@ onUnmounted(() => {
             <div v-else class="overflow-auto">
                 <table class="min-w-full border border-gray-300 table-fixed">
                     <colgroup>
-                        <col class="w-24">
+                        <col class="w-40">
                         <col class="w-80">
                         <col class="w-24">
                         <col class="w-28">
                         <col class="w-28">
                         <col class="w-24">
                         <col class="w-24">
-                        <col class="w-32">
                     </colgroup>
                     <thead class="bg-gradient-to-r from-gray-50 to-gray-100">
                         <tr>
@@ -460,9 +321,6 @@ onUnmounted(() => {
                             <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-700 capitalize tracking-wider border-r border-gray-300">
                                 Attachments
                             </th>
-                            <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-700 capitalize tracking-wider">
-                                Actions
-                            </th>
                         </tr>
                     </thead>
                     <tbody class="bg-white">
@@ -471,11 +329,14 @@ onUnmounted(() => {
                             :key="receivedBackorder.id"
                             class="hover:bg-gray-50 transition-colors duration-150 border-b border-gray-300"
                         >
-                            <!-- RB ID -->
+                            <!-- RB ID (link to detail) -->
                             <td class="px-4 py-3 whitespace-nowrap border-r border-gray-300">
-                                <div class="text-sm font-bold text-gray-900">
+                                <Link 
+                                    :href="route('supplies.received-backorder.show', receivedBackorder.id)"
+                                    class="text-sm font-bold text-blue-700 hover:text-blue-900 hover:underline"
+                                >
                                     #{{ receivedBackorder.received_backorder_number }}
-                                </div>
+                                </Link>
                             </td>
 
                             <!-- Details -->
@@ -576,74 +437,6 @@ onUnmounted(() => {
                                             <div v-else class="text-xs text-gray-500">No attachments</div>
                                         </div>
                                     </div>
-                                </div>
-                            </td>
-
-                            <!-- Actions Column -->
-                            <td class="px-4 py-3 whitespace-nowrap">
-                                <div class="flex items-center space-x-2">
-                                    <!-- View Details Button -->
-                                    <Link 
-                                        :href="route('supplies.received-backorder.show', receivedBackorder.id)"
-                                        class="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-150"
-                                    >
-                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                        </svg>
-                                        View
-                                    </Link>
-
-                                    <!-- Review Button -->
-                                    <button 
-                                        v-if="receivedBackorder.status === 'pending' && $page.props.auth.can.received_backorder_review"
-                                        @click="reviewReceivedBackorder(receivedBackorder.id, index)"
-                                        :disabled="isReviewing[index]"
-                                        class="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-150 disabled:opacity-50"
-                                    >
-                                        <svg v-if="isReviewing[index]" class="animate-spin -ml-1 mr-1 h-3 w-3 text-blue-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        <svg v-else class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                        </svg>
-                                        Review
-                                    </button>
-
-                                    <!-- Approve Button -->
-                                    <button 
-                                        v-if="receivedBackorder.status === 'reviewed' && $page.props.auth.can.received_backorder_approve"
-                                        @click="approveReceivedBackorder(receivedBackorder.id, index)"
-                                        :disabled="isApproving[index]"
-                                        class="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-green-700 bg-green-100 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-150 disabled:opacity-50"
-                                    >
-                                        <svg v-if="isApproving[index]" class="animate-spin -ml-1 mr-1 h-3 w-3 text-green-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        <svg v-else class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                        </svg>
-                                        Approve
-                                    </button>
-
-                                    <!-- Reject Button -->
-                                    <button 
-                                        v-if="receivedBackorder.status === 'reviewed' && $page.props.auth.can.received_backorder_approve"
-                                        @click="rejectReceivedBackorder(receivedBackorder.id, index)"
-                                        :disabled="isRejecting[index]"
-                                        class="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-150 disabled:opacity-50"
-                                    >
-                                        <svg v-if="isRejecting[index]" class="animate-spin -ml-1 mr-1 h-3 w-3 text-red-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        <svg v-else class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                        </svg>
-                                        Reject
-                                    </button>
                                 </div>
                             </td>
                         </tr>

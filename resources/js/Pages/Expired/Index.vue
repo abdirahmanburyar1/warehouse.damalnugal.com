@@ -282,9 +282,9 @@
             <!-- Quantity -->
             <div>
                 <label for="quantity" class="block text-xs font-medium text-gray-700">Quantity</label>
-                <input type="number" id="quantity" v-model="disposeForm.quantity" readonly
+                <input type="number" id="quantity" v-model.number="disposeForm.quantity" readonly
                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-xs"
-                    :min="1" :max="selectedItem?.quantity" required>
+                    :min="1" :max="selectedItem?.quantity" step="1" required>
             </div>
 
             <!-- Note -->
@@ -295,12 +295,12 @@
                     rows="3" required></textarea>
             </div>
 
-            <!-- Attachments -->
+            <!-- Attachments (optional) -->
             <div>
-                <label class="block text-xs font-medium text-gray-700">Attachments (PDF files)</label>
-                <input type="file" @change="handleFileChange"
+                <label class="block text-xs font-medium text-gray-700">Attachments (PDF files, optional)</label>
+                <input type="file" ref="disposeFileInput" @change="handleFileChange"
                     class="mt-1 block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                    multiple accept=".pdf" required>
+                    multiple accept=".pdf">
             </div>
 
             <!-- Selected Files Preview -->
@@ -442,6 +442,7 @@ const formatDate = (date) => {
 
 const showDisposeModal = ref(false);
 const selectedItem = ref(null);
+const disposeFileInput = ref(null);
 
 const disposeForm = ref({
     quantity: 0,
@@ -460,8 +461,9 @@ const removeFile = (index) => {
 
 const disposeItem = (item) => {
     selectedItem.value = item;
+    const qty = Math.floor(Number(item.quantity)) || 0;
     disposeForm.value = {
-        quantity: item.quantity || 0,
+        quantity: qty,
         note: '',
         attachments: []
     };
@@ -557,7 +559,8 @@ const submitDisposal = async () => {
     isDisposing.value = true
     const formData = new FormData();
     formData.append('id', selectedItem.value.id);
-    formData.append('quantity', disposeForm.value.quantity);
+    const quantity = Math.floor(Number(disposeForm.value.quantity)) || 1;
+    formData.append('quantity', quantity);
     formData.append('note', disposeForm.value.note);
     formData.append('type', 'Expired');
     formData.append('barcode', selectedItem.value.barcode);
@@ -572,39 +575,41 @@ const submitDisposal = async () => {
         formData.append('attachments[]', disposeForm.value.attachments[i]);
     }
 
-    await axios.post(route('expired.dispose', selectedItem.value.id), formData, {
+    await axios.post(route('expired.dispose'), formData, {
         headers: {
             'Content-Type': 'multipart/form-data'
         }
     })
         .then((response) => {
-            isDisposing.value = false
+            isDisposing.value = false;
+            const message = typeof response.data === 'string' ? response.data : (response.data?.message || 'Item has been disposed successfully');
             Swal.fire({
                 icon: 'success',
-                title: response.data.message,
+                title: message,
                 showConfirmButton: false,
                 timer: 1500
             }).then(() => {
-                isDisposing.value = false
                 showDisposeModal.value = false;
                 disposeForm.value = {
                     quantity: 0,
                     note: '',
                     attachments: []
                 };
+                if (disposeFileInput.value) disposeFileInput.value.value = '';
                 router.get(route('expired.index'), {}, {
                     preserveState: true,
                     preserveScroll: true,
-                    only: ['inventories']
+                    only: ['inventories', 'summary', 'filters']
                 });
             });
         })
         .catch(error => {
             console.error('Error disposing item:', error);
-            isDisposing.value = false
+            isDisposing.value = false;
+            const errMsg = error.response?.data?.message ?? (typeof error.response?.data === 'string' ? error.response.data : 'Failed to dispose item');
             Swal.fire({
                 icon: 'error',
-                title: error.response.data,
+                title: errMsg,
                 showConfirmButton: false,
                 timer: 1500
             });

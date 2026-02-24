@@ -205,6 +205,7 @@
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">User</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Contact</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Roles</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Organization</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Location</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
@@ -218,15 +219,21 @@
                                     <div class="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center text-sm font-semibold text-slate-600 shrink-0">
                                         {{ user.name?.charAt(0).toUpperCase() || '?' }}
                                     </div>
-                                    <div>
-                                        <div class="font-medium text-slate-900">{{ user.name }}</div>
-                                        <div class="text-xs text-slate-500">{{ user.title || '—' }}</div>
-                                    </div>
+                                    <div class="font-medium text-slate-900">{{ user.name }}</div>
                                 </div>
                             </td>
                             <td class="px-4 py-3">
                                 <div class="text-sm text-slate-900">{{ user.username }}</div>
                                 <div class="text-xs text-slate-500">{{ user.email }}</div>
+                            </td>
+                            <td class="px-4 py-3">
+                                <button
+                                    type="button"
+                                    @click="openRolesModal(user)"
+                                    class="text-left text-sm text-slate-700 hover:text-slate-900 hover:underline focus:outline-none"
+                                >
+                                    {{ rolesSummary(user) }}
+                                </button>
                             </td>
                             <td class="px-4 py-3">
                                 <span
@@ -297,6 +304,13 @@
                                 <div class="min-w-0">
                                     <div class="font-medium text-slate-900 truncate">{{ user.name }}</div>
                                     <div class="text-xs text-slate-500 truncate">{{ user.email }}</div>
+                                    <button
+                                        type="button"
+                                        @click="openRolesModal(user)"
+                                        class="text-left mt-1 text-xs text-slate-600 hover:underline"
+                                    >
+                                        {{ rolesSummary(user) }}
+                                    </button>
                                     <span
                                         class="inline-flex mt-1.5 px-2 py-0.5 text-xs font-medium rounded-full"
                                         :class="user.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'"
@@ -365,6 +379,37 @@
                 </div>
             </div>
         </div>
+
+        <!-- Roles modal -->
+        <Modal :show="showRolesModal" @close="showRolesModal = false">
+            <div class="p-4 sm:p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-slate-900">
+                        Roles — {{ selectedUserForRoles?.name || 'User' }}
+                    </h3>
+                    <button
+                        type="button"
+                        @click="showRolesModal = false"
+                        class="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                        aria-label="Close"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div v-if="selectedUserForRoles?.roles?.length" class="space-y-2">
+                    <div
+                        v-for="r in selectedUserForRoles.roles"
+                        :key="r.id"
+                        class="px-3 py-2 rounded-lg bg-slate-50 text-slate-800 text-sm"
+                    >
+                        {{ r.name }}
+                    </div>
+                </div>
+                <p v-else class="text-sm text-slate-500">No roles assigned.</p>
+            </div>
+        </Modal>
     </UserAuthTab>
 </template>
 
@@ -374,6 +419,7 @@ import { router } from '@inertiajs/vue3';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import UserAuthTab from '@/Layouts/UserAuthTab.vue';
+import Modal from '@/Components/Modal.vue';
 import { Link, Head } from '@inertiajs/vue3';
 import Multiselect from 'vue-multiselect';
 import 'vue-multiselect/dist/vue-multiselect.css';
@@ -397,6 +443,8 @@ const facility = ref(props.filters?.facility ?? null);
 const role = ref(props.filters?.role || null);
 const status = ref(props.filters?.status ?? 'All');
 const viewMode = ref('table');
+const showRolesModal = ref(false);
+const selectedUserForRoles = ref(null);
 
 const hasActiveFilters = computed(() => {
     return search.value || organization.value || warehouse.value || facility.value || (status.value && status.value !== 'All');
@@ -429,12 +477,25 @@ function applyFilters() {
     router.get(route('settings.users.index'), params, {
         preserveState: true,
         preserveScroll: true,
-        only: ['users', 'roles', 'warehouses', 'facilities'],
+        only: ['users', 'roles', 'warehouses', 'facilities', 'filters'],
     });
 }
 
 function getUsers(page) {
     props.filters.page = page;
+}
+
+function rolesSummary(user) {
+    const roles = user?.roles || [];
+    if (!roles.length) return '—';
+    const first = roles[0]?.name || roles[0];
+    if (roles.length === 1) return first;
+    return `${first} +`;
+}
+
+function openRolesModal(user) {
+    selectedUserForRoles.value = user;
+    showRolesModal.value = true;
 }
 
 function confirmToggleStatus(user) {

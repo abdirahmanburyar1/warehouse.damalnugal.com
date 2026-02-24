@@ -45,6 +45,8 @@ use App\Http\Controllers\ReasonController;
 use App\Http\Controllers\ReorderLevelController;
 use App\Http\Controllers\WarehouseAmcController;
 use App\Http\Controllers\AssetDepreciationSettingsController;
+use App\Http\Controllers\RoleController;
+use App\Http\Controllers\EmailNotificationSettingController;
 use Maatwebsite\Excel\Facades\Excel;
 
 // Welcome route - accessible without authentication
@@ -172,8 +174,8 @@ Route::middleware(['auth', \App\Http\Middleware\TwoFactorAuth::class])->group(fu
         Route::get('/reports/facility-lmis-report/create', [ReportController::class, 'createFacilityLmisReport'])->name('reports.facility-lmis-report.create');
     });
 
-    // Category Management Routes
-    Route::middleware([\App\Http\Middleware\TwoFactorAuth::class, PermissionMiddleware::class . ':category.view'])
+    // Category Management Routes (product-view or product-manage)
+    Route::middleware([\App\Http\Middleware\TwoFactorAuth::class, PermissionMiddleware::class . ':product-view,product-manage'])
         ->group(function () {
             Route::get('/categories', [CategoryController::class, 'index'])->name('products.categories.index');
             Route::post('/categories/store', [CategoryController::class, 'store'])->name('products.categories.store');
@@ -439,7 +441,8 @@ Route::controller(LocationController::class)
         Route::get('/import/format', [ReorderLevelController::class, 'getImportFormat'])->name('reorder-levels.import.format');
     });
 
-    // Order Management Routes
+    // Order Management Routes (same as transfer: view, create, edit, delete, manage + workflow; workflow actions checked in controller)
+    Route::middleware(PermissionMiddleware::class . ':order-view,order-create,order-edit,order-delete,order-manage,order-review,order-approve,order-reject,order-processing,order-dispatch')->group(function () {
     Route::prefix('orders')->group(function () {
         Route::get('/', [OrderController::class, 'index'])->name('orders.index');
         Route::get('/{id}/show', [OrderController::class, 'show'])->name('orders.show');
@@ -461,6 +464,7 @@ Route::controller(LocationController::class)
         // 'order.update-quantity
         Route::post('/update-quantity', [OrderController::class, 'updateQuantity'])->name('orders.update-quantity');
 
+    });
     });
 
     // Transfer Management Routes
@@ -563,7 +567,8 @@ Route::controller(LocationController::class)
             Route::delete('/{dispatch}', [DispatchController::class, 'destroy'])->name('dispatches.destroy');
     });
 
-    // Facility Management Routes
+    // Facility Management Routes (facility-view or facility-manage)
+    Route::middleware(PermissionMiddleware::class . ':facility-view,facility-manage')->group(function () {
     Route::prefix('facilities')->group(function () {
         Route::get('/', [FacilityController::class, 'index'])->name('facilities.index');
         Route::get('/{id}/show', [FacilityController::class, 'show'])->name('facilities.show');
@@ -583,8 +588,10 @@ Route::controller(LocationController::class)
         // get facilities
         Route::post('/get-facilities', [FacilityController::class, 'getFacilities'])->name('facilities.get-facilities');
     });
+    });
 
-    // District Management Routes
+    // District Management Routes (under facility module: facility-view or facility-manage)
+    Route::middleware(PermissionMiddleware::class . ':facility-view,facility-manage')->group(function () {
     Route::prefix('districts')->group(function () {
             Route::get('/', [DistrictController::class, 'index'])->name('districts.index');
             Route::get('/create', [DistrictController::class, 'create'])->name('districts.create');
@@ -597,8 +604,10 @@ Route::controller(LocationController::class)
         Route::post('/get-districts', [DistrictController::class, 'getDistricts'])->name('districts.get-districts');
         Route::post('/store', [DistrictController::class, 'store'])->name('districts.store');
     });
+    });
 
-    // Asset Management Routes
+    // Asset Management Routes (any asset permission grants route access; controller enforces per-action)
+    Route::middleware(PermissionMiddleware::class . ':asset-view,asset-create,asset-edit,asset-delete,asset-review,asset-approve,asset-reject,asset-manage,asset-bulk-import,asset-export')->group(function () {
     Route::controller(AssetController::class)
         ->prefix('assets-management')
         ->group(function () {
@@ -664,8 +673,10 @@ Route::controller(LocationController::class)
             Route::post('/maintenance/{maintenance}/mark-completed', [AssetMaintenanceController::class, 'markCompleted'])->name('asset.maintenance.mark-completed');
             Route::get('/{asset}/maintenance/list', [AssetMaintenanceController::class, 'getAssetMaintenance'])->name('asset.maintenance.list');
         });
+    });
 
-    // Inventory Management Routes
+    // Inventory Management Routes (inventory-view or inventory-manage or inventory-adjust or inventory-transfer)
+    Route::middleware(PermissionMiddleware::class . ':inventory-view,inventory-manage,inventory-adjust,inventory-transfer')->group(function () {
     Route::prefix('inventory')->group(function () {
         Route::get('/', [InventoryController::class, 'index'])->name('inventories.index');
         Route::get('/create', [InventoryController::class, 'create'])->name('inventories.create');
@@ -677,6 +688,7 @@ Route::controller(LocationController::class)
         Route::get('/get-locations', [InventoryController::class, 'getLocations'])->name('inventories.getLocations');
         Route::get('/get-all-locations', [InventoryController::class, 'getAllLocations'])->name('inventories.getAllLocations');
         Route::post('/import', [InventoryController::class, 'import'])->name('inventories.import');
+    });
     });
 
     // API Routes
@@ -770,7 +782,8 @@ Route::controller(LocationController::class)
             Route::get('/warehouse-amc/template', [WarehouseAmcController::class, 'downloadTemplate'])->name('reports.warehouse-amc.template');
     });
 
-    // MOH Inventory Routes
+    // MOH Inventory Routes (own permissions: view, create, review, approve, reject)
+    Route::middleware(PermissionMiddleware::class . ':moh-inventory-view,moh-inventory-create,moh-inventory-review,moh-inventory-approve,moh-inventory-reject')->group(function () {
     Route::controller(MohInventoryController::class)
     ->group(function () {
         Route::get('/moh-inventory', 'index')->name('inventories.moh-inventory.index');
@@ -780,6 +793,7 @@ Route::controller(LocationController::class)
         Route::get('/moh-inventory/test-import', 'testImport')->name('inventories.moh-inventory.test-import');
         Route::post('/moh-inventory/{mohInventory}/change-status', 'changeStatus')->name('inventories.moh-inventory.change-status');
         Route::put('/moh-inventory/{mohInventoryItem}', 'updateItem')->name('inventories.moh-inventory.update-item');
+    });
     });
 
     // Approval Routes
@@ -814,6 +828,15 @@ Route::controller(LocationController::class)
         Route::post('/users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('settings.users.reset-password');
         Route::post('/users/{user}/assign-permissions', [UserController::class, 'assignPermissions'])->name('settings.users.assign-permissions');
         Route::get('/users/{user}/permissions', [UserController::class, 'getUserPermissions'])->name('settings.users.permissions');
+        
+        // Roles
+        Route::get('/roles', [RoleController::class, 'index'])->name('settings.roles.index');
+        Route::post('/roles', [RoleController::class, 'store'])->name('settings.roles.store');
+        Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('settings.roles.destroy');
+        
+        // Email notifications (programmable)
+        Route::get('/email-notifications', [EmailNotificationSettingController::class, 'index'])->name('settings.email-notifications.index');
+        Route::put('/email-notifications', [EmailNotificationSettingController::class, 'update'])->name('settings.email-notifications.update');
         
         // Logistic Companies
         Route::get('/logistics/companies', [LogisticCompanyController::class, 'index'])->name('settings.logistics.companies.index');

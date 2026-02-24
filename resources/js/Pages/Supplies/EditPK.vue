@@ -27,7 +27,7 @@
                         class="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">Reviewed</div>
                     <div v-else-if="form.status === 'rejected'"
                         class="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">Rejected</div>
-                    <div v-else class="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-medium">Processing
+                    <div v-else class="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-medium">Draft
                     </div>
                 </div>
             </div>
@@ -378,9 +378,10 @@
                                 <img src="/assets/images/rejected.png" class="w-5 h-5 mr-2" alt="Reject" />
                                 <span class="text-sm font-bold text-white">{{ form.rejected_at ? 'Rejected' : 'Reject' }}</span>
                             </button>
-                            <div v-if="form.rejected_at" class="mt-2 text-center">
+                            <div v-if="form.rejected_at" class="mt-2 text-center max-w-[200px]">
                                 <div class="text-xs text-gray-600">{{ moment(form.rejected_at).format('DD/MM/YYYY HH:mm') }}</div>
                                 <div class="text-xs font-medium text-gray-700">By {{ form.rejected_by?.name }}</div>
+                                <p v-if="form.rejection_reason" class="text-xs text-gray-600 mt-1 italic">"{{ form.rejection_reason }}"</p>
                             </div>
                         </div>
                         <div v-if="form.reviewed_at && !form.approved_at && !form.rejected_at"
@@ -460,13 +461,13 @@
                         <tbody class="bg-white divide-y divide-gray-200">
                             <tr v-for="(row, index) in backOrderRows" :key="index" class="hover:bg-gray-50">
                                 <td class="px-4 py-3">
-                                    <input type="number" v-model="row.quantity" :disabled="row.finalized != null"
-                                        class="w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                                    <input type="number" v-model="row.quantity" :disabled="row.finalized != null || form.status === 'approved'"
+                                        class="w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 disabled:opacity-60 disabled:cursor-not-allowed"
                                         min="0" />
                                 </td>
                                 <td class="px-4 py-3">
-                                    <select v-model="row.status"
-                                        class="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                                    <select v-model="row.status" :disabled="form.status === 'approved'"
+                                        class="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 disabled:opacity-60 disabled:cursor-not-allowed">
                                         <option
                                             v-for="status in [row.status, ...availableStatuses.filter((s) => s !== row.status)]"
                                             :key="status" :value="status">
@@ -475,13 +476,13 @@
                                     </select>
                                 </td>
                                 <td class="px-4 py-3">
-                                    <input type="text" v-model="row.notes"
-                                        class="w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                                    <input type="text" v-model="row.notes" :disabled="form.status === 'approved'"
+                                        class="w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 disabled:opacity-60 disabled:cursor-not-allowed"
                                         placeholder="Enter note..." />
                                 </td>
                                 <td class="px-4 py-3">
-                                    <button @click="removeBackOrderRow(index, row)"
-                                        class="text-red-600 hover:text-red-800 transition-colors duration-150">
+                                    <button @click="removeBackOrderRow(index, row)" :disabled="form.status === 'approved'"
+                                        class="text-red-600 hover:text-red-800 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-red-600">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
                                             viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -498,7 +499,7 @@
                     <div class="flex items-center gap-4">
                         <button @click="addBackOrderRow"
                             class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                            :disabled="!canAddMoreRows">
+                            :disabled="!canAddMoreRows || form.status === 'approved'">
                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
@@ -516,7 +517,7 @@
                             </span>
                         </div>
                     </div>
-                    <PrimaryButton @click="attemptCloseModal">Save and Exit</PrimaryButton>
+                    <PrimaryButton @click="attemptCloseModal" :disabled="form.status === 'approved'">Save and Exit</PrimaryButton>
                 </div>
             </div>
         </Modal>
@@ -1227,23 +1228,24 @@ async function reviewPackingList() {
             const response = await axios.post(route('supplies.reviewPK'), {
                 id: form.value.id,
                 status: 'reviewed',
-                items: form.value.items
             });
-            
-            console.log('Review response:', response.data);
+            if (response.data.reviewed_at) {
+                form.value.reviewed_at = response.data.reviewed_at;
+                form.value.reviewed_by = response.data.reviewed_by;
+                form.value.status = 'reviewed';
+            }
 
             await Swal.fire({
                 title: 'Success!',
-                text: 'Items have been reviewed',
+                text: 'Packing list has been marked for review',
                 icon: 'success',
                 confirmButtonColor: '#10B981',
             });
 
-            // Refresh the page with updated data
             router.get(route('supplies.packing-list.edit', form.value.id), {}, {
                 preserveScroll: false,
                 preserveState: false,
-                only: ['packing_list', 'warehouses', 'locations']
+                only: ['packing_list', 'warehouses', 'locations'],
             });
 
         } catch (error) {
@@ -1319,53 +1321,56 @@ async function approvePackingList() {
 const isRejecting = ref(false);
 
 async function rejectPackingList() {
-    console.log('Reject function called');
-    console.log('Form status:', form.value?.status);
-    console.log('User permissions:', page.props.auth.can);
-    
-    const confirm = await Swal.fire({
-        title: 'Reject Packing List',
-        text: 'Are you sure you want to reject these items?',
-        icon: 'question',
+    if (isRejecting.value) return;
+
+    const { value: reason } = await Swal.fire({
+        title: 'Rejection Reason',
+        input: 'textarea',
+        inputLabel: 'Please provide a reason for rejection',
+        inputPlaceholder: 'Type your reason here...',
+        inputAttributes: { 'aria-label': 'Type your reason here' },
         showCancelButton: true,
         confirmButtonColor: '#d33',
         cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Yes, reject it!'
+        confirmButtonText: 'Reject',
+        inputValidator: (value) => {
+            if (!value || !String(value).trim()) {
+                return 'You need to provide a reason!';
+            }
+        },
     });
 
-    if (confirm.isConfirmed) {
-        console.log('User confirmed reject');
-        isRejecting.value = true;
-        try {
-            console.log('Sending reject request to:', route('supplies.rejectPK'));
-            const response = await axios.post(route('supplies.rejectPK'), {
-                id: form.value.id,
-                status: 'rejected',
-                items: form.value.items
-            });
-            
-            console.log('Reject response:', response.data);
+    if (!reason) return;
 
-            await Swal.fire({
-                title: 'Success!',
-                text: 'Items have been rejected',
-                icon: 'success',
-                confirmButtonColor: '#10B981',
-            });
+    isRejecting.value = true;
+    try {
+        const response = await axios.post(route('supplies.rejectPK'), {
+            id: form.value.id,
+            status: 'rejected',
+            rejection_reason: reason.trim(),
+        });
+        form.value.rejected_at = response.data.rejected_at;
+        form.value.rejected_by = response.data.rejected_by;
+        form.value.rejection_reason = reason.trim();
+        form.value.status = 'rejected';
 
-            // Refresh the page with updated data
-            router.get(route('supplies.packing-list.edit', form.value.id), {}, {
-                preserveScroll: false,
-                preserveState: false,
-                only: ['packingList', 'warehouses']
-            });
+        await Swal.fire({
+            title: 'Success!',
+            text: 'Packing list has been rejected',
+            icon: 'success',
+            confirmButtonColor: '#10B981',
+        });
 
-        } catch (error) {
-            console.error('Reject error:', error);
-            toast.error(error.response?.data || 'An error occurred while rejecting the items');
-        } finally {
-            isRejecting.value = false;
-        }
+        router.get(route('supplies.packing-list.edit', form.value.id), {}, {
+            preserveScroll: false,
+            preserveState: false,
+            only: ['packing_list', 'warehouses', 'locations'],
+        });
+    } catch (error) {
+        console.error('Reject error:', error);
+        toast.error(error.response?.data || 'An error occurred while rejecting the packing list');
+    } finally {
+        isRejecting.value = false;
     }
 }
 

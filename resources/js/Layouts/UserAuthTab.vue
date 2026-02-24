@@ -14,9 +14,7 @@
                     :href="route(tab.name)"
                     class="py-2 px-4 text-sm font-medium border-b-2 -mb-[2px] transition-colors"
                     :class="{
-                        'border-blue-500 text-blue-600': $page.component.startsWith('User/'),
-                        // 'border-yellow-500 text-yellow-600': $page.component.startsWith('Permission/'),
-                        // 'border-red-500 text-red-600': $page.component.startsWith('Audit/'),
+                        'border-blue-500 text-blue-600': $page.component.startsWith(tab.component),
                         'border-transparent text-gray-600 hover:text-blue-500 hover:border-blue-300': !$page.component.startsWith(tab.component)
                     }"
                 >
@@ -37,8 +35,7 @@ import { ref } from "vue";
 
 const tabs = [
     { name: 'settings.users.index', label: 'Manage Users', component: 'User' },
-    // { name: '#', label: 'Permissions', component: 'Permission' },
-    // { name: '#', label: 'Audit Trials', component: 'Audit' }
+    { name: 'settings.roles.index', label: 'Roles', component: 'Settings/Role' },
 ];
 
 const currentTab = ref('users');

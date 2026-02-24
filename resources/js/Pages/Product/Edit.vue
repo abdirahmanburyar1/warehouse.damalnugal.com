@@ -189,7 +189,7 @@
                         </Link>
                         <PrimaryButton 
                             class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 border border-transparent rounded-lg font-medium text-sm text-white hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-200 shadow-sm" 
-                            :disabled="processing || !$page.props.auth.can.product_manage && !$page.props.auth.isAdmin"
+                            :disabled="processing || (!$page.props.auth.can.product_manage && !$page.props.auth.isAdmin)"
                         >
                             <svg v-if="processing" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

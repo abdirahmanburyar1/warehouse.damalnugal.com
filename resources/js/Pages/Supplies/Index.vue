@@ -37,7 +37,8 @@
                                         role="menuitem">
                                         View Back Order
                                     </a>
-                                    <a @click="router.visit(route('supplies.received-backorder.index'))"
+                                    <a v-if="$page.props.auth.can.received_backorder_view"
+                                        @click="router.visit(route('supplies.received-backorder.index'))"
                                         class="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 cursor-pointer transition-colors duration-150"
                                         role="menuitem">
                                         Received Back Order

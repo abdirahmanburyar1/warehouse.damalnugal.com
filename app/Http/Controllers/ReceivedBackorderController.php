@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\ReceivedBackorder;
+use App\Models\User;
 use App\Models\Product;
 use App\Models\Warehouse;
 use App\Models\Location;
@@ -24,6 +25,7 @@ use App\Models\FacilityInventory;
 use App\Models\FacilityInventoryItem;
 use App\Models\Transfer;
 use App\Models\FacilityInventoryMovement;
+use App\Notifications\ReceivedBackorderActionRequired;
 
 class ReceivedBackorderController extends Controller
 {
@@ -32,7 +34,12 @@ class ReceivedBackorderController extends Controller
      */
     public function index(Request $request)
     {
-        $query = ReceivedBackorder::with(['receivedBy', 'reviewedBy', 'approvedBy', 'rejectedBy', 'backOrder', 'warehouse', 'facility']);
+        if (!auth()->user()->hasPermission('received-backorder-view')) {
+            abort(403, 'You do not have permission to view received backorders.');
+        }
+
+        $query = ReceivedBackorder::with(['receivedBy', 'reviewedBy', 'approvedBy', 'rejectedBy', 'backOrder', 'warehouse', 'facility'])
+            ->withCount('items');
 
         // Apply filters
         if ($request->filled('search')) {
@@ -105,6 +112,10 @@ class ReceivedBackorderController extends Controller
      */
     public function create()
     {
+        if (!auth()->user()->hasPermission('received-backorder-create')) {
+            abort(403, 'You do not have permission to create received backorders.');
+        }
+
         $products = Product::select('id', 'name', 'productID')->get();
         $warehouses = Warehouse::select('id', 'name')->get();
         $locations = Location::select('id', 'location')->get();
@@ -123,6 +134,10 @@ class ReceivedBackorderController extends Controller
      */
     public function store(Request $request)
     {
+        if (!auth()->user()->hasPermission('received-backorder-create')) {
+            abort(403, 'You do not have permission to create received backorders.');
+        }
+
         $validated = $request->validate([
             'product_id' => 'required|exists:products,id',
             'barcode' => 'nullable|string|max:255',
@@ -177,6 +192,16 @@ class ReceivedBackorderController extends Controller
 
             $receivedBackorder = ReceivedBackorder::create($validated);
 
+            // Notify users with review permission (next action = review)
+            $reviewers = User::withPermission('received-backorder-review')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', auth()->id())
+                ->get();
+            foreach ($reviewers as $user) {
+                $user->notify(new ReceivedBackorderActionRequired($receivedBackorder, ReceivedBackorderActionRequired::ACTION_NEEDS_REVIEW));
+            }
+
             DB::commit();
 
             return redirect()->route('supplies.received-backorder.index')
@@ -193,6 +218,10 @@ class ReceivedBackorderController extends Controller
      */
     public function show(ReceivedBackorder $receivedBackorder)
     {
+        if (!auth()->user()->hasPermission('received-backorder-view')) {
+            abort(403, 'You do not have permission to view this received backorder.');
+        }
+
         $receivedBackorder->load([
             'items.product',
             'receivedBy',
@@ -218,6 +247,10 @@ class ReceivedBackorderController extends Controller
      */
     public function destroy(ReceivedBackorder $receivedBackorder)
     {
+        if (!auth()->user()->hasPermission('received-backorder-create')) {
+            abort(403, 'You do not have permission to delete received backorders.');
+        }
+
         try {
             DB::beginTransaction();
 
@@ -248,6 +281,10 @@ class ReceivedBackorderController extends Controller
      */
     public function review(Request $request, ReceivedBackorder $receivedBackorder)
     {
+        if (!auth()->user()->hasPermission('received-backorder-review')) {
+            abort(403, 'You do not have permission to review received backorders.');
+        }
+
         $validated = $request->validate([
             'note' => 'nullable|string',
         ]);
@@ -259,6 +296,22 @@ class ReceivedBackorderController extends Controller
             'note' => $validated['note'] ?? $receivedBackorder->note,
         ]);
 
+        // Notify users with approve/reject permission (next action)
+        $approvers = User::withPermission('received-backorder-approve')
+            ->where('is_active', true)
+            ->whereNotNull('email')
+            ->where('id', '!=', auth()->id())
+            ->get();
+        $rejectors = User::withPermission('received-backorder-reject')
+            ->where('is_active', true)
+            ->whereNotNull('email')
+            ->where('id', '!=', auth()->id())
+            ->get();
+        $recipients = $approvers->merge($rejectors)->unique('id');
+        foreach ($recipients as $user) {
+            $user->notify(new ReceivedBackorderActionRequired($receivedBackorder, ReceivedBackorderActionRequired::ACTION_READY_FOR_APPROVAL));
+        }
+
         return back()->with('success', 'Received backorder reviewed successfully.');
     }
 
@@ -267,6 +320,10 @@ class ReceivedBackorderController extends Controller
      */
     public function approve(Request $request, ReceivedBackorder $receivedBackorder)
     {
+        if (!auth()->user()->hasPermission('received-backorder-approve')) {
+            abort(403, 'You do not have permission to approve received backorders.');
+        }
+
         $validated = $request->validate([
             'note' => 'nullable|string',
         ]);
@@ -802,6 +859,10 @@ class ReceivedBackorderController extends Controller
      */
     public function reject(Request $request, ReceivedBackorder $receivedBackorder)
     {
+        if (!auth()->user()->hasPermission('received-backorder-reject')) {
+            abort(403, 'You do not have permission to reject received backorders.');
+        }
+
         $validated = $request->validate([
             'rejection_reason' => 'required|string',
         ]);

@@ -102,6 +102,15 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the roles assigned to the user (Spatie model_has_roles).
+     */
+    public function roles()
+    {
+        $table = config('permission.table_names.model_has_roles', 'model_has_roles');
+        return $this->morphToMany(Role::class, 'model', $table);
+    }
+
+    /**
      * Check if user has a specific permission.
      */
     public function hasPermission($permission)

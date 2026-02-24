@@ -11,6 +11,9 @@ class DistrictController extends Controller
 {
     public function index(Request $request)
     {
+        if (!auth()->user()->hasPermission('facility-view') && !auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the facilities module.');
+        }
         $districts = District::query();
 
         if($request->filled('search')) {
@@ -30,6 +33,9 @@ class DistrictController extends Controller
 
     public function store(Request $request)
     {
+        if (!auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage facilities.');
+        }
         try {
             $validated = $request->validate([
                 'id' => 'nullable|exists:districts,id',
@@ -47,12 +53,18 @@ class DistrictController extends Controller
 
     public function destroy($id)
     {
+        if (!auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage facilities.');
+        }
         District::destroy($id);
         return response()->json('District deleted successfully', 200);
     }
 
     public function getDistricts(Request $request)
     {
+        if (!auth()->user()->hasPermission('facility-view') && !auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the facilities module.');
+        }
         try {
             $query = District::query();
             

@@ -7,6 +7,8 @@ use App\Models\InventoryItem;
 use App\Models\Product;
 use App\Models\Warehouse;
 use App\Models\Disposal;
+use App\Models\DisposalItem;
+use App\Models\User;
 use App\Models\Transfer;
 use App\Models\Facility;
 use App\Models\Category;
@@ -18,10 +20,15 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use App\Notifications\DisposalActionRequired;
 
 class ExpiredController extends Controller
 {
-    public function index(Request $request) {
+    public function index(Request $request)
+    {
+        if (!auth()->user()->hasPermission('expiry-view')) {
+            abort(403, 'Unauthorized. You do not have permission to view the Expiry module.');
+        }
         $now = Carbon::now();
         $sixMonthsFromNow = $now->copy()->addMonths(6);
         $oneYearFromNow = $now->copy()->addYear();
@@ -244,6 +251,9 @@ class ExpiredController extends Controller
 
     public function dispose(Request $request)
     {
+        if (!auth()->user()->hasPermission('expiry-view')) {
+            abort(403, 'Unauthorized. You do not have permission to perform disposal in the Expiry module.');
+        }
         try {
             // Validate the request
             $validated = $request->validate([
@@ -286,27 +296,47 @@ class ExpiredController extends Controller
                 }
             }
             
-            // Create a new liquidation record
+            // Create disposal record with source 'Expiry' so it appears in the wastage disposal list/detail
             $disposal = Disposal::create([
-                'product_id' => $request->product_id,
                 'disposed_by' => auth()->id(),
                 'disposed_at' => Carbon::now(),
-                'quantity' => $request->quantity,
-                'status' => 'pending', // Default status is pending
-                'note' => $note,
-                'type' => $request->type,
-                'warehouse' => $inventory->warehouse->name ?? null,  // Add warehouse info
-                'location' => $inventory->location ?? null,          // Add location info
+                'status' => 'pending',
+                'source' => 'Expiry',
+            ]);
+
+            $unitCost = $inventory->unit_cost ?? 0;
+            $totalCost = $unitCost * (int) $request->quantity;
+            $warehouseName = $inventory->warehouse->name ?? null;
+
+            // Create disposal item so detail page shows items and total
+            DisposalItem::create([
+                'disposal_id' => $disposal->id,
+                'product_id' => $request->product_id,
+                'quantity' => (int) $request->quantity,
+                'unit_cost' => $unitCost,
+                'total_cost' => $totalCost,
                 'barcode' => $inventory->barcode,
-                'unit_cost' => $inventory->unit_cost ?? 0,
-                'tota_cost' => ($inventory->unit_cost ?? 0) * $request->quantity,  
                 'expire_date' => $inventory->expiry_date,
                 'batch_number' => $inventory->batch_number,
                 'uom' => $inventory->uom,
-                'attachments' => !empty($attachments) ? json_encode($attachments) : null,
+                'location' => $inventory->location,
+                'warehouse' => $warehouseName,
+                'note' => $note,
+                'type' => $request->type ?? 'Expired',
+                'attachments' => !empty($attachments) ? $attachments : null,
             ]);
 
-            // Update inventory quantity
+            // Notify users with disposal-review permission (next action = review)
+            $reviewers = User::withPermission('disposal-review')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', auth()->id())
+                ->get();
+            foreach ($reviewers as $user) {
+                $user->notify(new DisposalActionRequired($disposal, DisposalActionRequired::ACTION_NEEDS_REVIEW));
+            }
+
+            // Remove from inventory
             $inventory->delete();
             
             // Commit the transaction
@@ -321,10 +351,22 @@ class ExpiredController extends Controller
 
     public function transfer(Request $request, $inventory)
     {
+        if (!auth()->user()->hasPermission('expiry-view')) {
+            abort(403, 'Unauthorized. You do not have permission to perform transfer in the Expiry module.');
+        }
         if ($request->isMethod('get')) {
             $inv = InventoryItem::with('product','warehouse')->find($inventory);
-            $facilities = Facility::get();
-            $warehouses = Warehouse::get();
+            $facilities = Facility::select('id', 'name')
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get()
+                ->map(fn ($f) => ['id' => $f->id, 'name' => $f->name ?? ''])
+                ->values()
+                ->toArray();
+            $warehouses = Warehouse::select('id', 'name')->orderBy('name')->get()
+                ->map(fn ($w) => ['id' => $w->id, 'name' => $w->name ?? ''])
+                ->values()
+                ->toArray();
             $transferID = Transfer::generateTransferId();
             if (!$inv) {
                 return redirect()->route('expired.index')->with('error', 'Inventory not found');

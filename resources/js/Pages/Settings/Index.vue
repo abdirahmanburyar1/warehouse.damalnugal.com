@@ -13,6 +13,8 @@
                             <h3 class="text-lg font-medium mb-2">User & Access Management</h3>
                             <ul class="space-y-2">
                                 <li><Link :href="route('settings.users.index')" class="text-gray-600 hover:text-indigo-600">Manage Users</Link></li>
+                                <li><Link :href="route('settings.roles.index')" class="text-gray-600 hover:text-indigo-600">Roles</Link></li>
+                                <li><Link :href="route('settings.email-notifications.index')" class="text-gray-600 hover:text-indigo-600">Email Notifications</Link></li>
                                 <li><a href="#" class="text-gray-600 hover:text-indigo-600">Permissions</a></li>
                                 <li><a href="#" class="text-gray-600 hover:text-indigo-600">Audit Trials</a></li>
                             </ul>

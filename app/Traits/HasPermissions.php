@@ -73,12 +73,13 @@ trait HasPermissions
         
         // Check specific module permissions
         $modulePermissions = [
-            'facilities' => ['facility-view', 'facility-create', 'facility-edit', 'facility-delete', 'facility-import'],
-            'products' => ['product-view', 'product-create', 'product-edit', 'product-delete', 'product-import'],
-            'inventory' => ['inventory-view', 'inventory-adjust', 'inventory-transfer'],
-            'orders' => ['order-view', 'order-create', 'order-edit', 'order-delete', 'order-approve'],
-            'transfers' => ['transfer-view', 'transfer-create', 'transfer-edit', 'transfer-delete', 'transfer-approve'],
-            'assets' => ['asset-view', 'asset-create', 'asset-edit', 'asset-delete'],
+            'facilities' => ['facility-view', 'facility-manage'],
+            'products' => ['product-view', 'product-manage'],
+            'inventory' => ['inventory-view', 'inventory-adjust', 'inventory-transfer', 'inventory-manage'],
+            'moh_inventory' => ['moh-inventory-view', 'moh-inventory-create', 'moh-inventory-review', 'moh-inventory-approve', 'moh-inventory-reject'],
+            'orders' => ['order-view', 'order-create', 'order-edit', 'order-delete', 'order-manage', 'order-review', 'order-approve', 'order-reject', 'order-processing', 'order-dispatch'],
+            'transfers' => ['transfer-view', 'transfer-create', 'transfer-edit', 'transfer-delete', 'transfer-manage', 'transfer-approve'],
+            'assets' => ['asset-view', 'asset-create', 'asset-edit', 'asset-delete', 'asset-review', 'asset-approve', 'asset-reject', 'asset-manage', 'asset-bulk-import', 'asset-export'],
             'users' => ['user-view', 'user-create', 'user-edit', 'user-delete'],
             'reports' => ['report-view', 'report-export'],
             'settings' => ['system-settings', 'permission-manage']

@@ -266,6 +266,9 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                 <span class="bg-gray-50 text-gray-700 px-2 py-1 rounded-md text-xs">{{ item.batch_number || 'N/A' }}</span>
                             </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                <span class="bg-gray-50 text-gray-700 px-2 py-1 rounded-md text-xs">{{ item.location || '—' }}</span>
+                            </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {{ item.quantity }}
                             </td>

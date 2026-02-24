@@ -18,8 +18,10 @@ use App\Models\IssuedQuantity;
 use App\Http\Resources\OrderResource;
 use App\Events\InventoryUpdated;
 use App\Models\Region;
+use App\Models\User;
 use App\Models\Driver;
 use App\Models\LogisticCompany;
+use App\Notifications\OrderActionRequired;
 
 // Laravel Core
 use Illuminate\Http\Request;
@@ -42,6 +44,9 @@ class OrderController extends Controller
      */
     public function rejectOrder(Request $request)
     {
+        if (!auth()->user()->hasPermission('order-reject') && !auth()->user()->hasPermission('order-manage') && !auth()->user()->isAdmin()) {
+            return response()->json('You do not have permission to reject orders', 403);
+        }
         try {
             DB::beginTransaction();
             
@@ -74,6 +79,9 @@ class OrderController extends Controller
     }
     public function index(Request $request)
     {
+        if (!auth()->user()->hasPermission('order-view') && !auth()->user()->hasPermission('order-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the orders module.');
+        }
         $facility = $request->facility;
         $facilityLocation = $request->facilityLocation;
         $query = Order::query();
@@ -162,6 +170,17 @@ class OrderController extends Controller
 
     public function store(Request $request)
     {
+        $user = auth()->user();
+        $isUpdate = !empty($request->id);
+        if ($isUpdate) {
+            if (!$user->hasPermission('order-edit') && !$user->hasPermission('order-manage') && !$user->isAdmin()) {
+                return response()->json('You do not have permission to edit orders', 403);
+            }
+        } else {
+            if (!$user->hasPermission('order-create') && !$user->hasPermission('order-manage') && !$user->isAdmin()) {
+                return response()->json('You do not have permission to create orders', 403);
+            }
+        }
         try {
             $validated = $request->validate([
                 'warehouse_id' => 'required|exists:warehouses,id',
@@ -230,6 +249,18 @@ class OrderController extends Controller
 
             event(new OrderEvent('Refreshed'));
 
+            // Workflow: on new order creation, notify users with order-review (next action = review)
+            if (!$request->id) {
+                $reviewers = User::withPermission('order-review')
+                    ->where('is_active', true)
+                    ->whereNotNull('email')
+                    ->where('id', '!=', auth()->id())
+                    ->get();
+                foreach ($reviewers as $reviewer) {
+                    $reviewer->notify(new OrderActionRequired($order, OrderActionRequired::ACTION_NEEDS_REVIEW));
+                }
+            }
+
             DB::commit();
             return response()->json('Order ' . ($request->id ? 'updated' : 'created') . ' successfully');
         } catch (\Exception $e) {
@@ -240,6 +271,9 @@ class OrderController extends Controller
 
 
     public function dispatchInfo(Request $request){
+        if (!auth()->user()->hasPermission('order-manage') && !auth()->user()->hasPermission('order-dispatch') && !auth()->user()->isAdmin()) {
+            return response()->json('You do not have permission to dispatch orders', 403);
+        }
         try {
             return DB::transaction(function() use ($request){
                 $request->validate([
@@ -278,6 +312,9 @@ class OrderController extends Controller
     
     public function destroy(Order $order)
     {
+        if (!auth()->user()->hasPermission('order-delete') && !auth()->user()->hasPermission('order-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to delete orders.');
+        }
         try {
             if ($order->status !== 'pending') {
                 return back()->with('error', 'Only pending orders can be deleted.');
@@ -294,6 +331,9 @@ class OrderController extends Controller
 
     public function bulk(Request $request)
     {
+        if (!auth()->user()->hasPermission('order-delete') && !auth()->user()->hasPermission('order-manage') && !auth()->user()->isAdmin()) {
+            return response()->json('You do not have permission to delete orders', 403);
+        }
         try {
             $orderIds = $request->input('orderIds');
 
@@ -332,6 +372,9 @@ class OrderController extends Controller
     // updateQuantity
     public function updateQuantity(Request $request)
     {
+        if (!auth()->user()->hasPermission('order-edit') && !auth()->user()->hasPermission('order-manage') && !auth()->user()->isAdmin()) {
+            return response()->json('You do not have permission to update order quantities', 403);
+        }
         try {
             DB::beginTransaction();
             
@@ -723,6 +766,10 @@ class OrderController extends Controller
 
     public function changeStatus(Request $request)
     {
+        $user = auth()->user();
+        if (!auth()->user()->hasPermission('order-view') && !auth()->user()->hasPermission('order-manage') && !$user->isAdmin()) {
+            return response()->json('You do not have permission to access orders', 403);
+        }
         try {
             DB::beginTransaction();
             // Validate request
@@ -748,6 +795,35 @@ class OrderController extends Controller
                 !in_array($request->status, $allowedTransitions[$order->status])
             ) {
                 return response()->json("Status transition not allowed", 500);
+            }
+
+            // Workflow permission checks (same pattern as transfer)
+            $newStatus = $request->status;
+            if ($newStatus === 'reviewed') {
+                if (!$user->hasPermission('order-review') && !$user->hasPermission('order-manage') && !$user->isAdmin()) {
+                    DB::rollBack();
+                    return response()->json('You do not have permission to review orders', 403);
+                }
+            } elseif ($newStatus === 'approved') {
+                if (!$user->hasPermission('order-approve') && !$user->hasPermission('order-manage') && !$user->isAdmin()) {
+                    DB::rollBack();
+                    return response()->json('You do not have permission to approve orders', 403);
+                }
+            } elseif ($newStatus === 'rejected') {
+                if (!$user->hasPermission('order-reject') && !$user->hasPermission('order-manage') && !$user->isAdmin()) {
+                    DB::rollBack();
+                    return response()->json('You do not have permission to reject orders', 403);
+                }
+            } elseif ($newStatus === 'in_process') {
+                if (!$user->hasPermission('order-processing') && !$user->hasPermission('order-manage') && !$user->isAdmin()) {
+                    DB::rollBack();
+                    return response()->json('You do not have permission to process orders', 403);
+                }
+            } elseif ($newStatus === 'dispatched') {
+                if (!$user->hasPermission('order-dispatch') && !$user->hasPermission('order-manage') && !$user->isAdmin()) {
+                    DB::rollBack();
+                    return response()->json('You do not have permission to dispatch orders', 403);
+                }
             }
 
             $userId = auth()->id();
@@ -870,10 +946,32 @@ class OrderController extends Controller
             // Update the order
             $order->update($updates);
 
-            // Trigger Kafka event for order status change
-            // Kafka::publishOrderPlaced("Refreshed");
-            // Broadcast event
-            // event(new OrderEvent('Refreshed'));
+            // Workflow: notify eligible users (by permission) for the next action
+            $notifyRecipients = function (string $permission, string $actionConstant) use ($user, $order) {
+                User::withPermission($permission)
+                    ->where('is_active', true)
+                    ->whereNotNull('email')
+                    ->where('id', '!=', $user->id)
+                    ->get()
+                    ->each(fn ($u) => $u->notify(new OrderActionRequired($order, $actionConstant)));
+            };
+            $notifyRecipientsMultiple = function (array $permissions, string $actionConstant) use ($user, $order) {
+                $recipients = collect();
+                foreach ($permissions as $perm) {
+                    $recipients = $recipients->merge(
+                        User::withPermission($perm)->where('is_active', true)->whereNotNull('email')->where('id', '!=', $user->id)->get()
+                    );
+                }
+                $recipients->unique('id')->each(fn ($u) => $u->notify(new OrderActionRequired($order, $actionConstant)));
+            };
+
+            if ($newStatus === 'reviewed') {
+                $notifyRecipientsMultiple(['order-approve', 'order-reject'], OrderActionRequired::ACTION_READY_FOR_APPROVAL);
+            } elseif ($newStatus === 'approved') {
+                $notifyRecipients('order-processing', OrderActionRequired::ACTION_READY_FOR_PROCESSING);
+            } elseif ($newStatus === 'in_process') {
+                $notifyRecipients('order-dispatch', OrderActionRequired::ACTION_READY_FOR_DISPATCH);
+            }
 
             DB::commit();
             return response()->json('Order status updated successfully.', 200);
@@ -916,6 +1014,9 @@ class OrderController extends Controller
 
     public function updateItem(Request $request)
     {
+        if (!auth()->user()->hasPermission('order-edit') && !auth()->user()->hasPermission('order-manage') && !auth()->user()->isAdmin()) {
+            return response()->json('You do not have permission to update order items', 403);
+        }
         try {
             DB::beginTransaction();
 
@@ -1377,6 +1478,9 @@ class OrderController extends Controller
 
     public function show(Request $request, $id)
     {
+        if (!auth()->user()->hasPermission('order-view') && !auth()->user()->hasPermission('order-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the orders module.');
+        }
         try {
             DB::beginTransaction();
             $order = Order::where('orders.id', $id)
@@ -1545,6 +1649,9 @@ class OrderController extends Controller
     
     public function restoreOrder(Request $request)
     {
+        if (!auth()->user()->hasPermission('order-edit') && !auth()->user()->hasPermission('order-manage') && !auth()->user()->isAdmin()) {
+            return response()->json('You do not have permission to restore orders', 403);
+        }
         try {
             $order = Order::find($request->order_id);
             $order->status = 'pending';

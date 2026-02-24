@@ -280,15 +280,15 @@
                     <div class="relative">
                         <div class="flex flex-col">
                             <button @click="changeStatus(disposal.id, 'reviewed', 'is_reviewing')" 
-                                :disabled="isType['is_reviewing'] || disposal.status !== 'pending'"
+                                :disabled="isType['is_reviewing'] || disposal.status !== 'pending' || !$page.props.auth.can.disposal_review"
                                 :class="[
                                     disposal.status === 'pending'
-                                        ? 'bg-yellow-500 hover:bg-yellow-600'
-                                        : ['reviewed', 'approved'].includes(disposal.status)
+                                    ? 'bg-yellow-500 hover:bg-yellow-600'
+                                    : ['reviewed', 'approved'].includes(disposal.status)
                                         ? 'bg-green-500'
                                         : 'bg-gray-300 cursor-not-allowed',
                                 ]" 
-                                class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px]">
+                                class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px] disabled:opacity-60 disabled:cursor-not-allowed">
                                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                 </svg>
@@ -315,7 +315,7 @@
                     <div class="relative" v-if="disposal.status !== 'rejected'">
                         <div class="flex flex-col">
                             <button @click="changeStatus(disposal.id, 'approved', 'is_approve')" 
-                                :disabled="isType['is_approve'] || disposal.status !== 'reviewed'"
+                                :disabled="isType['is_approve'] || disposal.status !== 'reviewed' || !$page.props.auth.can.disposal_approve"
                                 :class="[
                                     disposal.status === 'reviewed'
                                     ? 'bg-yellow-500 hover:bg-yellow-600'
@@ -362,7 +362,7 @@
                     <div class="relative" v-if="disposal.status !== 'rejected' && disposal.status !== 'approved'">
                         <div class="flex flex-col">
                             <button @click="rejectDisposal()" 
-                                :disabled="isType['is_reject'] || disposal.status !== 'reviewed'"
+                                :disabled="isType['is_reject'] || disposal.status !== 'reviewed' || !$page.props.auth.can.disposal_reject"
                                 :class="[
                                     disposal.status === 'reviewed'
                                         ? 'bg-red-500 hover:bg-red-600'
@@ -389,8 +389,8 @@
                     <div class="relative" v-if="disposal.status === 'rejected'">
                         <div class="flex flex-col">
                             <button @click="restoreDisposal()" 
-                                :disabled="isType['is_restore']"
-                                class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px] bg-blue-500 hover:bg-blue-600">
+                                :disabled="isType['is_restore'] || !$page.props.auth.can.disposal_edit"
+                                class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px] bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed">
                                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                                 </svg>

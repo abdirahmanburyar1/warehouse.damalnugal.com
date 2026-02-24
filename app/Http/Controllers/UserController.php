@@ -15,6 +15,7 @@ use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use App\Http\Resources\UserResource;
 use App\Models\Permission;
+use App\Models\Role;
 use App\Events\GlobalPermissionChanged;
 use Throwable;
 
@@ -59,7 +60,7 @@ class UserController extends Controller
             $query->where('organization', $request->organization);
         }
 
-        $query->with(['warehouse', 'facility'])->latest();
+        $query->with(['warehouse', 'facility', 'roles'])->latest();
 
         
         $users = $query->paginate($request->per_page, ['*'], 'page', $request->page)->withQueryString();
@@ -80,9 +81,12 @@ class UserController extends Controller
         // Get all facilities for filtering and selection
         $facilities = Facility::pluck('name')->toArray();
         
+        $roles = Role::orderBy('name')->get();
+
         return Inertia::render('User/Index', [
             'users' => UserResource::collection($users),
             'warehouses' => $warehouses,
+            'roles' => $roles,
             'filters' => $request->only(['search', 'role', 'status', 'organization', 'warehouse', 'facility', 'per_page']),
             'facilities' => $facilities
         ]);
@@ -136,7 +140,7 @@ class UserController extends Controller
                 'warehouse_id' => 'nullable|exists:warehouses,id',
                 'password' => $request->id ? 'nullable|string|min:8' : 'required|string|min:8',
                 'facility_id' => 'nullable|exists:facilities,id',
-                'title' => 'required|string|max:255',
+                'title' => 'nullable|string|max:255',
                 'is_active' => 'nullable|boolean',
             ];
 
@@ -146,12 +150,15 @@ class UserController extends Controller
                 $validationRules['permissions.*'] = 'exists:permissions,id';
             }
 
+            $validationRules['roles'] = 'nullable|array';
+            $validationRules['roles.*'] = 'exists:roles,id';
+
             $request->validate($validationRules);
 
             $userData = [
                 'name' => $request->name,
                 'username' => $request->username,
-                'title' => $request->title,
+                'title' => $request->filled('title') ? $request->title : null,
                 'email' => $request->email,
                 'organization' => $request->organization,
                 'warehouse_id' => $request->warehouse_id,
@@ -175,6 +182,10 @@ class UserController extends Controller
                 $userData
             );
             
+            // Handle roles
+            $roleIds = $request->has('roles') && is_array($request->roles) ? $request->roles : [];
+            $user->roles()->sync($roleIds);
+
             // Handle permissions - if user has facility_id, don't assign permissions
             $oldPermissionIds = $request->id ? $user->permissions()->pluck('permissions.id')->toArray() : [];
 
@@ -228,11 +239,13 @@ class UserController extends Controller
         $warehouses = Warehouse::all();
         $permissions = Permission::all();
         $facilities = Facility::all();
+        $roles = Role::orderBy('name')->get();
         
         return Inertia::render('User/Create', [
             'warehouses' => $warehouses,
             'permissions' => $permissions,
-            'facilities' => $facilities
+            'facilities' => $facilities,
+            'roles' => $roles,
         ]);
     }
     
@@ -258,16 +271,18 @@ class UserController extends Controller
         //     return redirect()->back()->with('error', 'You can only edit users from your organization.');
         // }
         
-        $user->load(['permissions', 'warehouse', 'facility']);
+        $user->load(['permissions', 'roles', 'warehouse', 'facility']);
         $warehouses = Warehouse::all();
         $permissions = Permission::all();
         $facilities = Facility::all();
+        $roles = Role::orderBy('name')->get();
         
         return Inertia::render('User/Edit', [
             'user' => $user,
             'warehouses' => $warehouses,
             'permissions' => $permissions,
-            'facilities' => $facilities
+            'facilities' => $facilities,
+            'roles' => $roles,
         ]);
     }
 

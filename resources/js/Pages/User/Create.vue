@@ -32,16 +32,6 @@
                         />
                     </div>
                     <div>
-                        <InputLabel for="title" value="Title" />
-                        <input
-                            id="title"
-                            v-model="form.title"
-                            type="text"
-                            placeholder="e.g. Warehouse Manager"
-                            class="mt-1.5 block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400 transition-colors"
-                        />
-                    </div>
-                    <div>
                         <InputLabel for="organization" value="Organization" />
                         <select
                             id="organization"
@@ -116,6 +106,21 @@
                             placeholder="Select facility"
                             class="mt-1.5"
                             @select="handleSelectFacility"
+                        />
+                    </div>
+                    <div>
+                        <InputLabel for="roles" value="Roles" />
+                        <Multiselect
+                            id="roles"
+                            v-model="form.roles"
+                            :options="roles"
+                            :multiple="true"
+                            :searchable="true"
+                            :close-on-select="false"
+                            track-by="id"
+                            label="name"
+                            placeholder="Select roles"
+                            class="mt-1.5"
                         />
                     </div>
                 </div>
@@ -265,6 +270,9 @@ import UserAuthTab from '@/Layouts/UserAuthTab.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import Modal from '@/Components/Modal.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
+import Multiselect from 'vue-multiselect';
+import 'vue-multiselect/dist/vue-multiselect.css';
+import '@/Components/multiselect.css';
 import { useToast } from 'vue-toastification';
 import axios from 'axios';
 import Swal from 'sweetalert2';
@@ -277,6 +285,10 @@ const permissionSearch = ref('');
 const props = defineProps({
     warehouses: Array,
     facilities: Array,
+    roles: {
+        type: Array,
+        default: () => [],
+    },
     permissions: {
         type: Array,
         default: () => [],
@@ -285,7 +297,6 @@ const props = defineProps({
 
 const form = ref({
     name: '',
-    title: '',
     organization: '',
     username: '',
     email: '',
@@ -295,6 +306,7 @@ const form = ref({
     warehouse: null,
     facility_id: null,
     facility: null,
+    roles: [],
     permissions: [],
     is_active: true,
 });
@@ -365,6 +377,7 @@ async function submit() {
         password_confirmation: form.value.password_confirmation,
         warehouse_id: form.value.warehouse_id,
         facility_id: form.value.facility_id,
+        roles: Array.isArray(form.value.roles) ? form.value.roles.map((r) => (r && typeof r === 'object' && 'id' in r ? r.id : r)) : [],
         permissions: hasFacility.value ? [] : form.value.permissions,
         is_active: form.value.is_active,
     };

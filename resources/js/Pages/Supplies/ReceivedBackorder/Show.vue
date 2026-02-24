@@ -269,7 +269,7 @@
                     <div class="flex flex-col">
                         <button 
                             @click="reviewReceivedBackorder()" 
-                            :disabled="isType.is_reviewing || receivedBackorder.status !== 'pending'"
+                            :disabled="isType.is_reviewing || receivedBackorder.status !== 'pending' || !$page.props.auth.can.received_backorder_review"
                             :class="[
                                 receivedBackorder.status === 'pending'
                                     ? 'bg-yellow-500 hover:bg-yellow-600'
@@ -277,7 +277,7 @@
                                     ? 'bg-green-500'
                                     : 'bg-gray-300 cursor-not-allowed',
                             ]" 
-                            class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px]"
+                            class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px] disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                             <img src="/assets/images/review.png" class="w-5 h-5 mr-2" alt="Review" />
                             <span class="text-sm font-bold text-white">{{
@@ -304,7 +304,7 @@
                     <div class="flex flex-col">
                         <button 
                             @click="approveReceivedBackorder()" 
-                            :disabled="isType.is_approve || receivedBackorder.status !== 'reviewed'"
+                            :disabled="isType.is_approve || receivedBackorder.status !== 'reviewed' || !$page.props.auth.can.received_backorder_approve"
                             :class="[
                                 receivedBackorder.status === 'reviewed'
                                 ? 'bg-yellow-500 hover:bg-yellow-600'
@@ -312,7 +312,7 @@
                                 ? 'bg-green-500'
                                 : 'bg-gray-300 cursor-not-allowed',
                         ]" 
-                        class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px]"
+                        class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px] disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                             <svg v-if="isType.is_approve" 
                                 class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none"
@@ -351,8 +351,8 @@
                     <div class="flex flex-col">
                         <button 
                             @click="rejectReceivedBackorder()" 
-                            :disabled="isType.is_reject"
-                            class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px] bg-red-500 hover:bg-red-600"
+                            :disabled="isType.is_reject || !$page.props.auth.can.received_backorder_reject"
+                            class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px] bg-red-500 hover:bg-red-600 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                             <img src="/assets/images/rejected.png" class="w-5 h-5 mr-2" alt="Reject" />
                             <span class="text-sm font-bold text-white">{{

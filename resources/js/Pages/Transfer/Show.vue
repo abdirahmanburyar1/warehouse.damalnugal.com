@@ -1,6 +1,6 @@
 <template>
     <AuthenticatedLayout title="Transfer Details" description="Transfer Details" img="/assets/images/transfer.png">
-        <div class="container mx-auto">
+        <div class="mb-[100px]">
             <!-- Transfer Header -->
             <div class="mb-6 bg-white rounded-lg">
                 <div class="flex justify-between items-center mb-4">
@@ -423,63 +423,63 @@
 
                     <div class="bg-white overflow-hidden">
                         <div class="overflow-x-auto">
-                            <table class="min-w-full text-sm text-left table-sm">
+                            <table class="min-w-full text-sm table-sm">
                                 <thead>
                                     <tr style="background-color: #F4F7FB;" class="items-center">
-                                        <th class="min-w-[300px] px-3 py-2 text-xs font-bold rounded-tl-lg" style="color: #4F6FCB;" rowspan="2">
+                                        <th class="min-w-[300px] px-3 py-2 text-xs font-bold text-left rounded-tl-lg" style="color: #4F6FCB;" rowspan="2">
                                             Item Name
                                         </th>
-                                        <th class="px-3 py-2 items-center text-xs font-bold" style="color: #4F6FCB;" rowspan="2">
+                                        <th class="px-3 py-2 text-xs font-bold text-left" style="color: #4F6FCB;" rowspan="2">
                                             Category
                                         </th>
-                                        <th class="px-3 py-2 items-center text-xs font-bold" style="color: #4F6FCB;" rowspan="2">
+                                        <th class="px-3 py-2 text-xs font-bold text-left" style="color: #4F6FCB;" rowspan="2">
                                             UoM
                                         </th>
                                         <th class="px-3 py-2 text-xs font-bold text-center" style="color: #4F6FCB;" colspan="4">
                                             Item Details
                                         </th>
-                                        <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB;" rowspan="2">
+                                        <th class="px-3 py-2 text-xs font-bold text-left" style="color: #4F6FCB;" rowspan="2">
                                             Total Quantity on Hand Per Unit
                                         </th>
-                                        <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB;" rowspan="2">
+                                        <th class="px-3 py-2 text-xs font-bold text-left" style="color: #4F6FCB;" rowspan="2">
                                             Transfer Reason
                                         </th>
-                                        <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB;" rowspan="2">
+                                        <th class="px-3 py-2 text-xs font-bold text-left" style="color: #4F6FCB;" rowspan="2">
                                             Quantity to Transfer
                                         </th>
-                                        <th class="px-3 py-2 text-xs font-bold rounded-tr-lg" style="color: #4F6FCB;" rowspan="2">
+                                        <th class="px-3 py-2 text-xs font-bold text-left rounded-tr-lg" style="color: #4F6FCB;" rowspan="2">
                                             Received Quantity
                                         </th>
                                     </tr>
                                     <tr style="background-color: #F4F7FB;">
-                                        <th class="px-2 py-1 text-xs font-bold text-center" style="color: #4F6FCB;">
+                                        <th class="px-2 py-1 text-xs font-bold text-left" style="color: #4F6FCB;">
                                             QTY
                                         </th>
-                                        <th class="px-2 py-1 text-xs font-bold text-center" style="color: #4F6FCB;">
+                                        <th class="px-2 py-1 text-xs font-bold text-left" style="color: #4F6FCB;">
                                             Batch Number
                                         </th>
-                                        <th class="px-2 py-1 text-xs font-bold text-center" style="color: #4F6FCB;">
+                                        <th class="px-2 py-1 text-xs font-bold text-left" style="color: #4F6FCB;">
                                             Expiry Date
                                         </th>
-                                        <th class="px-2 py-1 text-xs font-bold text-center" style="color: #4F6FCB;">
+                                        <th class="px-2 py-1 text-xs font-bold text-left" style="color: #4F6FCB;">
                                             Location
                                         </th>
                                     </tr>
                                 </thead>
 
-                            <tbody>
+                            <tbody class="[&_td]:text-center [&_td]:align-middle">
                                 <template v-for="(item, index) in form" :key="item.id">
                                 <!-- Show allocations if they exist, otherwise show one row with main item data -->
                                 <tr v-for="(allocation, allocIndex) in (item.inventory_allocations?.length > 0 ? item.inventory_allocations : [{}])" :key="`${item.id}-${allocIndex}`" class="hover:bg-gray-50 transition-colors duration-150 border-b" style="border-bottom: 1px solid #B7C6E6;">
-                                        <!-- Item Name -->
+                                        <!-- Item Name (first column: left-aligned like inventory table) -->
                                         <td v-if="allocIndex === 0" :rowspan="item.inventory_allocations?.length || 1"
-                                            class="px-3 py-2 text-xs font-medium text-gray-800 align-top items-center">
+                                            class="px-3 py-2 text-xs font-medium text-gray-800 !text-left align-middle">
                                             {{ item.product?.name || "N/A" }}
                                         </td>
 
                                         <!-- Category -->
                                         <td v-if="allocIndex === 0" :rowspan="item.inventory_allocations?.length || 1"
-                                            class="px-3 py-2 text-xs text-gray-700 align-top items-center">
+                                            class="px-3 py-2 text-xs text-gray-700">
                                             {{
                                                 item.product?.category?.name ||
                                                 "N/A"
@@ -488,12 +488,12 @@
 
                                         <!-- UoM Column -->
                                         <td v-if="allocIndex === 0" :rowspan="item.inventory_allocations?.length || 1"
-                                            class="px-3 py-2 text-xs text-gray-700 align-top items-center">
+                                            class="px-3 py-2 text-xs text-gray-700">
                                             {{ item.inventory_allocations?.[0]?.uom || "N/A" }}
                                         </td>
 
                                         <!-- QTY -->
-                                        <td class="px-2 py-1 text-xs border-b text-center text-gray-900">
+                                        <td class="px-2 py-1 text-xs border-b text-gray-900">
                                             {{
                                                 (allocation.updated_quantity !== null && allocation.updated_quantity !== undefined && allocation.updated_quantity > 0 ? allocation.updated_quantity : allocation.allocated_quantity) ||
                                                 0
@@ -501,14 +501,14 @@
                                         </td>
 
                                         <!-- Batch Number -->
-                                        <td class="px-2 py-1 text-xs border-b text-center text-gray-900">
+                                        <td class="px-2 py-1 text-xs border-b text-gray-900">
                                             {{
                                                 allocation.batch_number || "N/A"
                                             }}
                                         </td>
 
                                         <!-- Expiry Date -->
-                                        <td class="px-2 py-1 text-xs border-b text-center">
+                                        <td class="px-2 py-1 text-xs border-b">
                                             <span :class="{
                                                 'text-red-600':
                                                     isExpiringItem(
@@ -524,23 +524,23 @@
                                         </td>
 
                                         <!-- Location -->
-                                        <td class="px-2 py-1 text-xs border-b text-center text-gray-900">
+                                        <td class="px-2 py-1 text-xs border-b text-gray-900">
                                             {{ allocation.location || "N/A" }}
                                         </td>
 
                                         <!-- Total Quantity per Unit -->
                                         <td v-if="allocIndex === 0" :rowspan="item.inventory_allocations?.length || 1"
-                                            class="px-3 py-2 text-xs text-gray-800 align-top items-center">
+                                            class="px-3 py-2 text-xs text-gray-800">
                                             {{ (item.quantity_per_unit && !isNaN(item.quantity_per_unit)) ? item.quantity_per_unit : 0 }}
                                         </td>
 
                                         <!-- Transfer Reason - per allocation -->
-                                        <td class="px-2 py-1 text-xs border-b text-center text-gray-900">
+                                        <td class="px-2 py-1 text-xs border-b text-gray-900">
                                             {{ allocation.transfer_reason || "N/A" }}
                                         </td>
 
                                         <!-- Quantity to Transfer - per allocation -->
-                                        <td class="px-2 py-1 text-xs border-b text-center text-gray-900">
+                                        <td class="px-2 py-1 text-xs border-b text-gray-900">
                                             <div class="flex flex-col items-center gap-1">
                                                 <span class="font-medium">{{ allocation.allocated_quantity }}</span>
                                                 <input 
@@ -562,7 +562,7 @@
                                         </td>
 
                                         <!-- Received Quantity -->
-                                        <td class="px-2 py-1 text-xs border border-gray-300 text-center text-black"
+                                        <td class="px-2 py-1 text-xs border border-gray-300 text-black"
                                         >
                                             <input 
                                                 type="number" 

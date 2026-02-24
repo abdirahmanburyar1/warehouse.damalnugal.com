@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { ref, computed, watch } from "vue";
-import { router } from "@inertiajs/vue3";
+import { router, usePage } from "@inertiajs/vue3";
 import InputError from "@/Components/InputError.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
@@ -402,6 +402,16 @@ function getSafeAvailableQuantity(item) {
     return isNaN(total) ? 0 : total;
 }
 
+// Transfer create permission: used for action buttons and "Add New Reason" in reason dropdown
+const page = usePage();
+const canCreateTransfer = computed(() =>
+    !!page.props.auth?.can?.transfer_create || !!page.props.auth?.can?.transfer_manage || !!page.props.auth?.user?.isAdmin
+);
+// Reason dropdown: "Add New Reason" only for users who can create transfers (avoids permission-only "+" option for others)
+const reasonOptions = computed(() => {
+    const list = props.reasons || [];
+    return canCreateTransfer.value ? ['Add New Reason', ...list] : list;
+});
 // Modal state for adding new reason
 const showAddReasonModal = ref(false);
 const newReasonName = ref("");
@@ -761,7 +771,7 @@ async function handleAddReason() {
                                     <td class="px-2 py-1 text-xs text-center">
                                         <Multiselect v-if="item.product && detail.quantity"
                                             v-model="detail.transfer_reason"
-                                            :options="['Add New Reason', ...props.reasons]" :searchable="true"
+                                            :options="reasonOptions" :searchable="true"
                                             :close-on-select="true" :show-labels="false" :placeholder="'Select reason'"
                                             @select="handleReasonSelect(detail, $event)">
                                             <template v-slot:option="{ option }">
@@ -805,21 +815,18 @@ async function handleAddReason() {
                         </tbody>
                     </table>
 
-                    <!-- Action Buttons -->
+                    <!-- Action Buttons (only when user can create transfers) -->
                     <div class="flex items-center justify-between pt-8 border-t border-gray-200">
-                        <button type="button" @click="addNewItem" :disabled="(!$page.props.auth.can.transfer_create && !$page.props.auth.can.transfer_manage)"
-                            :class="[
-                                (!$page.props.auth.can.transfer_create && !$page.props.auth.can.transfer_manage)
-                                    ? 'bg-red-200 text-red-800 cursor-not-allowed opacity-75'
-                                    : 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white'
-                            ]"
-                            class="inline-flex items-center px-6 py-3 font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105">
+                        <button v-if="canCreateTransfer"
+                            type="button" @click="addNewItem"
+                            class="inline-flex items-center px-6 py-3 font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                             </svg>
-                            {{ (!$page.props.auth.can.transfer_create && !$page.props.auth.can.transfer_manage) ? "No Permission" : "Add Another Item" }}
+                            Add Another Item
                         </button>
+                        <div v-else class="flex-1"></div>
                         <div class="flex items-center space-x-4">
                             <SecondaryButton :href="route('transfers.index')" as="a" :disabled="loading"
                                 class="px-8 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-all duration-200"
@@ -828,13 +835,9 @@ async function handleAddReason() {
                                 }">
                                 Cancel
                             </SecondaryButton>
-                            <PrimaryButton :disabled="loading || (!$page.props.auth.can.transfer_create && !$page.props.auth.can.transfer_manage)"
-                                :class="[
-                                    (!$page.props.auth.can.transfer_create && !$page.props.auth.can.transfer_manage)
-                                        ? 'bg-red-200 text-red-800 cursor-not-allowed opacity-75'
-                                        : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white'
-                                ]"
-                                class="relative px-8 py-3 font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105">
+                            <PrimaryButton v-if="canCreateTransfer"
+                                :disabled="loading"
+                                class="relative px-8 py-3 font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white">
                                 <span v-if="loading" class="absolute left-3">
                                     <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg"
                                         fill="none" viewBox="0 0 24 24">
@@ -845,10 +848,7 @@ async function handleAddReason() {
                                         </path>
                                     </svg>
                                 </span>
-                                <span :class="{ 'pl-7': loading }">{{
-                                    loading ? "Processing..." : 
-                                    (!$page.props.auth.can.transfer_create && !$page.props.auth.can.transfer_manage) ? "No Permission" : "Create Transfer"
-                                    }}</span>
+                                <span :class="{ 'pl-7': loading }">{{ loading ? "Processing..." : "Create Transfer" }}</span>
                             </PrimaryButton>
                         </div>
                     </div>

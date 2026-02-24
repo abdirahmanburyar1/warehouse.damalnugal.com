@@ -37,6 +37,10 @@ use App\Models\DisposalItem;
 use App\Http\Resources\SupplierResource;
 use App\Models\User;
 use App\Notifications\PurchaseOrderActionRequired;
+use App\Notifications\PackingListActionRequired;
+use App\Notifications\ReceivedBackorderActionRequired;
+use App\Notifications\DisposalActionRequired;
+use App\Notifications\LiquidationActionRequired;
 use Inertia\Inertia;
 
 class SupplyController extends Controller
@@ -162,7 +166,7 @@ class SupplyController extends Controller
             $results = PackingListDifference::whereHas('packingListItem', function($query) use ($id) {
                 $query->where('packing_list_id', $id);
             })
-                ->select('id', 'packing_list_item_id', 'back_order_id', 'product_id', 'quantity', 'status', 'finalized', 'created_at')
+                ->select('id', 'packing_list_item_id', 'back_order_id', 'product_id', 'quantity', 'original_quantity', 'status', 'finalized', 'created_at')
                 ->with([
                     'product:id,name,productID',
                     'packingListItem.packingList:id,packing_list_number',
@@ -220,6 +224,7 @@ class SupplyController extends Controller
             // Check if there is already a liquidation for this back order
             $liquidate = Liquidate::where('back_order_id', $request->back_order_id)->first();
             
+            $liquidateIsNew = false;
             if (!$liquidate) {
                 // Create new liquidation record
                 $liquidate = Liquidate::create([
@@ -232,6 +237,7 @@ class SupplyController extends Controller
                     'order_id' => $request->purchase_order_id, // or $request->order_id if that's the field
                     'transfer_id' => $request->transfer_id,
                 ]);
+                $liquidateIsNew = true;
             }
             
             // Get packing list item to get unit cost
@@ -294,6 +300,18 @@ class SupplyController extends Controller
                     }
                 }
             }
+
+            // Notify users with liquidation-review permission when new liquidation is created (next action = review)
+            if ($liquidateIsNew) {
+                $reviewers = User::withPermission('liquidation-review')
+                    ->where('is_active', true)
+                    ->whereNotNull('email')
+                    ->where('id', '!=', auth()->id())
+                    ->get();
+                foreach ($reviewers as $user) {
+                    $user->notify(new LiquidationActionRequired($liquidate, LiquidationActionRequired::ACTION_NEEDS_REVIEW));
+                }
+            }
             
             // Handle attachments if any
             if ($request->hasFile('attachments')) {
@@ -339,6 +357,7 @@ class SupplyController extends Controller
             // Check if there is already a disposal for this back order
             $disposal = Disposal::where('back_order_id', $request->back_order_id)->first();
             
+            $disposalIsNew = false;
             if (!$disposal) {
                 // Create new disposal record
                 $disposal = Disposal::create([
@@ -348,6 +367,7 @@ class SupplyController extends Controller
                     'source' => $backOrder->source_type, // Get source from BackOrder
                     'back_order_id' => $request->back_order_id,
                 ]);
+                $disposalIsNew = true;
             }
             
             // Get packing list item to get unit cost
@@ -408,6 +428,18 @@ class SupplyController extends Controller
                         $inventoryAllocation->increment('received_quantity', $request->quantity);
                         $inventoryAllocation->save();
                     }
+                }
+            }
+
+            // Notify users with disposal-review permission when new disposal is created from back order (next action = review)
+            if ($disposalIsNew) {
+                $reviewers = User::withPermission('disposal-review')
+                    ->where('is_active', true)
+                    ->whereNotNull('email')
+                    ->where('id', '!=', auth()->id())
+                    ->get();
+                foreach ($reviewers as $user) {
+                    $user->notify(new DisposalActionRequired($disposal, DisposalActionRequired::ACTION_NEEDS_REVIEW));
                 }
             }
             
@@ -612,6 +644,16 @@ class SupplyController extends Controller
                 'location' => $packingListItem->location ?? null,
                 'note' => "Received from Back Order: {$request->packing_list_number}",
             ]);
+
+            // Notify users with received-backorder review permission (next action = review)
+            $reviewers = User::withPermission('received-backorder-review')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', auth()->id())
+                ->get();
+            foreach ($reviewers as $user) {
+                $user->notify(new ReceivedBackorderActionRequired($receivedBackorder, ReceivedBackorderActionRequired::ACTION_NEEDS_REVIEW));
+            }
             
             // Update inventory allocation if it exists
             if ($packingListDiff->inventory_allocation_id) {
@@ -624,6 +666,14 @@ class SupplyController extends Controller
             
             // Decrement the packing list difference quantity
             $packingListDiff->decrement('quantity', $receivedQuantity);
+
+            // When fully received (remaining = 0), mark as finalized and store original quantity for display
+            if ($packingListDiff->quantity <= 0) {
+                $packingListDiff->update([
+                    'finalized' => true,
+                    'original_quantity' => $originalQuantity,
+                ]);
+            }
             
             // Note: Inventory is not updated directly during receive action
             // The received quantities are stored in ReceivedBackorder and BackOrderHistory
@@ -946,6 +996,18 @@ class SupplyController extends Controller
                 // Update BackOrder totals if it exists
                 if ($backOrder) {
                     $backOrder->updateTotals();
+                }
+
+                // Notify users with "review" permission when a new packing list is created (next action = review)
+                if ($packingList->wasRecentlyCreated) {
+                    $reviewers = User::withPermission('packing-list-review')
+                        ->where('is_active', true)
+                        ->whereNotNull('email')
+                        ->where('id', '!=', auth()->id())
+                        ->get();
+                    foreach ($reviewers as $user) {
+                        $user->notify(new PackingListActionRequired($packingList, PackingListActionRequired::ACTION_NEEDS_REVIEW));
+                    }
                 }
 
                 return response()->json('Packing list created successfully', 200);
@@ -2024,24 +2086,55 @@ class SupplyController extends Controller
     public function reviewPK(Request $request)
     {
         try {
-            // Check permission
             if (!auth()->user()->hasPermission('packing-list-review')) {
                 return response()->json('Unauthorized: You do not have permission to review packing lists', 403);
             }
 
             $request->validate([
-                'id' => 'required',
-                'status' => 'required|in:reviewed'
+                'id' => 'required|exists:packing_lists,id',
+                'status' => 'required|in:reviewed',
             ]);
 
-            PackingList::where('id', $request->id)
-                ->update([
-                    'status' => $request->status,
-                    'reviewed_by' => auth()->user()->id,
-                    'reviewed_at' => now()
-                ]);
+            $packingList = PackingList::findOrFail($request->id);
 
-            return response()->json('Items have been reviewed successfully', 200);
+            if ($packingList->reviewed_at) {
+                return response()->json('Packing list has already been reviewed', 422);
+            }
+            if ($packingList->approved_at) {
+                return response()->json('Packing list is already approved', 422);
+            }
+            if ($packingList->rejected_at) {
+                return response()->json('Cannot review a rejected packing list', 422);
+            }
+
+            $packingList->update([
+                'status' => 'reviewed',
+                'reviewed_by' => auth()->id(),
+                'reviewed_at' => now(),
+            ]);
+            $packingList->load('reviewedBy');
+
+            // Notify users with approve/reject permission (next action)
+            $approvers = User::withPermission('packing-list-approve')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', auth()->id())
+                ->get();
+            $rejectors = User::withPermission('packing-list-reject')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', auth()->id())
+                ->get();
+            $recipients = $approvers->merge($rejectors)->unique('id');
+            foreach ($recipients as $user) {
+                $user->notify(new PackingListActionRequired($packingList, PackingListActionRequired::ACTION_READY_FOR_APPROVAL));
+            }
+
+            return response()->json([
+                'message' => 'Packing list has been marked for review',
+                'reviewed_at' => $packingList->reviewed_at->toIso8601String(),
+                'reviewed_by' => $packingList->reviewedBy,
+            ]);
         } catch (\Throwable $th) {
             return response()->json($th->getMessage(), 500);
         }
@@ -2050,24 +2143,38 @@ class SupplyController extends Controller
     public function rejectPK(Request $request)
     {
         try {
-            // Check permission
             if (!auth()->user()->hasPermission('packing-list-reject')) {
                 return response()->json('Unauthorized: You do not have permission to reject packing lists', 403);
             }
 
-            $request->validate([
-                'id' => 'required',
-                'status' => 'required|in:rejected'
+            $validated = $request->validate([
+                'id' => 'required|exists:packing_lists,id',
+                'status' => 'required|in:rejected',
+                'rejection_reason' => 'required|string|max:1000',
             ]);
 
-            PackingList::where('id', $request->id)
-                ->update([
-                    'status' => $request->status,
-                    'rejected_by' => auth()->user()->id,
-                    'rejected_at' => now()
-                ]);
+            $packingList = PackingList::findOrFail($request->id);
 
-            return response()->json('Items have been rejected successfully', 200);
+            if (!$packingList->reviewed_at) {
+                return response()->json('Packing list must be reviewed before it can be rejected', 422);
+            }
+            if ($packingList->approved_at) {
+                return response()->json('Cannot reject an approved packing list', 422);
+            }
+
+            $packingList->update([
+                'status' => 'rejected',
+                'rejected_by' => auth()->id(),
+                'rejected_at' => now(),
+                'rejection_reason' => $validated['rejection_reason'],
+            ]);
+            $packingList->load('rejectedBy');
+
+            return response()->json([
+                'message' => 'Packing list has been rejected',
+                'rejected_at' => $packingList->rejected_at->toIso8601String(),
+                'rejected_by' => $packingList->rejectedBy,
+            ]);
         } catch (\Throwable $th) {
             return response()->json($th->getMessage(), 500);
         }
@@ -2076,7 +2183,6 @@ class SupplyController extends Controller
     // approve packing list and release to the inventory
     public function approvePK(Request $request)
     {
-        // Check permission
         if (!auth()->user()->hasPermission('packing-list-approve')) {
             return response()->json('Unauthorized: You do not have permission to approve packing lists', 403);
         }
@@ -2087,10 +2193,18 @@ class SupplyController extends Controller
             'items' => 'required|array',
         ]);
 
+        $packingList = PackingList::with('items.purchaseOrderItem')->findOrFail($request->id);
+
+        if (!$packingList->reviewed_at) {
+            return response()->json('Packing list must be reviewed before it can be approved', 422);
+        }
+        if ($packingList->rejected_at) {
+            return response()->json('Cannot approve a rejected packing list', 422);
+        }
+
         DB::beginTransaction();
 
         try {
-            $packingList = PackingList::with('items.purchaseOrderItem')->findOrFail($request->id);
 
             foreach ($request->items as $itemData) {
                 $pli = PackingListItem::findOrFail($itemData['id']);

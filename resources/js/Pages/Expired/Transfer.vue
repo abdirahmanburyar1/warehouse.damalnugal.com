@@ -69,17 +69,28 @@ const form = ref({
 
 const errors = ref({});
 
+// Normalize options to { id, name } for Multiselect (track-by="id", label="name")
+function toOptionsList(arrOrObj) {
+    if (!arrOrObj) return [];
+    const list = Array.isArray(arrOrObj) ? arrOrObj : Object.values(arrOrObj);
+    return list.map((item) => ({ id: item.id, name: item.name ?? '' }));
+}
+const normalizedWarehouses = computed(() => toOptionsList(props.warehouses));
+const normalizedFacilities = computed(() => toOptionsList(props.facilities));
+
 const destinationOptions = computed(() => {
     return destinationType.value === "warehouse"
-        ? props.warehouses
-        : props.facilities;
+        ? normalizedWarehouses.value
+        : normalizedFacilities.value;
 });
 
-// Filter out the source warehouse from destination options
+// Filter out the source warehouse only when destination type is warehouse (so we don't exclude facilities whose id happens to match warehouse_id)
 const filteredDestinationOptions = computed(() => {
-    return destinationOptions.value.filter(
-        (item) => item.id !== props.inventory?.warehouse_id
-    );
+    const options = destinationOptions.value;
+    if (destinationType.value === 'warehouse') {
+        return options.filter((item) => item.id !== props.inventory?.warehouse_id);
+    }
+    return options;
 });
 
 // Add "Add" option to reasons dropdown (first in the list)
@@ -256,7 +267,7 @@ const openAddReasonModal = () => {
         description="Transfer expired or soon to be expired items to warehouse or facility"
         img="/assets/images/transfer.png"
     >
-        <div class="max-w-7xl mx-auto py-6">
+        <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
             <div class="bg-white rounded-xl shadow-sm border border-gray-200">
                 <!-- Header -->
                 <div class="px-8 py-6 border-b border-gray-200">
@@ -530,7 +541,7 @@ const openAddReasonModal = () => {
                         </button>
                         <PrimaryButton 
                         
-                            v-if="$page.props.auth.can.transfer_create || $page.props.auth.user.isAdmin"
+                            v-if="$page.props.auth.can.transfer_create || $page.props.auth.can.facility_create || $page.props.auth.user.isAdmin"
                             :disabled="loading" 
                             class="relative px-8 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
                         >

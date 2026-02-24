@@ -95,10 +95,14 @@
                                                         {{ moment(item.created_at).format('DD/MM/YYYY') }}
                                                     </td>
                                                     <td class="px-3 py-2 text-xs text-gray-900 text-center align-middle">
-                                                        {{ row.quantity }}
+                                                        {{ row.finalized ? (row.original_quantity ?? row.quantity) : row.quantity }}
                                                     </td>
                                                     <td class="px-3 py-2 text-xs text-center align-middle">
-                                                        <span v-if="row.status === 'Missing'"
+                                                        <span v-if="row.finalized"
+                                                            class="text-gray-700 font-medium">
+                                                            Processed
+                                                        </span>
+                                                        <span v-else-if="row.status === 'Missing'"
                                                             class="text-yellow-600 font-medium">
                                                             Missing
                                                         </span>
@@ -385,6 +389,7 @@ const groupedItems = computed(() => {
                 rows: [{
                     id: item.id, // Include the specific row ID
                     quantity: item.quantity,
+                    original_quantity: item.original_quantity,
                     status: item.status,
                     actions: getAvailableActions(item.status),
                     finalized: item.finalized
@@ -395,6 +400,7 @@ const groupedItems = computed(() => {
             existingGroup.rows.push({
                 id: item.id, // Include the specific row ID
                 quantity: item.quantity,
+                original_quantity: item.original_quantity,
                 status: item.status,
                 actions: getAvailableActions(item.status),
                 finalized: item.finalized

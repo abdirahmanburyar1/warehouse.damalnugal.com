@@ -30,11 +30,9 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
-        
-        // Eager load permissions to avoid N+1 queries
-        // if ($user && !$user->relationLoaded('permissions')) {
-        //     $user->load('permissions');
-        // }
+        if ($user && !$user->relationLoaded('roles')) {
+            $user->load('roles');
+        }
 
         return [
             ...parent::share($request),

@@ -66,83 +66,27 @@ class PermissionSeeder extends Seeder
                 'guard_name' => 'web',
             ],
 
-            // Facility Management Module
+            // Facility Management Module (facility-view: menu + view; facility-manage: all actions + sub-modules e.g. districts)
             [
                 'name' => 'facility-view',
                 'display_name' => 'View Facilities',
-                'description' => 'Can view facility list and details',
-                'module' => 'Facility Management',
-                'guard_name' => 'web',
-            ],
-            [
-                'name' => 'facility-create',
-                'display_name' => 'Create Facilities',
-                'description' => 'Can create new facilities',
-                'module' => 'Facility Management',
-                'guard_name' => 'web',
-            ],
-            [
-                'name' => 'facility-edit',
-                'display_name' => 'Edit Facilities',
-                'description' => 'Can edit existing facilities',
-                'module' => 'Facility Management',
-                'guard_name' => 'web',
-            ],
-            [
-                'name' => 'facility-delete',
-                'display_name' => 'Delete Facilities',
-                'description' => 'Can delete facilities',
-                'module' => 'Facility Management',
-                'guard_name' => 'web',
-            ],
-            [
-                'name' => 'facility-import',
-                'display_name' => 'Import Facilities',
-                'description' => 'Can import facilities from Excel',
+                'description' => 'Required for Facilities menu visibility; can view facility list, details, and related modules (e.g. districts)',
                 'module' => 'Facility Management',
                 'guard_name' => 'web',
             ],
             [
                 'name' => 'facility-manage',
                 'display_name' => 'Manage Facilities',
-                'description' => 'Can perform all facility management actions (create, edit, delete, import, view)',
+                'description' => 'Full access to all facility actions and sub-modules: create, edit, delete, import, toggle status, manage districts',
                 'module' => 'Facility Management',
                 'guard_name' => 'web',
             ],
 
-            // Product Management Module
+            // Product Management Module (product-view: menu + view; product-manage: all actions + sub-modules)
             [
                 'name' => 'product-view',
                 'display_name' => 'View Products',
-                'description' => 'Can view product list and details',
-                'module' => 'Product Management',
-                'guard_name' => 'web',
-            ],
-            [
-                'name' => 'product-create',
-                'display_name' => 'Create Products',
-                'description' => 'Can create new products',
-                'module' => 'Product Management',
-                'guard_name' => 'web',
-            ],
-            [
-                'name' => 'product-edit',
-                'display_name' => 'Edit Products',
-                'description' => 'Can edit existing products',
-                'module' => 'Product Management',
-                'guard_name' => 'web',
-            ],
-            [
-                'name' => 'product-delete',
-                'display_name' => 'Delete Products',
-                'description' => 'Can delete products',
-                'module' => 'Product Management',
-                'guard_name' => 'web',
-            ],
-            [
-                'name' => 'product-import',
-                'display_name' => 'Import Products',
-                'description' => 'Can import products from Excel',
+                'description' => 'Required for Products menu visibility; can view product list, categories, dosages, eligible items, and UOM',
                 'module' => 'Product Management',
                 'guard_name' => 'web',
             ],
@@ -186,7 +130,7 @@ class PermissionSeeder extends Seeder
                 'guard_name' => 'web',
             ],
 
-            // Order Management
+            // Order Management Module (same structure as Transfer: view, create, edit, delete; workflow permissions in block below)
             [
                 'name' => 'order-view',
                 'display_name' => 'View Orders',
@@ -275,34 +219,120 @@ class PermissionSeeder extends Seeder
                 'module' => 'Asset Management',
                 'guard_name' => 'web',
             ],
+            [
+                'name' => 'asset-review',
+                'display_name' => 'Review Assets',
+                'description' => 'Can review assets in approval workflow',
+                'module' => 'Asset Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'asset-approve',
+                'display_name' => 'Approve Assets',
+                'description' => 'Can approve or reject assets',
+                'module' => 'Asset Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'asset-reject',
+                'display_name' => 'Reject Assets',
+                'description' => 'Can reject assets in approval workflow',
+                'module' => 'Asset Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'asset-manage',
+                'display_name' => 'Manage Assets',
+                'description' => 'Full asset management including transfer, locations, bulk import',
+                'module' => 'Asset Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'asset-bulk-import',
+                'display_name' => 'Bulk Import Assets',
+                'description' => 'Can bulk import assets',
+                'module' => 'Asset Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'asset-export',
+                'display_name' => 'Export Assets',
+                'description' => 'Can export asset data',
+                'module' => 'Asset Management',
+                'guard_name' => 'web',
+            ],
 
-            // Liquidate/Disposal Module
+            // Liquidation tab (under Wastage page)
             [
-                'name' => 'liquidate-view',
+                'name' => 'liquidation-view',
                 'display_name' => 'View Liquidations',
-                'description' => 'Can view liquidation and disposal records',
-                'module' => 'Liquidate Management',
+                'description' => 'Can view liquidation records',
+                'module' => 'Wastage Management',
                 'guard_name' => 'web',
             ],
             [
-                'name' => 'liquidate-create',
-                'display_name' => 'Create Liquidations',
-                'description' => 'Can create liquidation and disposal records',
-                'module' => 'Liquidate Management',
+                'name' => 'liquidation-review',
+                'display_name' => 'Review Liquidations',
+                'description' => 'Can review liquidation records',
+                'module' => 'Wastage Management',
                 'guard_name' => 'web',
             ],
             [
-                'name' => 'liquidate-edit',
+                'name' => 'liquidation-approve',
+                'display_name' => 'Approve Liquidations',
+                'description' => 'Can approve liquidation records',
+                'module' => 'Wastage Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'liquidation-reject',
+                'display_name' => 'Reject Liquidations',
+                'description' => 'Can reject liquidation records',
+                'module' => 'Wastage Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'liquidation-edit',
                 'display_name' => 'Edit Liquidations',
-                'description' => 'Can edit liquidation and disposal records',
-                'module' => 'Liquidate Management',
+                'description' => 'Can rollback approved/rejected liquidations',
+                'module' => 'Wastage Management',
+                'guard_name' => 'web',
+            ],
+
+            // Disposal tab (under Wastage page)
+            [
+                'name' => 'disposal-view',
+                'display_name' => 'View Disposals',
+                'description' => 'Can view disposal records',
+                'module' => 'Wastage Management',
                 'guard_name' => 'web',
             ],
             [
-                'name' => 'liquidate-delete',
-                'display_name' => 'Delete Liquidations',
-                'description' => 'Can delete liquidation and disposal records',
-                'module' => 'Liquidate Management',
+                'name' => 'disposal-review',
+                'display_name' => 'Review Disposals',
+                'description' => 'Can review disposal records',
+                'module' => 'Wastage Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'disposal-approve',
+                'display_name' => 'Approve Disposals',
+                'description' => 'Can approve disposal records',
+                'module' => 'Wastage Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'disposal-reject',
+                'display_name' => 'Reject Disposals',
+                'description' => 'Can reject disposal records',
+                'module' => 'Wastage Management',
+                'guard_name' => 'web',
+            ],
+            [
+                'name' => 'disposal-edit',
+                'display_name' => 'Edit Disposals',
+                'description' => 'Can rollback approved/rejected disposals',
+                'module' => 'Wastage Management',
                 'guard_name' => 'web',
             ],
 
@@ -534,11 +564,11 @@ class PermissionSeeder extends Seeder
                 'guard_name' => 'web',
             ],
 
-            // Product (frontend uses product_manage)
+            // Product Management (grants all product actions and sub-modules)
             [
                 'name' => 'product-manage',
                 'display_name' => 'Manage Products',
-                'description' => 'Can create/edit/delete/import products (module-level)',
+                'description' => 'Full access to all product actions and sub-modules (categories, dosages, eligible items, UOM): create, edit, delete, import, toggle status',
                 'module' => 'Product Management',
                 'guard_name' => 'web',
             ],
@@ -552,7 +582,7 @@ class PermissionSeeder extends Seeder
                 'guard_name' => 'web',
             ],
 
-            // Orders (workflow permissions used in UI)
+            // Orders (workflow permissions used in UI; same pattern as Transfers)
             [
                 'name' => 'order-manage',
                 'display_name' => 'Manage Orders',
@@ -640,6 +670,13 @@ class PermissionSeeder extends Seeder
                 'guard_name' => 'web',
             ],
             [
+                'name' => 'transfer-delivery',
+                'display_name' => 'Mark Transfers Delivered',
+                'description' => 'Can mark transfers as delivered at destination',
+                'module' => 'Transfer Management',
+                'guard_name' => 'web',
+            ],
+            [
                 'name' => 'transfer-receive',
                 'display_name' => 'Receive Transfers',
                 'description' => 'Can receive transfers',
@@ -647,11 +684,20 @@ class PermissionSeeder extends Seeder
                 'guard_name' => 'web',
             ],
 
-            // Wastage (sidebar uses wastage_view)
+            // Expiry (Expires menu and expired/disposal module)
+            [
+                'name' => 'expiry-view',
+                'display_name' => 'View Expiry',
+                'description' => 'Can access Expiry menu and expired items / disposal',
+                'module' => 'Expiry Management',
+                'guard_name' => 'web',
+            ],
+
+            // Wastage (sidebar: only wastage-view; tabs use liquidation-* and disposal-*)
             [
                 'name' => 'wastage-view',
                 'display_name' => 'View Wastages',
-                'description' => 'Can view wastage / liquidate / disposal records',
+                'description' => 'Can access wastage page (liquidation and disposal tabs)',
                 'module' => 'Wastage Management',
                 'guard_name' => 'web',
             ],

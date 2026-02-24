@@ -17,6 +17,9 @@ class DosageController extends Controller
      */
     public function index(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the products module.');
+        }
         $query = Dosage::query();
         
         // Handle search
@@ -43,6 +46,9 @@ class DosageController extends Controller
      */
     public function create()
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the products module.');
+        }
         return Inertia::render('Product/Dosage/Create');
     }
 
@@ -51,6 +57,9 @@ class DosageController extends Controller
      */
     public function edit(Dosage $dosage)
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the products module.');
+        }
         return Inertia::render('Product/Dosage/Edit', [
             'dosage' => new DosageResource($dosage)
         ]);
@@ -61,6 +70,9 @@ class DosageController extends Controller
      */
     public function store(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             $request->validate([
                 'id' => 'nullable',
@@ -88,6 +100,9 @@ class DosageController extends Controller
      */
     public function toggleStatus(Dosage $dosage)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             $dosage->update(['is_active' => !$dosage->is_active]);
             $status = $dosage->is_active ? 'activated' : 'deactivated';
@@ -99,6 +114,9 @@ class DosageController extends Controller
 
     public function destroy(Dosage $dosage)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             // Check if the dosage is associated with any products
             if ($dosage->products()->exists()) {

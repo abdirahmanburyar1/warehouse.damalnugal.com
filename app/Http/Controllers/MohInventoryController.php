@@ -30,6 +30,9 @@ class MohInventoryController extends Controller
      */
     public function index(Request $request)
     {
+        if (!auth()->user()->hasPermission('moh-inventory-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access MOH Inventory.');
+        }
         try {
             // If migrations haven't been run yet, don't crash the whole app.
             if (!Schema::hasTable('moh_inventories')) {
@@ -104,9 +107,7 @@ class MohInventoryController extends Controller
      */
     public function import(Request $request)
     {
-        // Server-side permission enforcement (frontend uses underscore keys; DB uses dash names)
-        $user = auth()->user();
-        if (!$user || (!$user->can('moh-inventory-create') && !$user->can('manage-system') && !$user->isAdmin())) {
+        if (!auth()->user()->hasPermission('moh-inventory-create') && !auth()->user()->isAdmin()) {
             return response()->json([
                 'success' => false,
                 'message' => 'You do not have permission to import MOH inventory'
@@ -288,6 +289,9 @@ class MohInventoryController extends Controller
      */
     public function getImportProgress(Request $request)
     {
+        if (!auth()->user()->hasPermission('moh-inventory-view') && !auth()->user()->hasPermission('moh-inventory-create') && !auth()->user()->isAdmin()) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to access MOH Inventory.'], 403);
+        }
         $importId = $request->input('import_id');
         
         if (!$importId) {
@@ -317,6 +321,9 @@ class MohInventoryController extends Controller
      */
     public function testImport(Request $request)
     {
+        if (!auth()->user()->hasPermission('moh-inventory-create') && !auth()->user()->isAdmin()) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to run MOH inventory test import.'], 403);
+        }
         try {
             // Create a test MOH inventory
             $mohInventory = MohInventory::create([
@@ -396,6 +403,16 @@ class MohInventoryController extends Controller
         $status = $request->input('status');
         $user = auth()->user();
 
+        if ($status === 'reviewed' && !$user->hasPermission('moh-inventory-review') && !$user->isAdmin()) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to review MOH inventory.'], 403);
+        }
+        if ($status === 'approved' && !$user->hasPermission('moh-inventory-approve') && !$user->isAdmin()) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to approve MOH inventory.'], 403);
+        }
+        if ($status === 'rejected' && !$user->hasPermission('moh-inventory-reject') && !$user->isAdmin()) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to reject MOH inventory.'], 403);
+        }
+
         try {
             switch ($status) {
                 case 'reviewed':
@@ -454,6 +471,9 @@ class MohInventoryController extends Controller
      */
     public function updateItem(Request $request, MohInventoryItem $mohInventoryItem)
     {
+        if (!auth()->user()->hasPermission('moh-inventory-create') && !auth()->user()->isAdmin()) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to edit MOH inventory items.'], 403);
+        }
         try {
             $request->validate([
                 'product_id' => 'required|exists:products,id',
@@ -658,6 +678,9 @@ class MohInventoryController extends Controller
      */
     public function store(Request $request)
     {
+        if (!auth()->user()->hasPermission('moh-inventory-create') && !auth()->user()->isAdmin()) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to create MOH inventory.'], 403);
+        }
         try {
             $request->validate([
                 'date' => 'required|date',

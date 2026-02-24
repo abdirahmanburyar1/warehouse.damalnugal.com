@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\AssetsImport;
+use App\Notifications\AssetActionRequired;
 use Inertia\Inertia;
 use Illuminate\Support\Carbon;
 
@@ -292,6 +293,14 @@ class AssetController extends Controller
                         'performed_at' => now(),
                     ]);
                 }
+
+                // Notify users with asset-review permission (workflow: next action is review)
+                User::withPermission('asset-review')
+                    ->where('is_active', true)
+                    ->whereNotNull('email')
+                    ->where('id', '!=', auth()->id())
+                    ->get()
+                    ->each(fn ($u) => $u->notify(new AssetActionRequired($asset, AssetActionRequired::ACTION_NEEDS_REVIEW)));
 
                 return response()->json([
                     'success' => true,
@@ -610,6 +619,10 @@ class AssetController extends Controller
      */
     public function approve(Asset $asset)
     {
+        $user = auth()->user();
+        if (!$user->hasPermission('asset-approve') && !$user->hasPermission('asset-manage') && !$user->isAdmin()) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to approve assets.'], 403);
+        }
         try {
             // Check if user has access to this asset through organization
             if (auth()->check() && auth()->user() && !empty(auth()->user()->organization)) {
@@ -677,6 +690,10 @@ class AssetController extends Controller
      */
     public function reject(Request $request, Asset $asset)
     {
+        $user = auth()->user();
+        if (!$user->hasPermission('asset-approve') && !$user->hasPermission('asset-reject') && !$user->hasPermission('asset-manage') && !$user->isAdmin()) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to reject assets.'], 403);
+        }
         try {
             // Check if user has access to this asset through organization
             if (auth()->check() && auth()->user() && !empty(auth()->user()->organization)) {
@@ -749,6 +766,10 @@ class AssetController extends Controller
      */
     public function review(Asset $asset)
     {
+        $user = auth()->user();
+        if (!$user->hasPermission('asset-review') && !$user->hasPermission('asset-manage') && !$user->isAdmin()) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to review assets.'], 403);
+        }
         try {
             // Check if user has access to this asset through organization
             if (auth()->check() && auth()->user() && !empty(auth()->user()->organization)) {
@@ -783,6 +804,22 @@ class AssetController extends Controller
                 'performed_at' => now(),
             ]);
 
+            // Notify users with asset-approve or asset-reject (workflow: next action is approve/reject)
+            $recipients = User::withPermission('asset-approve')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', $user->id)
+                ->get()
+                ->merge(
+                    User::withPermission('asset-reject')
+                        ->where('is_active', true)
+                        ->whereNotNull('email')
+                        ->where('id', '!=', $user->id)
+                        ->get()
+                )
+                ->unique('id');
+            $recipients->each(fn ($u) => $u->notify(new AssetActionRequired($asset->fresh(), AssetActionRequired::ACTION_READY_FOR_APPROVAL)));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Asset reviewed successfully',
@@ -801,6 +838,10 @@ class AssetController extends Controller
      */
     public function restore(Asset $asset)
     {
+        $user = auth()->user();
+        if (!$user->hasPermission('asset-approve') && !$user->hasPermission('asset-manage') && !$user->isAdmin()) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to restore assets.'], 403);
+        }
         try {
             // Check if asset is rejected (has rejected_at)
             if (!$asset->rejected_at) {
@@ -825,6 +866,14 @@ class AssetController extends Controller
                 'performed_at' => now(),
             ]);
 
+            // Notify reviewers that asset is back in workflow and needs review
+            User::withPermission('asset-review')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', auth()->id())
+                ->get()
+                ->each(fn ($u) => $u->notify(new AssetActionRequired($asset->fresh(), AssetActionRequired::ACTION_NEEDS_REVIEW)));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Asset restored successfully',
@@ -843,6 +892,10 @@ class AssetController extends Controller
      */
     public function bulkApprove(Request $request)
     {
+        $user = auth()->user();
+        if (!$user->hasPermission('asset-approve') && !$user->hasPermission('asset-manage') && !$user->isAdmin()) {
+            return back()->withErrors(['error' => 'You do not have permission to approve assets.']);
+        }
         try {
             $request->validate([
                 'asset_ids' => 'required|array',

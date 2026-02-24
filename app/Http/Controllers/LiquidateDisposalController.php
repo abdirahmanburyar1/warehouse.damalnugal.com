@@ -8,9 +8,12 @@ use App\Models\Liquidate;
 use App\Models\Product;
 use App\Models\Warehouse;
 use App\Models\Facility;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Resources\DisposalResource;
 use App\Http\Resources\LiquidateResource;
+use App\Notifications\LiquidationActionRequired;
+use App\Notifications\DisposalActionRequired;
 
 class LiquidateDisposalController extends Controller
 {
@@ -19,6 +22,10 @@ class LiquidateDisposalController extends Controller
      */
     public function index(Request $request)
     {
+        if (!auth()->user()->hasPermission('wastage-view')) {
+            abort(403, 'You do not have permission to view wastages.');
+        }
+
         // Get liquidations
         $liquidates = $this->getLiquidatesQuery($request);
         $liquidates = $liquidates->paginate($request->input('per_page', 25), ['*'], 'page', $request->input('page', 1))
@@ -140,6 +147,10 @@ class LiquidateDisposalController extends Controller
      */
     public function showLiquidate($id)
     {
+        if (!auth()->user()->hasPermission('wastage-view') && !auth()->user()->hasPermission('liquidation-view')) {
+            abort(403, 'You do not have permission to view this liquidation.');
+        }
+
         $liquidate = Liquidate::with([
             'items.product',
             'liquidatedBy',
@@ -159,6 +170,10 @@ class LiquidateDisposalController extends Controller
      */
     public function showDisposal($id)
     {
+        if (!auth()->user()->hasPermission('wastage-view') && !auth()->user()->hasPermission('disposal-view')) {
+            abort(403, 'You do not have permission to view this disposal.');
+        }
+
         $disposal = Disposal::with([
             'items.product',
             'disposedBy',
@@ -178,6 +193,10 @@ class LiquidateDisposalController extends Controller
      */
     public function reviewLiquidate(Request $request, $id)
     {
+        if (!auth()->user()->hasPermission('liquidation-review')) {
+            return response()->json(['message' => 'Unauthorized: You do not have permission to review liquidations.'], 403);
+        }
+
         try {
             $liquidate = Liquidate::findOrFail($id);
             
@@ -185,6 +204,22 @@ class LiquidateDisposalController extends Controller
             $liquidate->reviewed_at = now();
             $liquidate->reviewed_by = Auth::id();
             $liquidate->save();
+
+            // Notify users with approve/reject permission (next action)
+            $approvers = User::withPermission('liquidation-approve')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', auth()->id())
+                ->get();
+            $rejectors = User::withPermission('liquidation-reject')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', auth()->id())
+                ->get();
+            $recipients = $approvers->merge($rejectors)->unique('id');
+            foreach ($recipients as $user) {
+                $user->notify(new LiquidationActionRequired($liquidate, LiquidationActionRequired::ACTION_READY_FOR_APPROVAL));
+            }
 
             return response()->json([
                 'message' => 'Liquidation reviewed successfully',
@@ -202,6 +237,10 @@ class LiquidateDisposalController extends Controller
      */
     public function approveLiquidate(Request $request, $id)
     {
+        if (!auth()->user()->hasPermission('liquidation-approve')) {
+            return response()->json(['message' => 'Unauthorized: You do not have permission to approve liquidations.'], 403);
+        }
+
         try {
             $liquidate = Liquidate::findOrFail($id);
             
@@ -229,6 +268,10 @@ class LiquidateDisposalController extends Controller
      */
     public function rejectLiquidate(Request $request, $id)
     {
+        if (!auth()->user()->hasPermission('liquidation-reject')) {
+            return response()->json(['message' => 'Unauthorized: You do not have permission to reject liquidations.'], 403);
+        }
+
         try {
             $liquidate = Liquidate::findOrFail($id);
             
@@ -254,6 +297,10 @@ class LiquidateDisposalController extends Controller
      */
     public function rollbackLiquidate(Request $request, $id)
     {
+        if (!auth()->user()->hasPermission('liquidation-edit')) {
+            return response()->json(['message' => 'Unauthorized: You do not have permission to rollback liquidations.'], 403);
+        }
+
         try {
             $liquidate = Liquidate::findOrFail($id);
             
@@ -278,6 +325,10 @@ class LiquidateDisposalController extends Controller
      */
     public function reviewDisposal(Request $request, $id)
     {
+        if (!auth()->user()->hasPermission('disposal-review')) {
+            return response()->json(['message' => 'Unauthorized: You do not have permission to review disposals.'], 403);
+        }
+
         try {
             $disposal = Disposal::findOrFail($id);
             
@@ -291,6 +342,22 @@ class LiquidateDisposalController extends Controller
             $disposal->reviewed_at = now();
             $disposal->reviewed_by = Auth::id();
             $disposal->save();
+
+            // Notify users with approve/reject permission (next action)
+            $approvers = User::withPermission('disposal-approve')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', auth()->id())
+                ->get();
+            $rejectors = User::withPermission('disposal-reject')
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->where('id', '!=', auth()->id())
+                ->get();
+            $recipients = $approvers->merge($rejectors)->unique('id');
+            foreach ($recipients as $user) {
+                $user->notify(new DisposalActionRequired($disposal, DisposalActionRequired::ACTION_READY_FOR_APPROVAL));
+            }
 
             return response()->json([
                 'message' => 'Disposal reviewed successfully',
@@ -308,6 +375,10 @@ class LiquidateDisposalController extends Controller
      */
     public function approveDisposal(Request $request, $id)
     {
+        if (!auth()->user()->hasPermission('disposal-approve')) {
+            return response()->json(['message' => 'Unauthorized: You do not have permission to approve disposals.'], 403);
+        }
+
         try {
             $disposal = Disposal::findOrFail($id);
             
@@ -341,6 +412,10 @@ class LiquidateDisposalController extends Controller
      */
     public function rejectDisposal(Request $request, $id)
     {
+        if (!auth()->user()->hasPermission('disposal-reject')) {
+            return response()->json(['message' => 'Unauthorized: You do not have permission to reject disposals.'], 403);
+        }
+
         try {
             $disposal = Disposal::findOrFail($id);
             
@@ -372,6 +447,10 @@ class LiquidateDisposalController extends Controller
      */
     public function rollbackDisposal(Request $request, $id)
     {
+        if (!auth()->user()->hasPermission('disposal-edit')) {
+            return response()->json(['message' => 'Unauthorized: You do not have permission to rollback disposals.'], 403);
+        }
+
         try {
             $disposal = Disposal::findOrFail($id);
             

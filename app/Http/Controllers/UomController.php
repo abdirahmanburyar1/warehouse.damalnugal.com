@@ -17,6 +17,9 @@ class UomController extends Controller
      */
     public function index(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the products module.');
+        }
         $query = Uom::query();
         
         // Handle search
@@ -56,6 +59,9 @@ class UomController extends Controller
      */
     public function create()
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the products module.');
+        }
         return Inertia::render('Product/Uom/Create');
     }
 
@@ -64,6 +70,9 @@ class UomController extends Controller
      */
     public function edit(Uom $uom)
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the products module.');
+        }
         return Inertia::render('Product/Uom/Edit', [
             'uom' => new UomResource($uom)
         ]);
@@ -74,6 +83,9 @@ class UomController extends Controller
      */
     public function store(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             $request->validate([
                 'id' => 'nullable',
@@ -98,6 +110,9 @@ class UomController extends Controller
      */
     public function update(Request $request, Uom $uom)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             $request->validate([
                 'name' => 'required|string|max:255|unique:uoms,name,' . $uom->id,
@@ -118,6 +133,9 @@ class UomController extends Controller
      */
     public function toggleStatus(Uom $uom)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             $uom->update(['is_active' => !$uom->is_active]);
             $status = $uom->is_active ? 'activated' : 'deactivated';
@@ -132,6 +150,9 @@ class UomController extends Controller
      */
     public function destroy(Uom $uom)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             $uom->delete();
             return response()->json('UOM deleted successfully', 200);

@@ -64,11 +64,11 @@
                         </svg>
                         <span class="text-sm text-gray-600">Source: {{ props.liquidate.source?.replace('_', ' ') || 'N/A' }}</span>
                     </div>
-                    <div class="flex items-center">
+                    <div v-if="props.liquidate.liquidatedBy?.name" class="flex items-center">
                         <svg class="h-4 w-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                         </svg>
-                        <span class="text-sm text-gray-600">Liquidated By: {{ props.liquidate.liquidatedBy?.name || 'N/A' }}</span>
+                        <span class="text-sm text-gray-600">Liquidated By: {{ props.liquidate.liquidatedBy.name }}</span>
                     </div>
                     <div class="flex items-center">
                         <svg class="h-4 w-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -443,7 +443,7 @@
                         <div class="relative">
                             <div class="flex flex-col">
                                 <button @click="changeStatus(props.liquidate.id, 'reviewed', 'is_reviewing')" 
-                                    :disabled="isType['is_reviewing'] || props.liquidate.status !== 'pending'"
+                                    :disabled="isType['is_reviewing'] || props.liquidate.status !== 'pending' || !$page.props.auth.can.liquidation_review"
                                     :class="[
                                         props.liquidate.status === 'pending'
                                             ? 'bg-yellow-500 hover:bg-yellow-600'
@@ -451,7 +451,7 @@
                                             ? 'bg-green-500'
                                             : 'bg-gray-300 cursor-not-allowed',
                                     ]" 
-                                    class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px]">
+                                    class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px] disabled:opacity-60 disabled:cursor-not-allowed">
                                     <img src="/assets/images/review.png" class="w-5 h-5 mr-2" alt="Review" />
                                     <span class="text-sm font-bold text-white">{{
                                         isType["is_reviewing"]
@@ -476,7 +476,7 @@
                         <div class="relative" v-if="props.liquidate.status !== 'rejected'">
                             <div class="flex flex-col">
                                 <button @click="changeStatus(props.liquidate.id, 'approved', 'is_approve')" 
-                                    :disabled="isType['is_approve'] || props.liquidate.status !== 'reviewed'"
+                                    :disabled="isType['is_approve'] || props.liquidate.status !== 'reviewed' || !$page.props.auth.can.liquidation_approve"
                                     :class="[
                                         props.liquidate.status === 'reviewed'
                                         ? 'bg-yellow-500 hover:bg-yellow-600'
@@ -521,7 +521,7 @@
                         <div class="relative" v-if="props.liquidate.status !== 'rejected' && props.liquidate.status !== 'approved'">
                             <div class="flex flex-col">
                                 <button @click="rejectLiquidation()" 
-                                    :disabled="isType['is_reject'] || props.liquidate.status !== 'reviewed'"
+                                    :disabled="isType['is_reject'] || props.liquidate.status !== 'reviewed' || !$page.props.auth.can.liquidation_reject"
                                     :class="[
                                         props.liquidate.status === 'reviewed'
                                             ? 'bg-red-500 hover:bg-red-600'
@@ -546,8 +546,8 @@
                         <div class="relative" v-if="props.liquidate.status === 'rejected'">
                             <div class="flex flex-col">
                                 <button @click="restoreLiquidation()" 
-                                    :disabled="isType['is_restore']"
-                                    class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px] bg-blue-500 hover:bg-blue-600">
+                                    :disabled="isType['is_restore'] || !$page.props.auth.can.liquidation_edit"
+                                    class="inline-flex items-center justify-center px-4 py-2 rounded-lg shadow-sm transition-colors duration-150 text-white min-w-[160px] bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed">
                                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                                     </svg>

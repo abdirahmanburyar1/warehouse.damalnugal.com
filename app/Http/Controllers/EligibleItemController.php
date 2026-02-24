@@ -21,6 +21,9 @@ class EligibleItemController extends Controller
 {
     public function index(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the products module.');
+        }
         $query = FacilityType::query();
 
         if ($request->filled('search')) {
@@ -58,6 +61,9 @@ class EligibleItemController extends Controller
 
     public function create()
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the products module.');
+        }
         // Get facility types for dropdown
         $facilityTypes = FacilityType::where('is_active', true)
             ->orderBy('name')
@@ -72,6 +78,9 @@ class EligibleItemController extends Controller
 
     public function store(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             $request->validate([
                 'products' => 'required|array|min:1',
@@ -119,6 +128,9 @@ class EligibleItemController extends Controller
 
     public function update(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             $request->validate([
                 'id' => 'required|exists:eligible_items,id',
@@ -142,6 +154,9 @@ class EligibleItemController extends Controller
 
     public function edit($eligibleItem)
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the products module.');
+        }
         $eligible = EligibleItem::with('product')->find($eligibleItem);
         
         // Get facility types for dropdown
@@ -159,6 +174,9 @@ class EligibleItemController extends Controller
 
     public function destroy($id)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             $eligible = EligibleItem::find($id);
             if (!$eligible) {
@@ -180,6 +198,9 @@ class EligibleItemController extends Controller
      */
     public function import(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         $tempFile = null;
         try {
             if (!$request->hasFile('file')) {

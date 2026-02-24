@@ -131,7 +131,7 @@
                     </div>
                 </Link>
                 <Link
-                    v-if="can('inventory_view')"
+                    v-if="can('expiry_view')"
                     :href="route('expired.index')"
                     class="menu-item"
                     :class="{ active: route().current('expired.*') }"
@@ -356,7 +356,7 @@
                                     </div>
                                     <div class="user-details">
                                         <span class="user-role">{{
-                                            $page.props.auth.user?.title
+                                            rolesLabel($page.props.auth.user)
                                         }} </span>
                                         <span class="user-name">{{
                                             $page.props.auth.user?.name
@@ -472,6 +472,12 @@ const props = defineProps({
 });
 
 const page = usePage();
+
+function rolesLabel(user) {
+    if (!user) return '—';
+    if (user.roles?.length) return user.roles.map((r) => r.name).join(', ');
+    return user.title || '—';
+}
 
 /** Permission-based access: true if user has the permission or is admin. Keys use underscore (e.g. order_view, system_settings). */
 const can = (permissionKey) => {

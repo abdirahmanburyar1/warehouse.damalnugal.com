@@ -16,6 +16,9 @@ class CategoryController extends Controller
      */
     public function index(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the products module.');
+        }
         $query = Category::query();
         
         // Handle search
@@ -42,6 +45,9 @@ class CategoryController extends Controller
      */
     public function create()
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the products module.');
+        }
         return Inertia::render('Product/Category/Create');
     }
 
@@ -50,6 +56,9 @@ class CategoryController extends Controller
      */
     public function edit(Category $category)
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the products module.');
+        }
         return Inertia::render('Product/Category/Edit', [
             'category' => new CategoryResource($category)
         ]);
@@ -60,6 +69,9 @@ class CategoryController extends Controller
      */
     public function store(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             $request->validate([
                 'id' => 'nullable',
@@ -119,6 +131,9 @@ class CategoryController extends Controller
      */
     public function toggleStatus(Category $category)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             $category->update(['is_active' => !$category->is_active]);
             $status = $category->is_active ? 'activated' : 'deactivated';
@@ -130,6 +145,9 @@ class CategoryController extends Controller
 
     public function destroy(Category $category)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             // Check if category has any products
             if ($category->products()->exists()) {
@@ -148,6 +166,9 @@ class CategoryController extends Controller
      */
     public function bulkDelete(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage products.');
+        }
         try {
             $request->validate([
                 'ids' => 'required|array',

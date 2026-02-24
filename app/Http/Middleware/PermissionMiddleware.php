@@ -15,7 +15,20 @@ class PermissionMiddleware
      */
     public function handle(Request $request, Closure $next, string $permission): Response
     {
-        if (!$request->user() || !$request->user()->hasPermission($permission)) {
+        $user = $request->user();
+        if (!$user) {
+            if ($request->wantsJson()) {
+                return response()->json('Unauthorized', 403);
+            }
+            abort(403, 'Unauthorized');
+        }
+
+        $permissions = array_map('trim', explode(',', $permission));
+        $allowed = count($permissions) > 1
+            ? $user->hasAnyPermission($permissions)
+            : $user->hasPermission($permissions[0]);
+
+        if (!$allowed) {
             if ($request->wantsJson()) {
                 return response()->json('Unauthorized', 403);
             }

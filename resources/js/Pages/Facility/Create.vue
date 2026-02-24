@@ -232,7 +232,7 @@
                     <PrimaryButton
                         :disabled="
                             isSubmitting ||
-                            !($page.props.auth?.can?.['facility-manage'] || $page.props.auth?.isAdmin)
+                            !($page.props.auth?.can?.facility_manage || $page.props.auth?.isAdmin)
                         "
                     >
                         {{ isSubmitting ? "Creating..." : "Create Facility" }}
@@ -270,7 +270,7 @@
                     <PrimaryButton
                         :disabled="
                             isNewRegion ||
-                            !($page.props.auth?.can?.['facility-manage'] || $page.props.auth?.isAdmin)
+                            !($page.props.auth?.can?.facility_manage || $page.props.auth?.isAdmin)
                         "
                         @click="createRegion"
                     >
@@ -311,7 +311,7 @@
                         :disabled="
                             isCreatingFacilityType ||
                             !newFacilityType ||
-                            !($page.props.auth?.can?.['facility-manage'] || $page.props.auth?.isAdmin)
+                            !($page.props.auth?.can?.facility_manage || $page.props.auth?.isAdmin)
                         "
                         @click="createFacilityType"
                     >
@@ -350,7 +350,7 @@
                     <PrimaryButton
                         :disabled="
                             isNewDistrict ||
-                            !($page.props.auth?.can?.['facility-manage'] || $page.props.auth?.isAdmin)
+                            !($page.props.auth?.can?.facility_manage || $page.props.auth?.isAdmin)
                         "
                         @click="createDistrict"
                     >

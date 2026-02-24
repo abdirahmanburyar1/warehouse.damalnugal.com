@@ -18,6 +18,7 @@ class PackingListDifference extends Model
         'back_order_id',
         'product_id',
         'quantity',
+        'original_quantity',
         'finalized',
         'status',
         'notes'

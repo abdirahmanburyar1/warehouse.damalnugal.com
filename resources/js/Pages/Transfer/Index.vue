@@ -45,8 +45,9 @@
         <div class="flex flex-col space-y-6">
             <!-- Buttons First -->
             <div class="flex items-center justify-end">
-                <!-- New Transfer -->
-                <button @click="router.visit(route('transfers.create'))"
+                <!-- New Transfer (restricted by transfer_create) -->
+                <button v-if="$page.props.auth.can.transfer_create || $page.props.auth.user?.isAdmin"
+                    @click="router.visit(route('transfers.create'))"
                     class="inline-flex items-center px-4 py-2 border border-transparent text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                     New Transfer
                 </button>

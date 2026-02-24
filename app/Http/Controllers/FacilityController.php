@@ -15,15 +15,13 @@ use App\Imports\FacilitiesImport;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Gate;
 
 class FacilityController extends Controller
 {
     public function import(Request $request)
     {
-        // Check if user can manage facilities
-        if (!Gate::allows('facility-manage')) {
-            abort(403, 'Access denied. You do not have permission to manage facilities.');
+        if (!auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage facilities.');
         }
 
         $request->validate([
@@ -87,6 +85,9 @@ class FacilityController extends Controller
 
     public function downloadTemplate()
     {
+        if (!auth()->user()->hasPermission('facility-view') && !auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the facilities module.');
+        }
         // Create CSV content with only headers (no sample data)
         $headers = ['facility_name', 'facility type', 'district', 'email', 'phone'];
         
@@ -100,9 +101,8 @@ class FacilityController extends Controller
     }
     public function index(Request $request)
     {
-        // Check if user can manage facilities
-        if (!Gate::allows('facility-manage')) {
-            abort(403, 'Access denied. You do not have permission to manage facilities.');
+        if (!auth()->user()->hasPermission('facility-view') && !auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the facilities module.');
         }
 
         // Get facility counts before pagination (independent of filters)
@@ -142,9 +142,8 @@ class FacilityController extends Controller
     }
 
     public function show(Request $request, $id){
-        // Check if user can manage facilities
-        if (!Gate::allows('facility-manage')) {
-            abort(403, 'Access denied. You do not have permission to manage facilities.');
+        if (!auth()->user()->hasPermission('facility-view') && !auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the facilities module.');
         }
 
         $facility = Facility::find($id);
@@ -156,9 +155,8 @@ class FacilityController extends Controller
 
     // tabs
     public function inventory(Request $request, $id){
-        // Check if user can manage facilities
-        if (!Gate::allows('facility-manage')) {
-            abort(403, 'Access denied. You do not have permission to manage facilities.');
+        if (!auth()->user()->hasPermission('facility-view') && !auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the facilities module.');
         }
 
         $facility = Facility::find($id);
@@ -169,9 +167,8 @@ class FacilityController extends Controller
     }
 
     public function dispence(Request $request, $id){
-        // Check if user can manage facilities
-        if (!Gate::allows('facility-manage')) {
-            abort(403, 'Access denied. You do not have permission to manage facilities.');
+        if (!auth()->user()->hasPermission('facility-view') && !auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the facilities module.');
         }
 
         $facility = Facility::find($id);
@@ -182,9 +179,8 @@ class FacilityController extends Controller
     }
 
     public function stock(Request $request, $id){
-        // Check if user can manage facilities
-        if (!Gate::allows('facility-manage')) {
-            abort(403, 'Access denied. You do not have permission to manage facilities.');
+        if (!auth()->user()->hasPermission('facility-view') && !auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the facilities module.');
         }
 
         $facility = Facility::find($id);
@@ -195,9 +191,8 @@ class FacilityController extends Controller
     }
 
     public function expiry(Request $request, $id){
-        // Check if user can manage facilities
-        if (!Gate::allows('facility-manage')) {
-            abort(403, 'Access denied. You do not have permission to manage facilities.');
+        if (!auth()->user()->hasPermission('facility-view') && !auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the facilities module.');
         }
 
         $facility = Facility::find($id);
@@ -209,9 +204,8 @@ class FacilityController extends Controller
     
     public function create()
     {
-        // Check if user can manage facilities
-        if (!Gate::allows('facility-manage')) {
-            abort(403, 'Access denied. You do not have permission to manage facilities.');
+        if (!auth()->user()->hasPermission('facility-view') && !auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the facilities module.');
         }
 
         return inertia('Facility/Create', [
@@ -224,9 +218,8 @@ class FacilityController extends Controller
     
     public function edit(Facility $facility)
     {
-        // Check if user can manage facilities
-        if (!Gate::allows('facility-manage')) {
-            abort(403, 'Access denied. You do not have permission to manage facilities.');
+        if (!auth()->user()->hasPermission('facility-view') && !auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the facilities module.');
         }
 
         return inertia('Facility/Edit', [
@@ -239,6 +232,9 @@ class FacilityController extends Controller
 
     public function store(Request $request)
     {
+        if (!auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage facilities.');
+        }
         try {
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
@@ -266,6 +262,9 @@ class FacilityController extends Controller
 
     public function destroy(Facility $facility)
     {
+        if (!auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage facilities.');
+        }
         try {
             $facility->delete();    
             return response()->json('Facility deleted successfully.', 200);
@@ -276,6 +275,9 @@ class FacilityController extends Controller
 
     public function toggleStatus(Facility $facility)
     {
+        if (!auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to manage facilities.');
+        }
         try {
             $facility->is_active = !$facility->is_active;
             $facility->save();
@@ -286,6 +288,9 @@ class FacilityController extends Controller
     }
 
     public function getFacilities(Request $request){
+        if (!auth()->user()->hasPermission('facility-view') && !auth()->user()->hasPermission('facility-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to access the facilities module.');
+        }
         try {
             $query = Facility::query();
             

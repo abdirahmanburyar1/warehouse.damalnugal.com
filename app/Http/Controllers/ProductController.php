@@ -29,6 +29,9 @@ class ProductController extends Controller
      */
     public function index(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to view products.');
+        }
         $query = Product::query();
         
         // Search functionality
@@ -110,6 +113,9 @@ class ProductController extends Controller
      */
     public function create()
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to view products.');
+        }
         $facilityTypes = FacilityType::where('is_active', true)
             ->orderBy('name')
             ->pluck('name')
@@ -128,6 +134,9 @@ class ProductController extends Controller
      */
     public function edit(Product $product)
     {
+        if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to view products.');
+        }
         // Load the product with its relationships
         $product->load(['category', 'dosage', 'eligible']);
         
@@ -157,6 +166,9 @@ class ProductController extends Controller
      */
     public function store(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to create products.');
+        }
         try {
             $request->validate([
                 'name' => [
@@ -213,6 +225,9 @@ class ProductController extends Controller
      */
     public function update(Request $request, Product $product)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to edit products.');
+        }
         try {
             $request->validate([
                 'name' => [
@@ -276,6 +291,9 @@ class ProductController extends Controller
      */
     public function destroy(Product $product)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to delete products.');
+        }
         $product->delete();
 
         return redirect()->route('products.index')
@@ -285,6 +303,9 @@ class ProductController extends Controller
 
     public function importExcel(Request $request)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to import products.');
+        }
         try {
             if (!$request->hasFile('file')) {
                 return response()->json([
@@ -355,6 +376,9 @@ class ProductController extends Controller
      */
     public function getImportFormat()
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to import products.');
+        }
         return response()->json([
             'success' => true,
             'data' => [
@@ -394,6 +418,9 @@ class ProductController extends Controller
 
     public function toggleStatus(Product $product)
     {
+        if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
+            abort(403, 'You do not have permission to edit products.');
+        }
         try {
             $product->is_active = !$product->is_active;
             $product->save();

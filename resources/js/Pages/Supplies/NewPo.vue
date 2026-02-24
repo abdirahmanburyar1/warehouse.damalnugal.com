@@ -20,8 +20,8 @@
             </div>
         </div>
 
-        <!-- Supplier Selection Card -->
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden mb-6">
+        <!-- Supplier Selection Card (overflow-visible so Multiselect dropdown is not clipped) -->
+        <div class="bg-white rounded-xl shadow-sm overflow-visible mb-6">
             <div class="px-6 py-5 border-b border-slate-100">
                 <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
                     <span class="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-600">
@@ -35,10 +35,20 @@
             <div class="px-6 py-5">
                 <label class="block text-sm font-medium text-slate-700 mb-2">Select Supplier</label>
                 <div class="max-w-md">
-                    <SearchableSelect
+                    <Multiselect
                         v-model="form.supplier"
                         :options="props.suppliers || []"
+                        :searchable="true"
+                        :close-on-select="true"
+                        :show-labels="false"
+                        :allow-empty="true"
+                        :max-height="300"
+                        no-options-text="No suppliers found."
+                        no-results-text="No suppliers match your search."
                         placeholder="Search and select supplier..."
+                        track-by="id"
+                        label="name"
+                        class="multiselect-modern"
                         @select="handleSupplierSelect"
                     />
                 </div>
@@ -171,11 +181,20 @@
                                 :data-item-index="index">
                                 <td class="px-4 py-3 text-sm text-slate-500">{{ index + 1 }}</td>
                                 <td class="px-4 py-3 relative z-[1]" style="width: 350px;">
-                                    <SearchableSelect
+                                    <Multiselect
                                         v-model="item.product"
                                         :options="props.products || []"
+                                        :searchable="true"
+                                        :close-on-select="true"
+                                        :show-labels="false"
+                                        :allow-empty="true"
+                                        :max-height="240"
+                                        no-options-text="No items found."
+                                        no-results-text="No items match your search."
                                         placeholder="Search and select item..."
-                                        options-max-height-class="max-h-24"
+                                        track-by="id"
+                                        label="name"
+                                        class="multiselect-modern"
                                         @select="(val) => hadleProductSelect(index, val)"
                                     />
                                 </td>
@@ -185,15 +204,21 @@
                                         min="1" placeholder="Qty">
                                 </td>
                                 <td class="px-4 py-3 w-[300px] relative z-[1]">
-                                    <SearchableSelect
+                                    <Multiselect
                                         :model-value="getUomModel(item.uom)"
                                         :options="uomOptions"
+                                        :searchable="true"
+                                        :close-on-select="true"
+                                        :show-labels="false"
+                                        :max-height="240"
+                                        no-options-text="No UoM found. Add one with + Add new UOM."
+                                        no-results-text="No UoM match your search."
                                         placeholder="Search and select UoM..."
-                                        options-max-height-class="max-h-24"
-                                        keep-first-option-in-filter
-                                        :option-id-to-hide-from-input="UOM_ADD_OPTION_ID"
-                                        @focus="loadUomList"
-                                        @update:model-value="(val) => onUomSelect(index, val)"
+                                        track-by="id"
+                                        label="name"
+                                        class="multiselect-modern"
+                                        @select="(val) => onUomSelect(index, val)"
+                                        @open="loadUomList"
                                     />
                                 </td>
                                 <td class="px-4 py-3">
@@ -347,15 +372,19 @@
 </template>
 
 <style scoped>
-/* Row with open dropdown stacks above next rows so dropdown is not cut off */
+/* Row with open dropdown stacks above next rows so dropdown doesn't overlap them */
 .order-items-section tbody tr.order-item-row {
     position: relative;
     z-index: 0;
 }
-.order-items-section tbody tr.order-item-row:has([data-dropdown-open="true"]) {
+/* When any Multiselect (Item or UoM) in the row is open, raise the row so its dropdown draws on top */
+.order-items-section tbody tr.order-item-row:has(.multiselect--active) {
     z-index: 10;
 }
-/* Dropdown list always on top */
+/* Ensure vue-multiselect dropdown content is on top within the row */
+.order-items-section :deep(.multiselect__content-wrapper) {
+    z-index: 9999 !important;
+}
 .order-items-section :deep([role="listbox"]) {
     z-index: 2147483647 !important;
 }
@@ -370,7 +399,9 @@ import axios from 'axios';
 import { PlusIcon, TrashIcon } from '@heroicons/vue/24/outline';
 import moment from 'moment';
 import Swal from 'sweetalert2';
-import SearchableSelect from '@/Components/SearchableSelect.vue';
+import Multiselect from 'vue-multiselect';
+import 'vue-multiselect/dist/vue-multiselect.css';
+import '@/Components/multiselect.css';
 import { useToast } from 'vue-toastification';
 
 const toast = useToast();

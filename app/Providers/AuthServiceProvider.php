@@ -87,7 +87,7 @@ class AuthServiceProvider extends ServiceProvider
         });
 
         Gate::define('facility-manage', function ($user) {
-            return $user->hasPermissionTo('facility-manage') || $user->hasPermissionTo('manage-system') || $user->isAdmin;
+            return $user->hasPermissionTo('facility-manage') || $user->hasPermissionTo('manage-system') || $user->isAdmin();
         });
 
         Gate::define('product-management', function ($user) {
