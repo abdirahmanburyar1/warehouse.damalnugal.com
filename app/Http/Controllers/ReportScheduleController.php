@@ -9,24 +9,36 @@ use Inertia\Inertia;
 
 class ReportScheduleController extends Controller
 {
+    private const SCHEDULE_KEYS = [
+        'monthly_received_report' => ['key' => 'monthly_received_report_schedule', 'method' => 'monthlyReceivedReportSchedule', 'default' => ['day_of_month' => 1, 'time' => '01:00']],
+        'issue_quantities' => ['key' => 'issue_quantities_schedule', 'method' => 'issueQuantitiesSchedule', 'default' => ['day_of_month' => 1, 'time' => '02:00']],
+        'monthly_consumption' => ['key' => 'monthly_consumption_schedule', 'method' => 'monthlyConsumptionSchedule', 'default' => ['day_of_month' => 1, 'time' => '02:00']],
+        'inventory_monthly_report' => ['key' => 'inventory_monthly_report_schedule', 'method' => 'inventoryMonthlyReportSchedule', 'default' => ['day_of_month' => 1, 'time' => '06:00']],
+        'orders_quarterly' => ['key' => 'orders_quarterly_schedule', 'method' => 'ordersQuarterlySchedule', 'default' => ['time' => '01:00'], 'quarterly' => true],
+        'warehouse_amc' => ['key' => 'warehouse_amc_schedule', 'method' => 'warehouseAmcSchedule', 'default' => ['day_of_month' => 1, 'time' => '03:00']],
+    ];
+
     public function index()
     {
-        if (!Schema::hasTable('email_notification_settings')) {
-            return Inertia::render('Settings/ReportSchedules/Index', [
-                'monthlyReceivedReport' => $this->defaultMonthlyReceivedConfig(),
-            ]);
+        $schedules = [];
+        foreach (self::SCHEDULE_KEYS as $slug => $def) {
+            $setting = Schema::hasTable('email_notification_settings')
+                ? EmailNotificationSetting::{$def['method']}()
+                : null;
+            $config = $setting ? ($setting->config ?? []) : [];
+            $default = $def['default'];
+            $schedules[$slug] = [
+                'enabled' => $setting ? $setting->enabled : false,
+                'day_of_month' => (int) ($config['day_of_month'] ?? $default['day_of_month'] ?? 1),
+                'time' => $config['time'] ?? $default['time'] ?? '01:00',
+            ];
+            if (!empty($def['quarterly'])) {
+                unset($schedules[$slug]['day_of_month']);
+            }
         }
 
-        $setting = EmailNotificationSetting::monthlyReceivedReportSchedule();
-        $config = $setting ? ($setting->config ?? []) : [];
-        $monthlyReceivedReport = [
-            'enabled' => $setting ? $setting->enabled : false,
-            'day_of_month' => (int) ($config['day_of_month'] ?? 1),
-            'time' => $config['time'] ?? '01:00',
-        ];
-
         return Inertia::render('Settings/ReportSchedules/Index', [
-            'monthlyReceivedReport' => $monthlyReceivedReport,
+            'schedules' => $schedules,
         ]);
     }
 
@@ -36,43 +48,36 @@ class ReportScheduleController extends Controller
             return back()->with('error', 'Settings table is not available. Please run migrations.');
         }
 
-        $validated = $request->validate([
-            'monthly_received_report.enabled' => 'boolean',
-            'monthly_received_report.day_of_month' => 'required|integer|min:1|max:28',
-            'monthly_received_report.time' => 'required|string|regex:/^\d{1,2}:\d{2}$/',
-        ]);
+        $rules = [];
+        foreach (self::SCHEDULE_KEYS as $slug => $def) {
+            $rules["{$slug}.enabled"] = 'boolean';
+            $rules["{$slug}.time"] = 'required|string|regex:/^\d{1,2}:\d{2}$/';
+            if (empty($def['quarterly'])) {
+                $rules["{$slug}.day_of_month"] = 'required|integer|min:1|max:28';
+            }
+        }
+        $validated = $request->validate($rules);
 
-        $data = $validated['monthly_received_report'] ?? [];
-        $enabled = (bool) ($data['enabled'] ?? false);
-        $dayOfMonth = (int) ($data['day_of_month'] ?? 1);
-        $time = $data['time'] ?? '01:00';
-        if (preg_match('/^\d{1,2}:\d{2}$/', $time)) {
-            $parts = explode(':', $time);
-            $time = sprintf('%02d:%02d', (int) $parts[0], (int) ($parts[1] ?? 0));
-        } else {
-            $time = '01:00';
+        foreach (self::SCHEDULE_KEYS as $slug => $def) {
+            $data = $validated[$slug] ?? [];
+            $enabled = (bool) ($data['enabled'] ?? false);
+            $time = $data['time'] ?? $def['default']['time'] ?? '01:00';
+            if (preg_match('/^\d{1,2}:\d{2}$/', $time)) {
+                $parts = explode(':', $time);
+                $time = sprintf('%02d:%02d', (int) $parts[0], (int) ($parts[1] ?? 0));
+            } else {
+                $time = $def['default']['time'] ?? '01:00';
+            }
+            $config = ['time' => $time];
+            if (empty($def['quarterly'])) {
+                $config['day_of_month'] = (int) ($data['day_of_month'] ?? 1);
+            }
+            EmailNotificationSetting::updateOrCreate(
+                ['key' => $def['key']],
+                ['enabled' => $enabled, 'config' => $config]
+            );
         }
 
-        EmailNotificationSetting::updateOrCreate(
-            ['key' => 'monthly_received_report_schedule'],
-            [
-                'enabled' => $enabled,
-                'config' => [
-                    'day_of_month' => $dayOfMonth,
-                    'time' => $time,
-                ],
-            ]
-        );
-
-        return back()->with('success', 'Report schedule settings saved. Use Laravel scheduler (e.g. cron: * * * * * php artisan schedule:run) so the command runs at the configured day and time.');
-    }
-
-    private function defaultMonthlyReceivedConfig(): array
-    {
-        return [
-            'enabled' => false,
-            'day_of_month' => 1,
-            'time' => '01:00',
-        ];
+        return back()->with('success', 'Report schedule settings saved. Ensure cron runs: * * * * * php artisan schedule:run');
     }
 }

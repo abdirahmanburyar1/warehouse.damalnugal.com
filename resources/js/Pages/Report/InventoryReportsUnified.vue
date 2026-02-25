@@ -83,7 +83,7 @@
                         <button
                             type="button"
                             @click="generateReport"
-                            :disabled="generating || !filters.report_type"
+                            :disabled="generating"
                             class="w-full sm:w-auto inline-flex justify-center items-center px-6 py-2.5 bg-emerald-600 border border-transparent rounded-md font-semibold text-sm text-white uppercase tracking-widest hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 transition ease-in-out duration-150"
                         >
                             <span v-if="generating">Generating...</span>
@@ -121,64 +121,60 @@
                     No data found for the selected filters. Try a different report type or period.
                 </div>
                 <div v-else-if="reportData.length > 0" class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200 border border-gray-300">
+                    <table class="min-w-full border-collapse border border-gray-300">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Item</th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Category</th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">UoM</th>
-                                <th scope="col" colspan="2" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Item Details</th>
-                                <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Beginning Balance</th>
-                                <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">QTY Received</th>
-                                <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">QTY Issued</th>
-                                <th scope="col" colspan="2" class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Adjustments</th>
-                                <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Closing Balance</th>
-                                <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Total Closing Balance</th>
-                                <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">AMC</th>
-                                <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">MOS</th>
-                                <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Stockout Days</th>
-                                <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Unit cost</th>
-                                <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Total Cost</th>
+                                <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">Item</th>
+                                <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">Category</th>
+                                <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">UoM</th>
+                                <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Item Details</th>
+                                <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Beginning<br>Balance</th>
+                                <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">QTY<br>Received</th>
+                                <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">QTY<br>Issued</th>
+                                <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Adjust<br>ments</th>
+                                <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Closing<br>Balance</th>
+                                <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Total<br>Closing<br>Balance</th>
+                                <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">AMC</th>
+                                <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">MOS<br>(Months<br>of Stock)</th>
+                                <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Stockout<br>Days</th>
+                                <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Unit<br>cost</th>
+                                <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Total<br>Cost</th>
                             </tr>
-                            <tr class="bg-gray-50/80">
-                                <th colspan="3" class="px-4 py-1 border border-gray-300"></th>
-                                <th class="px-4 py-1 text-left text-xs font-medium text-gray-500 uppercase border border-gray-300">Batch No.</th>
-                                <th class="px-4 py-1 text-left text-xs font-medium text-gray-500 uppercase border border-gray-300">Expiry Date</th>
-                                <th colspan="3" class="px-4 py-1 border border-gray-300"></th>
-                                <th class="px-4 py-1 text-right text-xs font-medium text-gray-500 uppercase border border-gray-300">(-)</th>
-                                <th class="px-4 py-1 text-right text-xs font-medium text-gray-500 uppercase border border-gray-300">(+)</th>
-                                <th colspan="7" class="px-4 py-1 border border-gray-300"></th>
+                            <tr class="bg-gray-50">
+                                <th class="px-3 py-1 text-left text-xs font-medium text-gray-600 border border-gray-300">Batch No.:</th>
+                                <th class="px-3 py-1 text-left text-xs font-medium text-gray-600 border border-gray-300">Expiry Date</th>
                             </tr>
                         </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
+                        <tbody class="bg-white">
                             <tr
                                 v-for="(row, index) in filteredRows"
                                 :key="index"
+                                :class="row.is_first_batch ? 'border-t border-gray-400' : ''"
                                 class="hover:bg-gray-50"
                             >
-                                <td class="px-4 py-3 text-sm text-gray-900 border border-gray-300 whitespace-nowrap">{{ row.item }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-600 border border-gray-300 whitespace-nowrap">{{ row.category }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-600 border border-gray-300 whitespace-nowrap">{{ row.uom }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-600 border border-gray-300 whitespace-nowrap">{{ row.batch_no || '–' }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-600 border border-gray-300 whitespace-nowrap">{{ formatExpiry(row.expiry_date) }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900 text-right border border-gray-300 whitespace-nowrap">{{ formatNum(row.beginning_balance) }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900 text-right border border-gray-300 whitespace-nowrap">{{ formatNum(row.qty_received) }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900 text-right border border-gray-300 whitespace-nowrap">{{ formatNum(row.qty_issued) }}</td>
-                                <td class="px-4 py-3 text-sm text-red-600 text-right border border-gray-300 whitespace-nowrap">{{ formatNum(row.adjustment_neg) }}</td>
-                                <td class="px-4 py-3 text-sm text-green-600 text-right border border-gray-300 whitespace-nowrap">{{ formatNum(row.adjustment_pos) }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900 text-right border border-gray-300 whitespace-nowrap">{{ formatNum(row.closing_balance) }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900 text-right border border-gray-300 whitespace-nowrap">{{ formatNum(row.total_closing_balance) }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900 text-right border border-gray-300 whitespace-nowrap">{{ formatNum(row.amc) }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900 text-right border border-gray-300 whitespace-nowrap">{{ row.mos ?? '–' }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900 text-right border border-gray-300 whitespace-nowrap">{{ formatNum(row.stockout_days) }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900 text-right border border-gray-300 whitespace-nowrap">{{ formatCost(row.unit_cost) }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900 text-right border border-gray-300 whitespace-nowrap">{{ formatCost(row.total_cost) }}</td>
+                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 border border-gray-300 align-top">{{ row.item }}</td>
+                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-600 border border-gray-300 align-top">{{ row.category }}</td>
+                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-600 border border-gray-300 align-top">{{ row.uom }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-600 border border-gray-300 whitespace-nowrap">{{ row.batch_no || '–' }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-600 border border-gray-300 whitespace-nowrap">{{ formatExpiry(row.expiry_date) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.beginning_balance) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.qty_received) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.qty_issued) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.adjustment_neg) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.adjustment_pos) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.closing_balance) }}</td>
+                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top font-medium">{{ formatNum(row.total_closing_balance) }}</td>
+                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top font-medium">{{ formatNum(row.amc) }}</td>
+                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top font-medium">{{ row.mos ?? '–' }}</td>
+                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top">{{ formatNum(row.stockout_days) }}</td>
+                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top">{{ formatCost(row.unit_cost) }}</td>
+                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top font-medium">{{ formatCost(row.total_cost) }}</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
                 <div v-else class="p-8 text-center text-gray-500">
-                    Select report type and period, then click Generate Report.
+                    Select at least one location filter (Region, District, or Warehouse/Facility), then click Generate Report.
                 </div>
             </div>
         </div>
@@ -207,7 +203,7 @@ const filters = ref({
     region_id: props.filters?.region_id ?? null,
     district_id: props.filters?.district_id ?? null,
     warehouse_or_facility: props.filters?.warehouse_or_facility ?? '',
-    report_type: props.filters?.report_type ?? '',
+    report_type: props.filters?.report_type ?? 'warehouse_inventory',
     monthYear: props.filters?.monthYear ?? defaultMonthYear,
 });
 const reportData = ref([]);
@@ -279,14 +275,13 @@ function formatExpiry(d) {
 }
 
 async function generateReport() {
-    if (!filters.value.report_type) return;
     generating.value = true;
     hasGenerated.value = true;
     try {
         const monthYear = filters.value.monthYear || defaultMonthYear;
         const [year, month] = monthYear.split('-').map(Number);
         const params = {
-            report_type: filters.value.report_type,
+            report_type: filters.value.report_type || 'warehouse_inventory',
             region_id: filters.value.region_id || undefined,
             district_id: filters.value.district_id || undefined,
             year: year || undefined,

@@ -14,6 +14,7 @@ use App\Http\Resources\DosageResource;
 use App\Models\FacilityType;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Log;
@@ -122,23 +123,25 @@ class ProductController extends Controller
             ->toArray();
         array_unshift($facilityTypes, 'All');
 
+        $supplyClassOptions = static::getSupplyClassOptions();
+
         return Inertia::render('Product/Create', [
             'categories' => CategoryResource::collection(Category::all()),
             'dosages' => DosageResource::collection(Dosage::all()),
             'facilityTypes' => $facilityTypes,
+            'supplyClassOptions' => $supplyClassOptions,
         ]);
     }
 
     /**
      * Show the form for editing the specified product.
      */
-    public function edit(Product $product)
+    public function edit($id)
     {
         if (!auth()->user()->hasPermission('product-view') && !auth()->user()->isAdmin()) {
             abort(403, 'You do not have permission to view products.');
         }
-        // Load the product with its relationships
-        $product->load(['category', 'dosage', 'eligible']);
+        $product = Product::with(['category', 'dosage', 'eligible'])->findOrFail($id);
         
         // Get facility types from eligible items
         $facilityTypes = $product->eligible->pluck('facility_type')->toArray();
@@ -146,6 +149,9 @@ class ProductController extends Controller
         // Add facility_types to the product data
         $productData = $product->toArray();
         $productData['facility_types'] = $facilityTypes;
+        $productData['supply_class_values'] = $product->supply_class
+            ? array_map('trim', explode(',', $product->supply_class))
+            : [];
 
         $allFacilityTypes = FacilityType::where('is_active', true)
             ->orderBy('name')
@@ -158,6 +164,7 @@ class ProductController extends Controller
             'categories' => CategoryResource::collection(Category::all()),
             'dosages' => DosageResource::collection(Dosage::all()),
             'facilityTypes' => $allFacilityTypes,
+            'supplyClassOptions' => static::getSupplyClassOptions(),
         ]);
     }
 
@@ -181,17 +188,25 @@ class ProductController extends Controller
                 'dosage_id' => 'nullable|exists:dosages,id',
                 'facility_types' => 'nullable|array',
                 'tracert_type' => 'nullable|string',
+                'supply_class' => 'nullable',
             ]);
-    
+
+            $supplyClassValue = $request->supply_class;
+            if (is_array($supplyClassValue)) {
+                $supplyClassValue = implode(',', array_map('trim', array_filter($supplyClassValue)));
+            }
+            $supplyClassValue = $supplyClassValue ? (string) $supplyClassValue : null;
+
             DB::beginTransaction();
-    
+
             $product = Product::create([
                 'tracert_type' => $request->tracert_type,
                 'name' => $request->name,
                 'category_id' => $request->category_id,
                 'dosage_id' => $request->dosage_id,
+                'supply_class' => $supplyClassValue,
             ]);
-    
+
             // Assign facility types for new products
             if (!empty($request->facility_types)) {
                 $facilityTypes = $request->facility_types;
@@ -223,24 +238,33 @@ class ProductController extends Controller
     /**
      * Update the specified product in storage.
      */
-    public function update(Request $request, Product $product)
+    public function update(Request $request, $id)
     {
         if (!auth()->user()->hasPermission('product-manage') && !auth()->user()->isAdmin()) {
             abort(403, 'You do not have permission to edit products.');
         }
         try {
+            $product = Product::with('eligible')->findOrFail($id);
+
             $request->validate([
                 'name' => [
                     'required',
                     'string',
                     'max:255',
-                    Rule::unique('products', 'name')->ignore($product->id)
+                    Rule::unique('products', 'name')->ignore($id, 'id')
                 ],
                 'category_id' => 'nullable|exists:categories,id',
                 'dosage_id' => 'nullable|exists:dosages,id',
                 'tracert_type' => 'nullable|string',
                 'facility_types' => 'nullable|array',
+                'supply_class' => 'nullable',
             ]);
+
+            $supplyClassValue = $request->supply_class;
+            if (is_array($supplyClassValue)) {
+                $supplyClassValue = implode(',', array_map('trim', array_filter($supplyClassValue)));
+            }
+            $supplyClassValue = $supplyClassValue ? (string) $supplyClassValue : null;
     
             DB::beginTransaction();
     
@@ -249,6 +273,7 @@ class ProductController extends Controller
                 'category_id' => $request->category_id,
                 'dosage_id' => $request->dosage_id,
                 'tracert_type' => $request->tracert_type,
+                'supply_class' => $supplyClassValue,
             ]);
 
             // Handle facility types - remove existing and add new ones
@@ -278,6 +303,12 @@ class ProductController extends Controller
     
             return response()->json('Product updated successfully.', 200);
     
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => $e->getMessage(),
+                'errors' => $e->errors(),
+            ], 422);
         } catch (Throwable $th) {
             DB::rollBack();
             logger()->error('Product update error', ['error' => $th->getMessage()]);
@@ -431,5 +462,22 @@ class ProductController extends Controller
         }
     }
 
+    /**
+     * Get distinct supply class values from products (for dropdown options).
+     */
+    public static function getSupplyClassOptions(): array
+    {
+        $values = Product::query()
+            ->whereNotNull('supply_class')
+            ->where('supply_class', '!=', '')
+            ->pluck('supply_class')
+            ->flatMap(fn ($v) => array_map('trim', explode(',', $v)))
+            ->filter()
+            ->unique()
+            ->values()
+            ->sort()
+            ->toArray();
 
+        return array_values($values);
+    }
 }

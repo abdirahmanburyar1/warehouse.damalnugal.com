@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\EmailNotificationSetting;
 use App\Models\MonthlyConsumptionReport;
 use App\Models\MonthlyConsumptionItem;
 use App\Models\Facility;
@@ -32,8 +33,25 @@ class GenerateMonthlyConsumptionData extends Command
         $facilityId = $this->option('facility');
         $productId = $this->option('product');
         $force = $this->option('force');
+        $today = Carbon::now();
+
+        if (!$facilityId && !$productId && !$force) {
+            $setting = EmailNotificationSetting::monthlyConsumptionSchedule();
+            if (!$setting || !$setting->enabled) {
+                $this->info('Monthly consumption schedule is disabled or not configured.');
+                return 0;
+            }
+            $config = $setting->config ?? [];
+            $dayOfMonth = (int) ($config['day_of_month'] ?? 1);
+            $time = $this->normalizeTime($config['time'] ?? '02:00');
+            $currentTime = $today->format('H:i');
+            if ($today->day != $dayOfMonth || $currentTime !== $time) {
+                return 0;
+            }
+        }
+
         $generatedBy = 'Artisan Command';
-        
+
         // Get previous month date range
         $previousMonth = now()->subMonth();
         $monthYear = $previousMonth->format('Y-m');
@@ -205,5 +223,13 @@ class GenerateMonthlyConsumptionData extends Command
         // Use insertOrIgnore to handle potential duplicates
         DB::table('monthly_consumptions')->insertOrIgnore($records);
     }
- 
+
+    private function normalizeTime(string $time): string
+    {
+        if (preg_match('/^\d{1,2}:\d{2}$/', $time)) {
+            $parts = explode(':', $time);
+            return sprintf('%02d:%02d', (int) $parts[0], (int) ($parts[1] ?? 0));
+        }
+        return '02:00';
+    }
 }

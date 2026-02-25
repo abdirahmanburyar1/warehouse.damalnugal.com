@@ -30,7 +30,8 @@ class Product extends Model
         'dosage_id',
         // 'movement',
         'is_active',
-        'tracert_type'
+        'tracert_type',
+        'supply_class',
     ];
 
     protected $casts = [

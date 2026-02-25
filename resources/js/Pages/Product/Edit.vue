@@ -144,6 +144,49 @@
                                 Select where this product should be traced (optional)
                             </p>
                         </div>
+
+                        <!-- Supply Class -->
+                        <div>
+                            <InputLabel for="supply_class" value="Supply Class" class="text-sm font-medium text-gray-700 mb-2" />
+                            <Multiselect
+                                v-model="form.supply_class"
+                                :options="supplyClassOptionsWithAddNew"
+                                :multiple="true"
+                                :searchable="true"
+                                :close-on-select="false"
+                                :clear-on-select="false"
+                                :preserve-search="true"
+                                :show-labels="false"
+                                placeholder="Select or add supply class"
+                                class="text-sm"
+                                track-by="value"
+                                label="label"
+                                @select="onSupplyClassSelect"
+                            >
+                                <template v-slot:option="{ option }">
+                                    <div :class="{ 'add-new-option': option.isAddNew }" class="py-1">
+                                        <span v-if="option.isAddNew" class="text-indigo-600 font-medium flex items-center">
+                                            <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                            </svg>
+                                            Add new supply class
+                                        </span>
+                                        <span v-else>{{ option.label }}</span>
+                                    </div>
+                                </template>
+                                <template v-slot:selection="{ values, search, isOpen }">
+                                    <span class="multiselect__single" v-if="values.length && !isOpen">
+                                        {{ values.map(v => v.label).join(', ') }}
+                                    </span>
+                                </template>
+                            </Multiselect>
+                            <p class="text-sm text-gray-500 mt-2 flex items-center">
+                                <svg class="h-4 w-4 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                Select one or more supply classes, or add a new one (optional)
+                            </p>
+                        </div>
                     </div>
 
                     <!-- Facility Types -->
@@ -205,6 +248,58 @@
             </div>
         </div>
     </AuthenticatedLayout>
+
+    <!-- Supply Class Modal -->
+    <div v-if="showSupplyClassModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click="showSupplyClassModal = false">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md" @click.stop>
+            <div class="flex items-center justify-between p-6 border-b border-gray-200">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900">Add Supply Class</h3>
+                    <p class="text-sm text-gray-500 mt-1">Enter a new supply class value</p>
+                </div>
+                <button
+                    @click="showSupplyClassModal = false"
+                    class="text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                >
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="p-6">
+                <div class="mb-4">
+                    <InputLabel for="new-supply-class" value="Supply Class" class="text-sm font-medium text-gray-700 mb-2" />
+                    <input
+                        id="new-supply-class"
+                        type="text"
+                        class="block w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out"
+                        v-model="newSupplyClass"
+                        placeholder="e.g. Essential, Non-essential"
+                        autofocus
+                        @keydown.enter.prevent="addNewSupplyClass"
+                    />
+                </div>
+            </div>
+
+            <div class="flex justify-end space-x-3 p-6 border-t border-gray-200 bg-gray-50">
+                <button
+                    @click="showSupplyClassModal = false"
+                    type="button"
+                    class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200"
+                >
+                    Cancel
+                </button>
+                <button
+                    @click="addNewSupplyClass"
+                    type="button"
+                    class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 border border-transparent rounded-lg font-medium text-sm text-white hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-200"
+                >
+                    Add
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Category Modal -->
     <div v-if="showCategoryModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click="showCategoryModal = false">
@@ -335,7 +430,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import Checkbox from '@/Components/Checkbox.vue';
 import { Link, useForm, router } from '@inertiajs/vue3';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useToast } from "vue-toastification";
 import axios from 'axios';
 import Swal from 'sweetalert2';
@@ -370,11 +465,20 @@ const props = defineProps({
         required: false,
         default: () => ([])
     },
+    supplyClassOptions: {
+        type: Array,
+        required: false,
+        default: () => ([])
+    },
     errors: {
         type: Object,
         default: () => ({})
     }
 });
+
+const ADD_NEW_SUPPLY_CLASS = { value: '__add_new__', label: '+ Add new supply class', isAddNew: true };
+
+const supplyClassValues = (props.product.supply_class_values || []).map(s => ({ value: s, label: s }));
 
 const form = ref({
     id: props.product.id,
@@ -385,15 +489,25 @@ const form = ref({
     dosage: null,
     facility_types: props.product.facility_types || [],
     tracert_type: props.product.tracert_type ? (typeof props.product.tracert_type === 'string' ? JSON.parse(props.product.tracert_type) : props.product.tracert_type) : [],
+    supply_class: supplyClassValues,
 });
 
 const processing = ref(false);
 const showCategoryModal = ref(false);
 const showDosageModal = ref(false);
+const showSupplyClassModal = ref(false);
 const newCategory = ref({ name: '' });
 const newDosage = ref({ name: '' });
+const newSupplyClass = ref('');
+const customSupplyClasses = ref([]);
 
 const facilityTypes = ref(props.facilityTypes || []);
+
+const supplyClassOptionsWithAddNew = computed(() => {
+    const base = (props.supplyClassOptions || []).map(s => ({ value: s, label: s }));
+    const custom = (customSupplyClasses.value || []).map(s => ({ value: s, label: s }));
+    return [ADD_NEW_SUPPLY_CLASS, ...base, ...custom];
+});
 
 // Initialize form with existing data
 onMounted(() => {
@@ -408,19 +522,69 @@ onMounted(() => {
     }
 });
 
+function onSupplyClassSelect(selected) {
+    if (selected && selected.isAddNew) {
+        form.value.supply_class = (form.value.supply_class || []).filter(x => x.value !== '__add_new__');
+        showSupplyClassModal.value = true;
+    }
+}
+
+function addNewSupplyClass() {
+    const val = (newSupplyClass.value || '').trim();
+    if (!val) {
+        toast.error('Supply class name is required');
+        return;
+    }
+    if (!customSupplyClasses.value.includes(val)) {
+        customSupplyClasses.value = [...customSupplyClasses.value, val];
+    }
+    const opt = { value: val, label: val };
+    if (!(form.value.supply_class || []).some(x => x.value === val)) {
+        form.value.supply_class = [...(form.value.supply_class || []), opt];
+    }
+    newSupplyClass.value = '';
+    showSupplyClassModal.value = false;
+    toast.success('Supply class added');
+}
+
+function getProductIdFromUrl() {
+    if (typeof window === 'undefined') return null;
+
+    const pathMatch = window.location.pathname.match(/\/products\/([^/]+)\/edit$/);
+    if (pathMatch && pathMatch[1]) {
+        return decodeURIComponent(pathMatch[1]);
+    }
+
+    const query = new URLSearchParams(window.location.search);
+    return query.get('product') || query.get('id') || null;
+}
+
 const submit = async () => {
-    // Create a payload with the correct format
+    const productId = getProductIdFromUrl() || props.product.id || form.value.id;
+    if (!productId) {
+        toast.error('Invalid product. Please reload and try again.');
+        return;
+    }
+
+    const supplyClassPayload = (form.value.supply_class || [])
+        .filter(x => x && x.value && x.value !== '__add_new__')
+        .map(x => typeof x === 'object' ? x.value : x);
+
     const payload = {
         ...form.value,
-        // Ensure we're sending the IDs, not the objects
-        category_id: form.value.category?.id,
-        dosage_id: form.value.dosage?.id,
-        // Convert tracert_type array to JSON string
-        tracert_type: form.value.tracert_type && form.value.tracert_type.length > 0 ? JSON.stringify(form.value.tracert_type) : null
+        category_id: form.value.category?.id ?? form.value.category_id ?? props.product.category_id ?? null,
+        dosage_id: form.value.dosage?.id ?? form.value.dosage_id ?? props.product.dosage_id ?? null,
+        tracert_type: form.value.tracert_type && form.value.tracert_type.length > 0 ? JSON.stringify(form.value.tracert_type) : null,
+        supply_class: supplyClassPayload.length > 0 ? supplyClassPayload : null,
     };
-    console.log(payload);
+
+    delete payload.id;
+
     processing.value = true;
-    await axios.put(route('products.update', form.value.id), payload)
+    await axios.post(route('products.update', productId), {
+        ...payload,
+        _method: 'PUT',
+    })
     .then((response) => {
         processing.value = false;
         Swal.fire({

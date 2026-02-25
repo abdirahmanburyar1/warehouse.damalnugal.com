@@ -37,4 +37,34 @@ class EmailNotificationSetting extends Model
     {
         return static::getForKey('monthly_received_report_schedule');
     }
+
+    /** Schedule for issue quantities report (day_of_month, time in config). */
+    public static function issueQuantitiesSchedule(): ?self
+    {
+        return static::getForKey('issue_quantities_schedule');
+    }
+
+    /** Schedule for monthly consumption data (day_of_month, time in config). */
+    public static function monthlyConsumptionSchedule(): ?self
+    {
+        return static::getForKey('monthly_consumption_schedule');
+    }
+
+    /** Schedule for inventory monthly report (day_of_month, time in config). */
+    public static function inventoryMonthlyReportSchedule(): ?self
+    {
+        return static::getForKey('inventory_monthly_report_schedule');
+    }
+
+    /** Schedule for quarterly orders (time in config; runs on quarter start days only). */
+    public static function ordersQuarterlySchedule(): ?self
+    {
+        return static::getForKey('orders_quarterly_schedule');
+    }
+
+    /** Schedule for warehouse AMC (day_of_month, time in config). */
+    public static function warehouseAmcSchedule(): ?self
+    {
+        return static::getForKey('warehouse_amc_schedule');
+    }
 }

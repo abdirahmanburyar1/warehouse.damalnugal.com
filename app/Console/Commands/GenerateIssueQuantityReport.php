@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\EmailNotificationSetting;
 use App\Models\IssuedQuantity;
 use App\Models\IssueQuantityReport;
 use App\Models\IssueQuantityItem;
@@ -30,12 +31,27 @@ class GenerateIssueQuantityReport extends Command
      */
     public function handle()
     {
-        $this->info('Starting monthly issued quantities report generation...');
-
-        // Get the month to process (either from argument or previous month)
         $monthArg = $this->option('month');
         $force = $this->option('force');
         $today = Carbon::now();
+
+        if (!$monthArg && !$force) {
+            $setting = EmailNotificationSetting::issueQuantitiesSchedule();
+            if (!$setting || !$setting->enabled) {
+                $this->info('Issue quantities report schedule is disabled or not configured.');
+                return 0;
+            }
+            $config = $setting->config ?? [];
+            $dayOfMonth = (int) ($config['day_of_month'] ?? 1);
+            $time = $this->normalizeTime($config['time'] ?? '02:00');
+            $currentTime = $today->format('H:i');
+            if ($today->day != $dayOfMonth || $currentTime !== $time) {
+                return 0;
+            }
+        }
+
+        $this->info('Starting monthly issued quantities report generation...');
+
         $isFirstDayOfMonth = $today->day === 1;
 
         if ($monthArg) {
@@ -201,5 +217,14 @@ class GenerateIssueQuantityReport extends Command
         $this->info("Total Warehouses: {$warehouseSummary->count()}");
         $this->info("Total Quantity: " . number_format($warehouseSummary->sum('total_quantity')));
         $this->info(str_repeat("=", 80));
+    }
+
+    private function normalizeTime(string $time): string
+    {
+        if (preg_match('/^\d{1,2}:\d{2}$/', $time)) {
+            $parts = explode(':', $time);
+            return sprintf('%02d:%02d', (int) $parts[0], (int) ($parts[1] ?? 0));
+        }
+        return '02:00';
     }
 }

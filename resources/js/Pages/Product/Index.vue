@@ -214,6 +214,7 @@
                             <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">Dosage Form</th>
                             <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">Eligibility Level</th>
                             <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">Tracertable</th>
+                            <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">Supply Class</th>
                             <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">Status</th>
                             <th class="px-3 py-2 text-xs font-bold text-right" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">Actions</th>
                         </tr>
@@ -256,6 +257,9 @@
                             </td>
                             <td class="px-3 py-2 whitespace-nowrap">
                                 {{ product.tracert_type }}
+                            </td>
+                            <td class="px-3 py-2 text-xs text-gray-800">
+                                {{ product.supply_class || '—' }}
                             </td>
                             <td class="px-3 py-2 whitespace-nowrap">
                                 <span

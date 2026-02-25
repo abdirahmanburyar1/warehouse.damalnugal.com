@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\EmailNotificationSetting;
 use App\Models\IssueQuantityReport;
 use App\Models\IssueQuantityItem;
 use App\Models\ReorderLevel;
@@ -32,11 +33,29 @@ class GenerateWarehouseAMC extends Command
      */
     public function handle()
     {
+        $monthArg = $this->option('month');
+        $today = Carbon::now();
+
+        if (!$monthArg) {
+            $setting = EmailNotificationSetting::warehouseAmcSchedule();
+            if (!$setting || !$setting->enabled) {
+                $this->info('Warehouse AMC schedule is disabled or not configured.');
+                return 0;
+            }
+            $config = $setting->config ?? [];
+            $dayOfMonth = (int) ($config['day_of_month'] ?? 1);
+            $time = $this->normalizeTime($config['time'] ?? '03:00');
+            $currentTime = $today->format('H:i');
+            if ($today->day != $dayOfMonth || $currentTime !== $time) {
+                return 0;
+            }
+        }
+
         $this->info('Starting AMC and Reorder Level generation...');
 
         try {
             // Get the target month (default to last month)
-            $targetMonth = $this->option('month') ?: Carbon::now()->subMonth()->format('Y-m');
+            $targetMonth = $monthArg ?: Carbon::now()->subMonth()->format('Y-m');
             
             $this->info("Processing AMC for month: {$targetMonth}");
 
@@ -318,5 +337,14 @@ class GenerateWarehouseAMC extends Command
         
         $this->info("Products with AMC data: {$productsWithAmc}");
         $this->info("Products without AMC data: " . ($allProducts->count() - $productsWithAmc));
+    }
+
+    private function normalizeTime(string $time): string
+    {
+        if (preg_match('/^\d{1,2}:\d{2}$/', $time)) {
+            $parts = explode(':', $time);
+            return sprintf('%02d:%02d', (int) $parts[0], (int) ($parts[1] ?? 0));
+        }
+        return '03:00';
     }
 }

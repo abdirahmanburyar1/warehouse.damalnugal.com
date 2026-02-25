@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\EmailNotificationSetting;
 use App\Jobs\GenerateMonthlyInventoryReportJob;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -28,9 +29,27 @@ class GenerateInventoryMonthlyReport extends Command
      */
     public function handle()
     {
+        $monthArg = $this->option('month');
+        $today = Carbon::now();
+
+        if (!$monthArg) {
+            $setting = EmailNotificationSetting::inventoryMonthlyReportSchedule();
+            if (!$setting || !$setting->enabled) {
+                $this->info('Inventory monthly report schedule is disabled or not configured.');
+                return 0;
+            }
+            $config = $setting->config ?? [];
+            $dayOfMonth = (int) ($config['day_of_month'] ?? 1);
+            $time = $this->normalizeTime($config['time'] ?? '06:00');
+            $currentTime = $today->format('H:i');
+            if ($today->day != $dayOfMonth || $currentTime !== $time) {
+                return 0;
+            }
+        }
+
         // Default to previous month since inventory reports are generated on the first day for the previous month
-        $monthYear = $this->option('month') ?? Carbon::now()->subMonth()->format('Y-m');
-        
+        $monthYear = $monthArg ?? Carbon::now()->subMonth()->format('Y-m');
+
         $this->info("Generating monthly inventory report for {$monthYear}");
         
         try {
@@ -49,5 +68,14 @@ class GenerateInventoryMonthlyReport extends Command
             $this->error("Error generating report: {$e->getMessage()}");
             return 1;
         }
+    }
+
+    private function normalizeTime(string $time): string
+    {
+        if (preg_match('/^\d{1,2}:\d{2}$/', $time)) {
+            $parts = explode(':', $time);
+            return sprintf('%02d:%02d', (int) $parts[0], (int) ($parts[1] ?? 0));
+        }
+        return '06:00';
     }
 }

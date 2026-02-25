@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\EmailNotificationSetting;
 use Illuminate\Console\Command;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -31,52 +32,51 @@ class GenerateQuarterlyOrders extends Command
 
     public function handle()
     {
+        $today = now();
+        $targetQuarter = $this->argument('quarter') ?? $this->getCurrentQuarter();
+        $year = $this->argument('year') ?? $today->year;
+
+        // When run from scheduler (no args, not --test): only run if schedule enabled and today is quarter start at configured time
+        if (!$this->argument('quarter') && !$this->argument('year') && !$this->option('test')) {
+            $setting = EmailNotificationSetting::ordersQuarterlySchedule();
+            if (!$setting || !$setting->enabled) {
+                $this->info('Quarterly orders schedule is disabled or not configured.');
+                return 0;
+            }
+            $quarterStartDates = [
+                1 => ['month' => 12, 'day' => 1],
+                2 => ['month' => 3, 'day' => 1],
+                3 => ['month' => 6, 'day' => 1],
+                4 => ['month' => 9, 'day' => 1],
+            ];
+            $isQuarterStartDate = false;
+            foreach ($quarterStartDates as $quarter => $dates) {
+                if ($today->month == $dates['month'] && $today->day == $dates['day']) {
+                    $isQuarterStartDate = true;
+                    $targetQuarter = $quarter;
+                    break;
+                }
+            }
+            if (!$isQuarterStartDate) {
+                return 0;
+            }
+            $config = $setting->config ?? [];
+            $time = $this->normalizeTime($config['time'] ?? '01:00');
+            if ($today->format('H:i') !== $time) {
+                return 0;
+            }
+        }
+
         $this->info('Starting quarterly order generation with advanced AMC screening logic...');
-        
+
         try {
-            // Calculate quarter and year using the correct quarter system
-            $today = now();
-            $targetQuarter = $this->argument('quarter') ?? $this->getCurrentQuarter();
-            $year = $this->argument('year') ?? $today->year;
-            
             // Handle year rollover for Q1 (Dec-Feb) when we're in Dec
             if ($targetQuarter == 1 && $today->month == 12 && !$this->argument('quarter')) {
-                // We're in December starting Q1, but the quarter spans into next year
-                $year = $today->year + 1; // The quarter name is for the year it ends in (Feb)
+                $year = $today->year + 1;
             }
 
             // Check if today is the first day of a quarter (only if no arguments provided and not in test mode)
             if (!$this->argument('quarter') && !$this->argument('year') && !$this->option('test')) {
-                $quarterStartDates = [
-                    1 => ['month' => 12, 'day' => 1],  // Q1: Dec 1 - Feb 28/29
-                    2 => ['month' => 3, 'day' => 1],   // Q2: Mar 1 - May 31  
-                    3 => ['month' => 6, 'day' => 1],   // Q3: Jun 1 - Aug 31
-                    4 => ['month' => 9, 'day' => 1],   // Q4: Sep 1 - Nov 30
-                ];
-
-                $isQuarterStartDate = false;
-                foreach ($quarterStartDates as $quarter => $dates) {
-                    if ($today->month == $dates['month'] && $today->day == $dates['day']) {
-                        $isQuarterStartDate = true;
-                        $targetQuarter = $quarter;
-                        break;
-                    }
-                }
-
-                if (!$isQuarterStartDate) {
-                    $this->warn("❌ Quarterly orders can only be generated on quarter start dates:");
-                    $this->warn("   • Q1: December 1st (Dec-Feb)");
-                    $this->warn("   • Q2: March 1st (Mar-May)"); 
-                    $this->warn("   • Q3: June 1st (Jun-Aug)");
-                    $this->warn("   • Q4: September 1st (Sep-Nov)");
-                    $this->warn("Current date: {$today->format('Y-m-d')}");
-                    $this->warn("To override this check, either:");
-                    $this->warn("   • Use test mode: php artisan orders:generate-quarterly --test");
-                    $this->warn("   • Specify quarter/year: php artisan orders:generate-quarterly 4 2025");
-                                        
-                    return 1;
-                }
-
                 $this->info("✅ Confirmed: Today is the start of Q{$targetQuarter} {$year}");
             } elseif ($this->option('test')) {
                 $this->warn("🧪 TEST MODE: Bypassing date validation - generating Q{$targetQuarter} {$year}");
@@ -800,5 +800,14 @@ class GenerateQuarterlyOrders extends Command
             ]);
             return false;
         }
+    }
+
+    private function normalizeTime(string $time): string
+    {
+        if (preg_match('/^\d{1,2}:\d{2}$/', $time)) {
+            $parts = explode(':', $time);
+            return sprintf('%02d:%02d', (int) $parts[0], (int) ($parts[1] ?? 0));
+        }
+        return '01:00';
     }
 }

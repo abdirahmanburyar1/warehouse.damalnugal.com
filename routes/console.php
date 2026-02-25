@@ -19,29 +19,40 @@ Schedule::command('assets:notify-warranty-expiring')->daily();
 Schedule::command('assets:generate-maintenance-schedules')->dailyAt('01:10');
 Schedule::command('assets:notify-maintenance-due')->dailyAt('08:00');
 Schedule::command('inventory:generate-report')->monthlyOn(1, '00:01');
-Schedule::command('warehouse:generate-amc')->monthlyOn(1, '00:01');
 Schedule::command('inventory:notify-low-stock')->twiceDaily(9, 15);
 Schedule::command('inventory:check-low-stock')->everyFiveMinutes();
 // Expiry items: run every minute; command exits early if not the configured send time
 Schedule::command('inventory:notify-expiry-items')->everyMinute();
 
-Schedule::command('orders:generate-quarterly')
-    ->dailyAt('23:00')
-    ->when(function () {
-        $d = (int) now()->format('d');
-        $m = (int) now()->format('m');
-        return ($m === 3 && $d === 31) || ($m === 6 && $d === 30) || ($m === 9 && $d === 30) || ($m === 12 && $d === 31);
-    });
-
-// Monthly received quantities: run every minute; command exits unless scheduled day/time matches (configurable in Settings > Report Schedules)
+// Report/job schedules: run every minute; each command exits unless Settings > Report Schedules matches (day/time)
 Schedule::command('report:monthly-received-quantities')
     ->everyMinute()
     ->appendOutputTo(storage_path('logs/monthly-reports.log'))
     ->emailOutputOnFailure(config('mail.admin_address'));
 
 Schedule::command('report:issue-quantities')
-    ->monthlyOn(1, '01:30')
+    ->everyMinute()
     ->appendOutputTo(storage_path('logs/monthly-reports.log'))
+    ->emailOutputOnFailure(config('mail.admin_address'));
+
+Schedule::command('consumption:generate')
+    ->everyMinute()
+    ->appendOutputTo(storage_path('logs/monthly-consumption.log'))
+    ->emailOutputOnFailure(config('mail.admin_address'));
+
+Schedule::command('inventory:generate-monthly-report')
+    ->everyMinute()
+    ->appendOutputTo(storage_path('logs/monthly-inventory-report.log'))
+    ->emailOutputOnFailure(config('mail.admin_address'));
+
+Schedule::command('orders:generate-quarterly')
+    ->everyMinute()
+    ->appendOutputTo(storage_path('logs/quarterly-orders.log'))
+    ->emailOutputOnFailure(config('mail.admin_address'));
+
+Schedule::command('warehouse:generate-amc')
+    ->everyMinute()
+    ->appendOutputTo(storage_path('logs/warehouse-amc.log'))
     ->emailOutputOnFailure(config('mail.admin_address'));
 
 Schedule::command('report:generate-inventory')

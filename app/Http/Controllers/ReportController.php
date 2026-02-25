@@ -251,10 +251,6 @@ class ReportController extends Controller
         $facilities = Facility::orderBy('name')->get(['id', 'name', 'region', 'district']);
         $reportTypes = [
             ['value' => 'warehouse_inventory', 'label' => 'Warehouse Inventory Report'],
-            ['value' => 'qty_received', 'label' => 'QTY Received Report'],
-            ['value' => 'qty_issued', 'label' => 'QTY Issued Report'],
-            ['value' => 'physical_count', 'label' => 'Physical Count Report'],
-            ['value' => 'warehouse_amc', 'label' => 'Warehouse AMC Report'],
             ['value' => 'facility_monthly_consumption', 'label' => 'Facility Monthly Consumption'],
         ];
         return Inertia::render('Report/InventoryReportsUnified', [
@@ -273,7 +269,7 @@ class ReportController extends Controller
     public function inventoryReportsUnifiedData(Request $request)
     {
         $request->validate([
-            'report_type' => 'required|in:warehouse_inventory,qty_received,qty_issued,physical_count,warehouse_amc,facility_monthly_consumption',
+            'report_type' => 'required|in:warehouse_inventory,facility_monthly_consumption',
             'region_id' => 'nullable|exists:regions,id',
             'district_id' => 'nullable|exists:districts,id',
             'warehouse_id' => 'nullable|exists:warehouses,id',
@@ -374,6 +370,9 @@ class ReportController extends Controller
         array $facilityIds,
         Request $request
     ): array {
+        if ($reportType === 'unified') {
+            return $this->getUnifiedInventoryReportRowsMerged($monthYear, $warehouseIds, $facilityIds, $request);
+        }
         $rows = [];
         switch ($reportType) {
             case 'warehouse_inventory':
@@ -398,6 +397,22 @@ class ReportController extends Controller
         return $rows;
     }
 
+    /**
+     * Unified report: one table with all columns, data from warehouse inventory (and AMC) plus facility consumption.
+     * Warehouse rows use InventoryReport (all columns); facility rows use facility_inventory_items.
+     */
+    private function getUnifiedInventoryReportRowsMerged(?string $monthYear, array $warehouseIds, array $facilityIds, Request $request): array
+    {
+        $rows = [];
+        if (!empty($warehouseIds) && $monthYear) {
+            $rows = array_merge($rows, $this->unifiedRowsFromWarehouseInventory($monthYear, $warehouseIds));
+        }
+        if (!empty($facilityIds)) {
+            $rows = array_merge($rows, $this->unifiedRowsFromFacilityMonthlyConsumption($monthYear, $facilityIds, $request));
+        }
+        return $rows;
+    }
+
     private function unifiedRowsFromWarehouseInventory(?string $monthYear, array $warehouseIds): array
     {
         if (!$monthYear) {
@@ -407,37 +422,96 @@ class ReportController extends Controller
         if (!$report) {
             return [];
         }
+
         $query = $report->items()->with([
-            'product' => fn ($q) => $q->select('id', 'name', 'category_id', 'dosage_id')->with(['category:id,name', 'dosage:id,name']),
+            'product' => fn ($q) => $q->select('id', 'name', 'category_id', 'dosage_id', 'supply_class')
+                ->with(['category:id,name', 'dosage:id,name']),
             'warehouse:id,name',
         ]);
         if (!empty($warehouseIds)) {
             $query->whereIn('warehouse_id', $warehouseIds);
         }
-        $items = $query->get();
+        $reportItems = $query->get();
+
+        $batchQuery = InventoryItem::with(['product:id,name', 'warehouse:id,name']);
+        if (!empty($warehouseIds)) {
+            $batchQuery->whereIn('warehouse_id', $warehouseIds);
+        }
+        $allBatches = $batchQuery->get()->groupBy(fn ($b) => $b->product_id . '-' . $b->warehouse_id);
+
         $rows = [];
-        foreach ($items as $item) {
-            $rows[] = [
-                'item' => $item->product->name ?? '',
-                'category' => $item->product->category->name ?? '',
-                'uom' => $item->product->dosage->name ?? '',
-                'batch_no' => null,
-                'expiry_date' => null,
-                'beginning_balance' => (int) $item->beginning_balance,
-                'qty_received' => (int) $item->received_quantity,
-                'qty_issued' => (int) $item->issued_quantity,
-                'adjustment_neg' => (int) $item->negative_adjustment,
-                'adjustment_pos' => (int) $item->positive_adjustment,
-                'closing_balance' => (int) $item->closing_balance,
+        foreach ($reportItems as $item) {
+            $productName = $item->product->name ?? '';
+            $category = $item->product->category->name ?? '';
+            $uom = $item->product->dosage->name ?? '';
+            $warehouseName = $item->warehouse->name ?? '';
+            $key = $item->product_id . '-' . $item->warehouse_id;
+            $batches = $allBatches->get($key, collect());
+
+            $productAgg = [
                 'total_closing_balance' => (int) $item->total_closing_balance,
                 'amc' => (int) ($item->average_monthly_consumption ?? 0),
                 'mos' => $item->months_of_stock ?? '',
                 'stockout_days' => 0,
                 'unit_cost' => (float) ($item->unit_cost ?? 0),
                 'total_cost' => (float) ($item->total_cost ?? 0),
-                'warehouse_name' => $item->warehouse->name ?? '',
-                'facility_name' => null,
             ];
+
+            if ($batches->isEmpty()) {
+                $rows[] = array_merge([
+                    'item' => $productName,
+                    'category' => $category,
+                    'uom' => $uom,
+                    'batch_no' => null,
+                    'expiry_date' => null,
+                    'beginning_balance' => (int) $item->beginning_balance,
+                    'qty_received' => (int) $item->received_quantity,
+                    'qty_issued' => (int) $item->issued_quantity,
+                    'adjustment_neg' => (int) $item->negative_adjustment,
+                    'adjustment_pos' => (int) $item->positive_adjustment,
+                    'closing_balance' => (int) $item->closing_balance,
+                    'warehouse_name' => $warehouseName,
+                    'facility_name' => null,
+                    'rowspan' => 1,
+                    'is_first_batch' => true,
+                ], $productAgg);
+            } else {
+                $batchCount = $batches->count();
+                $first = true;
+                foreach ($batches as $batch) {
+                    $row = [
+                        'item' => $first ? $productName : null,
+                        'category' => $first ? $category : null,
+                        'uom' => $first ? $uom : null,
+                        'batch_no' => $batch->batch_number ?? null,
+                        'expiry_date' => $batch->expiry_date ?? null,
+                        'beginning_balance' => 0,
+                        'qty_received' => 0,
+                        'qty_issued' => 0,
+                        'adjustment_neg' => 0,
+                        'adjustment_pos' => 0,
+                        'closing_balance' => (int) ($batch->quantity ?? 0),
+                        'warehouse_name' => $warehouseName,
+                        'facility_name' => null,
+                        'rowspan' => $first ? $batchCount : 0,
+                        'is_first_batch' => $first,
+                    ];
+                    if ($first) {
+                        $row = array_merge($row, $productAgg);
+                    } else {
+                        $row = array_merge($row, [
+                            'total_closing_balance' => null,
+                            'amc' => null,
+                            'mos' => null,
+                            'stockout_days' => null,
+                            'unit_cost' => null,
+                            'total_cost' => null,
+                        ]);
+                    }
+                    $rows[] = $row;
+                    $first = false;
+                }
+            }
         }
         return $rows;
     }
