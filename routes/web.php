@@ -142,32 +142,14 @@ Route::middleware(['auth', \App\Http\Middleware\TwoFactorAuth::class])->group(fu
     // Role Management Routes
     Route::middleware(PermissionMiddleware::class . ':role.view')->group(function () {
         Route::get('/reports', [ReportController::class, 'index'])->name('reports');
-        Route::get('/reports/orders', [ReportController::class, 'orders'])->name('reports.orders');
-        Route::get('/reports/order-tracking', [ReportController::class, 'orderTracking'])->name('reports.order-tracking');
-        Route::get('/reports/order-fulfillment', [ReportController::class, 'orderFulfillment'])->name('reports.order-fulfillment');
-        Route::get('/reports/transfers', [ReportController::class, 'transfers'])->name('reports.transfers');
-        Route::get('/reports/transfer-issued-quantity', [ReportController::class, 'transferIssuedQuantity'])->name('reports.transfer-issued-quantity');
-        Route::get('/reports/transfer-received-quantity', [ReportController::class, 'transferReceivedQuantity'])->name('reports.transfer-received-quantity');
-        Route::get('/reports/transfer-type', [ReportController::class, 'transferType'])->name('reports.transfer-type');
-        Route::get('/reports/transfer-reasons', [ReportController::class, 'transferReasons'])->name('reports.transfer-reasons');
-        Route::get('/reports/purchase-orders', [ReportController::class, 'purchaseOrders'])->name('reports.purchase-orders');
-        Route::get('/reports/packing-list', [ReportController::class, 'packingList'])->name('reports.packing-list');
+
+        // LMIS Reports
         Route::get('/reports/lmis-monthly-report', [ReportController::class, 'lmisMonthlyReport'])->name('reports.lmis-monthly');
         Route::put('/reports/lmis-monthly-report/review', [ReportController::class, 'reviewLmisReport'])->name('reports.lmis-monthly.review');
         Route::put('/reports/lmis-monthly-report/approve', [ReportController::class, 'approveLmisReport'])->name('reports.lmis-monthly.approve');
         Route::put('/reports/lmis-monthly-report/reject', [ReportController::class, 'rejectLmisReport'])->name('reports.lmis-monthly.reject');
-        Route::post('/reports/orders/exportToExcel', [ReportController::class, 'exportOrdersToExcel'])->name('reports.orders.exportToExcel');
-        Route::get('/reports/order-tracking/export', [\App\Http\Controllers\ReportController::class, 'exportOrderTrackingExcel'])->name('reports.order-tracking.export');
 
-        // monthlyConsumption
-        Route::get('/reports/monthly-consumption', [ReportController::class, 'monthlyConsumption'])->name('reports.monthly-consumption');
-        
-        // Facilities Reports
-        Route::get('/reports/facilities-list', [ReportController::class, 'facilitiesListReport'])->name('reports.facilities-list');
-        Route::get('/reports/lmis-monthly-consumption', [ReportController::class, 'lmisMonthlyConsumptionReport'])->name('reports.lmis-monthly-consumption');
-        Route::get('/reports/facility-compliance', [ReportController::class, 'facilityComplianceReport'])->name('reports.facility-compliance');
-        
-        // LMIS Report Routes
+        // Facility LMIS Reports
         Route::get('/reports/facility-lmis-report', [ReportController::class, 'facilityLmisReport'])->name('reports.facility-lmis-report');
         Route::post('/reports/facility-lmis-report/store', [ReportController::class, 'storeFacilityLmisReport'])->name('reports.facility-lmis-report.store');
         Route::post('/reports/facility-lmis-report/submit', [ReportController::class, 'submitFacilityLmisReport'])->name('reports.facility-lmis-report.submit');
@@ -694,97 +676,42 @@ Route::controller(LocationController::class)
 
     // API Routes
     Route::prefix('api')->group(function () {
-        // Issue Quantity Reports Export Routes
-            Route::get('/reports/issueQuantityReports/export', [ReportController::class, 'exportIssueQuantityReports']);
-            
         // API routes removed - data now comes from controller props
     });
 
     // Report Routes
     Route::prefix('reports')->group(function () {
-            Route::get('/', [ReportController::class, 'index'])->name('reports.index');
-            Route::get('/facilities/monthly-consumption', [ReportController::class, 'monthlyConsumption'])->name('reports.monthlyConsumption');
-            Route::get('/template-products', [ReportController::class, 'getTemplateProducts'])->name('reports.template-products');
-            Route::get('/receivedQuantities', [ReportController::class, 'receivedQuantities'])->name('reports.receivedQuantities');
-            Route::get('/physicalCount', [ReportController::class, 'physicalCountReport'])->name('reports.physicalCount');
-        
-        // Inventory Adjustment Routes
-            Route::post('/createAdjustments', [ReportController::class, 'createAdjustments'])->name('reports.createAdjustments');
-            Route::post('/adjustments/{id}/review', [ReportController::class, 'reviewAdjustment'])->name('reports.reviewAdjustment');
-            Route::post('/adjustments/{id}/approve', [ReportController::class, 'approveAdjustment'])->name('reports.approveAdjustment');
-            Route::post('/adjustments/{id}/reject', [ReportController::class, 'rejectAdjustment'])->name('reports.rejectAdjustment');
-        
-        // Excel Upload Route
-            Route::post('/upload-consumption', [ConsumptionUploadController::class, 'upload'])->name('reports.upload-consumption');
+        Route::get('/', [ReportController::class, 'index'])->name('reports.index');
 
-        // Issue Quantity Routes
-            Route::get('/issueQuantityReports', [ReportController::class, 'issueQuantityReports'])->name('reports.issueQuantityReports');
+        // Unified Reports page
+        Route::get('/inventory-reports', [ReportController::class, 'inventoryReportsUnified'])->name('reports.inventoryReportsUnified');
+        Route::get('/inventory-reports/data', [ReportController::class, 'inventoryReportsUnifiedData'])->name('reports.inventoryReportsUnified.data');
 
-        // Inventory Routes
-            Route::get('/inventory-report', [ReportController::class, 'inventoryReport'])->name('reports.inventoryReport');
-            Route::get('/inventory-report/data', [ReportController::class, 'inventoryReportData'])->name('reports.inventoryReport.data');
-            Route::post('/inventory-report/generate', [ReportController::class, 'generateInventoryReport'])->name('reports.generateInventoryReport');
-
-        // Consolidated Inventory Reports (unified view with report type filter)
-            Route::get('/inventory-reports', [ReportController::class, 'inventoryReportsUnified'])->name('reports.inventoryReportsUnified');
-            Route::get('/inventory-reports/data', [ReportController::class, 'inventoryReportsUnifiedData'])->name('reports.inventoryReportsUnified.data');
-
-        // Physical count report routes
-            Route::post('/physical-count/generate', [ReportController::class, 'generatePhysicalCountReport'])->name('reports.physicalCountReport');
-
-        // reports.physical-count.update
-            Route::post('/physical-count/update', [ReportController::class, 'updatePhysicalCountReport'])->name('reports.physical-count.update');
-        // reports.physical-count.status
-            Route::post('/physical-count/status', [ReportController::class, 'updatePhysicalCountStatus'])->name('reports.physical-count.status');
-        // reports.physical-count.approve
-            Route::post('/physical-count/approve', [ReportController::class, 'approvePhysicalCountReport'])->name('reports.physical-count.approve');
-        // reports.physical-count.reject
-            Route::post('/physical-count/reject', [ReportController::class, 'rejectPhysicalCountReport'])->name('reports.physical-count.reject');
-        // reports.physical-count.rollback
-            Route::post('/physical-count/rollback', [ReportController::class, 'rollBackRejectPhysicalCountReport'])->name('reports.physical-count.rollback');
-
-        // reports.physicalCountShow
+        // Physical Count
+        Route::get('/physicalCount', [ReportController::class, 'physicalCountReport'])->name('reports.physicalCount');
         Route::get('/physical-count-show', [ReportController::class, 'physicalCountShow'])->name('reports.physicalCountShow');
+        Route::post('/physical-count/generate', [ReportController::class, 'generatePhysicalCountReport'])->name('reports.physicalCountReport');
+        Route::post('/physical-count/update', [ReportController::class, 'updatePhysicalCountReport'])->name('reports.physical-count.update');
+        Route::post('/physical-count/status', [ReportController::class, 'updatePhysicalCountStatus'])->name('reports.physical-count.status');
+        Route::post('/physical-count/approve', [ReportController::class, 'approvePhysicalCountReport'])->name('reports.physical-count.approve');
+        Route::post('/physical-count/reject', [ReportController::class, 'rejectPhysicalCountReport'])->name('reports.physical-count.reject');
+        Route::post('/physical-count/rollback', [ReportController::class, 'rollBackRejectPhysicalCountReport'])->name('reports.physical-count.rollback');
 
-        // reports.disposals
-        Route::get('/disposals', [ReportController::class, 'disposals'])->name('reports.disposals');
-
-        // reports.issue-quantity
-        Route::post('/issue-quantity/upload', [ReportController::class, 'importIssueQuantity'])->name('reports.issue-quantity.upload');
-        
-        // Warehouse monthly inventory report
-            Route::get('/warehouse-monthly', [ReportController::class, 'warehouseMonthlyReport'])->name('reports.warehouseMonthly');
+        // Warehouse Monthly Inventory Report (adjustments workflow)
+        Route::get('/warehouse-monthly', [ReportController::class, 'warehouseMonthlyReport'])->name('reports.warehouseMonthly');
         Route::put('/warehouse-monthly/adjustments', [ReportController::class, 'updateInventoryReportAdjustments'])->name('reports.warehouseMonthly.updateInventoryReportAdjustments');
-            Route::put('/warehouse-monthly/submit', [ReportController::class, 'submitInventoryReport'])->name('reports.warehouseMonthly.submit');
-            Route::put('/warehouse-monthly/review', [ReportController::class, 'reviewInventoryReport'])->name('reports.warehouseMonthly.review');
-            Route::put('/warehouse-monthly/approve', [ReportController::class, 'approveInventoryReport'])->name('reports.warehouseMonthly.approve');
-            Route::put('/warehouse-monthly/reject', [ReportController::class, 'rejectInventoryReport'])->name('reports.warehouseMonthly.reject');
-            Route::post('/warehouse-monthly/export-to-excel', [ReportController::class, 'exportToExcel'])->name('reports.warehouseMonthly.exportToExcel');
+        Route::put('/warehouse-monthly/submit', [ReportController::class, 'submitInventoryReport'])->name('reports.warehouseMonthly.submit');
+        Route::put('/warehouse-monthly/review', [ReportController::class, 'reviewInventoryReport'])->name('reports.warehouseMonthly.review');
+        Route::put('/warehouse-monthly/approve', [ReportController::class, 'approveInventoryReport'])->name('reports.warehouseMonthly.approve');
+        Route::put('/warehouse-monthly/reject', [ReportController::class, 'rejectInventoryReport'])->name('reports.warehouseMonthly.reject');
+        Route::post('/warehouse-monthly/export-to-excel', [ReportController::class, 'exportToExcel'])->name('reports.warehouseMonthly.exportToExcel');
 
-        // Product Reports Routes
-            Route::get('/products/active-inactive', [ReportController::class, 'activeInactiveProducts'])->name('reports.products.active-inactive');
-            Route::get('/products/eligibility', [ReportController::class, 'productEligibility'])->name('reports.products.eligibility');
-            Route::get('/products/categories', [ReportController::class, 'productCategories'])->name('reports.products.categories');
-            Route::get('/products/dosage-forms', [ReportController::class, 'productDosageForms'])->name('reports.products.dosage-forms');
-            Route::get('/products/expiry-tracking', [ReportController::class, 'productExpiryTracking'])->name('reports.products.expiry-tracking');
-        
-        // Liquidation & Disposal Reports
-            Route::get('/liquidation-disposal/liquidation', [ReportController::class, 'liquidationReport'])->name('reports.liquidation-disposal.liquidation');
-            Route::get('/liquidation-disposal/disposal', [ReportController::class, 'disposalReport'])->name('reports.liquidation-disposal.disposal');
-        
-        // Procurement Reports
-            Route::get('/procurement/purchase-orders', [ReportController::class, 'purchaseOrdersReport'])->name('reports.procurement.purchase-orders');
-            Route::get('/procurement/packing-list', [ReportController::class, 'packingListReport'])->name('reports.procurement.packing-list');
-            Route::get('/procurement/backorder', [ReportController::class, 'backorderReport'])->name('reports.procurement.backorder');
-            Route::get('/procurement/lead-time-analysis', [ReportController::class, 'leadTimeAnalysisReport'])->name('reports.procurement.lead-time-analysis');
-            Route::get('/procurement/demand-forecasting', [ReportController::class, 'demandForecastingReport'])->name('reports.procurement.demand-forecasting');
-        
-        // Warehouse AMC Report Routes
-            Route::get('/warehouse-amc', [WarehouseAmcController::class, 'index'])->name('reports.warehouse-amc');
-            Route::get('/warehouse-amc/export', [WarehouseAmcController::class, 'export'])->name('reports.warehouse-amc.export');
-            Route::post('/warehouse-amc/import', [WarehouseAmcController::class, 'import'])->name('reports.warehouse-amc.import');
-            Route::get('/warehouse-amc/import/{importId}/status', [WarehouseAmcController::class, 'checkImportStatus'])->name('reports.warehouse-amc.import.status');
-            Route::get('/warehouse-amc/template', [WarehouseAmcController::class, 'downloadTemplate'])->name('reports.warehouse-amc.template');
+        // Warehouse AMC
+        Route::get('/warehouse-amc', [WarehouseAmcController::class, 'index'])->name('reports.warehouse-amc');
+        Route::get('/warehouse-amc/export', [WarehouseAmcController::class, 'export'])->name('reports.warehouse-amc.export');
+        Route::post('/warehouse-amc/import', [WarehouseAmcController::class, 'import'])->name('reports.warehouse-amc.import');
+        Route::get('/warehouse-amc/import/{importId}/status', [WarehouseAmcController::class, 'checkImportStatus'])->name('reports.warehouse-amc.import.status');
+        Route::get('/warehouse-amc/template', [WarehouseAmcController::class, 'downloadTemplate'])->name('reports.warehouse-amc.template');
     });
 
     // MOH Inventory Routes (own permissions: view, create, review, approve, reject)

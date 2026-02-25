@@ -7,6 +7,8 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import Toast from "vue-toastification";
 import "vue-toastification/dist/index.css";
+import PrimeVue from 'primevue/config';
+import 'primeicons/primeicons.css';
 import SplashScreen from './Components/SplashScreen.vue';
 
 // Set up global toast function
@@ -72,6 +74,7 @@ setTimeout(() => {
             
             return app
                 .use(plugin)
+                .use(PrimeVue)
                 .use(ZiggyVue)
                 .mount(el);
         },
