@@ -128,7 +128,7 @@
                     <p class="mt-4 text-gray-600">Loading report...</p>
                 </div>
                 <div v-else-if="!hasAnyData && hasGenerated" class="p-8 text-center text-gray-500">
-                    No data found for the selected filters. Try a different report type or period.
+                    {{ reportMessage || 'No data found for the selected filters. Try a different report type or period.' }}
                 </div>
 
                 <!-- Product Report: Tabs (Charts | Table) -->
@@ -158,8 +158,8 @@
                             <!-- Category: vertical bar chart (reference style) -->
                             <div class="bg-white p-8 pt-10">
                                 <div class="min-h-[2.5rem] mb-4 flex items-center text-sm font-bold text-black">Chart 1</div>
-                                <h3 class="text-center text-lg font-bold text-black mb-8">Category</h3>
-                                <div class="min-h-[220px] w-full" style="position: relative;">
+                                <h3 class="text-center text-lg font-bold text-black mb-10">Category</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
                                     <Chart
                                         v-if="productReportCategoryChartData.labels?.length"
                                         type="bar"
@@ -176,8 +176,8 @@
                             <!-- Supply Class: horizontal bar chart (reference style) -->
                             <div class="bg-white p-8 pt-10">
                                 <div class="min-h-[2.5rem] mb-4 flex items-center text-sm font-bold text-black">Chart 2</div>
-                                <h3 class="text-center text-lg font-bold text-black mb-8">Supply Class</h3>
-                                <div class="min-h-[220px] w-full" style="position: relative;">
+                                <h3 class="text-center text-lg font-bold text-black mb-10">Supply Class</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
                                     <Chart
                                         v-if="productReportSupplyClassChartData.labels?.length"
                                         type="bar"
@@ -231,8 +231,299 @@
                     </div>
                 </div>
 
+                <!-- Liquidation & Disposal: Tabs (Charts | Table) -->
+                <div v-else-if="isLiquidationDisposalReport && filteredRows.length > 0" class="space-y-4">
+                    <nav class="flex gap-4" aria-label="Tabs">
+                        <button
+                            type="button"
+                            @click="liquidationDisposalTab = 'charts'"
+                            class="py-2 px-1 font-medium text-sm transition-colors"
+                            :class="liquidationDisposalTab === 'charts' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+                        >
+                            Charts
+                        </button>
+                        <button
+                            type="button"
+                            @click="liquidationDisposalTab = 'table'"
+                            class="py-2 px-1 font-medium text-sm transition-colors"
+                            :class="liquidationDisposalTab === 'table' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+                        >
+                            Table
+                        </button>
+                    </nav>
+
+                    <!-- Liquidation & Disposal Charts tab -->
+                    <div v-show="liquidationDisposalTab === 'charts'" class="space-y-10">
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                            <div class="bg-white p-8 pt-10">
+                                <div class="min-h-[2.5rem] mb-4 flex items-center text-sm font-bold text-black">Chart 1</div>
+                                <h3 class="text-center text-lg font-bold text-black mb-10">Liquidation & Disposal Status</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                    <Chart
+                                        v-if="liquidationDisposalStatusChartData.labels?.length"
+                                        type="bar"
+                                        :data="liquidationDisposalStatusChartData"
+                                        :options="liquidationDisposalChartOptions"
+                                        :plugins="chartPlugins"
+                                        :width="chartSize.width"
+                                        :height="chartSize.height"
+                                        class="w-full"
+                                    />
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-8 pt-10">
+                                <div class="min-h-[2.5rem] mb-4 flex items-center text-sm font-bold text-black">Chart 2</div>
+                                <h3 class="text-center text-lg font-bold text-black mb-10">Reasons for Liquidation</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                    <Chart
+                                        v-if="liquidationReasonsChartData.labels?.length"
+                                        type="bar"
+                                        :data="liquidationReasonsChartData"
+                                        :options="liquidationDisposalChartOptions"
+                                        :plugins="chartPlugins"
+                                        :width="chartSize.width"
+                                        :height="chartSize.height"
+                                        class="w-full"
+                                    />
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-8 pt-10">
+                                <div class="min-h-[2.5rem] mb-4 flex items-center text-sm font-bold text-black">Chart 3</div>
+                                <h3 class="text-center text-lg font-bold text-black mb-10">Reasons for Disposal</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                    <Chart
+                                        v-if="disposalReasonsChartData.labels?.length"
+                                        type="bar"
+                                        :data="disposalReasonsChartData"
+                                        :options="liquidationDisposalChartOptions"
+                                        :plugins="chartPlugins"
+                                        :width="chartSize.width"
+                                        :height="chartSize.height"
+                                        class="w-full"
+                                    />
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Liquidation & Disposal Table tab -->
+                    <div v-show="liquidationDisposalTab === 'table'" class="overflow-x-auto">
+                    <table class="min-w-full border-collapse border border-gray-300">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">Warehouse Name</th>
+                                <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Total Liquated Items</th>
+                                <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Total Disposed Items</th>
+                                <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Reasons for Liquidation</th>
+                                <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Reasons for Disposal</th>
+                            </tr>
+                            <tr class="bg-gray-100">
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Item No.</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Total Value</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Item No.</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Total Value</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Missing</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Lost</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Damage</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Expired</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white">
+                            <tr v-for="(row, index) in filteredRows" :key="index" class="hover:bg-gray-50">
+                                <td class="px-3 py-2 text-sm text-gray-900 border border-gray-300">{{ row.warehouse_name }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.total_liquated_item_no) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ (row.total_liquated_value != null && row.total_liquated_value !== '') ? formatCost(row.total_liquated_value) + '$' : '–' }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.total_disposed_item_no) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ (row.total_disposed_value != null && row.total_disposed_value !== '') ? formatCost(row.total_disposed_value) + '$' : '–' }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.liquidation_missing) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.liquidation_lost) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.disposal_damage) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.disposal_expired) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
+
+                <!-- Facilities Report: Tabs (Charts | Table) -->
+                <div v-else-if="isFacilitiesReport && filteredRows.length > 0" class="space-y-4">
+                    <nav class="flex gap-4" aria-label="Tabs">
+                        <button
+                            type="button"
+                            @click="facilitiesReportTab = 'charts'"
+                            class="py-2 px-1 font-medium text-sm transition-colors"
+                            :class="facilitiesReportTab === 'charts' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+                        >
+                            Charts
+                        </button>
+                        <button
+                            type="button"
+                            @click="facilitiesReportTab = 'table'"
+                            class="py-2 px-1 font-medium text-sm transition-colors"
+                            :class="facilitiesReportTab === 'table' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+                        >
+                            Table
+                        </button>
+                    </nav>
+
+                    <!-- Facilities Report Charts -->
+                    <div v-show="facilitiesReportTab === 'charts'" class="space-y-10">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                            <div class="bg-white p-8 pt-10">
+                                <div class="min-h-[2.5rem] mb-4 flex items-center text-sm font-bold text-black">Chart 1</div>
+                                <h3 class="text-center text-lg font-bold text-black mb-10">Facility Type</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                    <Chart
+                                        v-if="facilitiesReportTypeChartData.labels?.length"
+                                        type="bar"
+                                        :data="facilitiesReportTypeChartData"
+                                        :options="facilitiesReportTypeChartOptions"
+                                        :plugins="chartPlugins"
+                                        :width="chartSize.width"
+                                        :height="chartSize.height"
+                                        class="w-full"
+                                    />
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-8 pt-10">
+                                <div class="min-h-[2.5rem] mb-4 flex items-center text-sm font-bold text-black">Chart 2</div>
+                                <h3 class="text-center text-lg font-bold text-black mb-10">Facility Activation Status</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                    <Chart
+                                        v-if="facilitiesReportActivationChartData.labels?.length"
+                                        type="doughnut"
+                                        :data="facilitiesReportActivationChartData"
+                                        :options="facilitiesReportDonutOptions"
+                                        :plugins="chartPlugins"
+                                        :width="chartSize.width"
+                                        :height="chartSize.height"
+                                        class="w-full"
+                                    />
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Facilities Report Table -->
+                    <div v-show="facilitiesReportTab === 'table'" class="overflow-x-auto">
+                    <table class="min-w-full border-collapse border border-gray-300">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300 align-middle">District Name</th>
+                                <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Total Number of Facilities</th>
+                                <th v-if="facilitiesReportTypeColumns.length" :colspan="facilitiesReportTypeColumns.length" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Facility Type</th>
+                                <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Facility Activation Status</th>
+                                <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Number of Cold Storage Available</th>
+                            </tr>
+                            <tr class="bg-gray-100">
+                                <th v-for="col in facilitiesReportTypeColumns" :key="col" class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300 whitespace-nowrap">{{ col }}</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Active</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Not Active</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white">
+                            <tr v-for="(row, index) in filteredRows" :key="index" class="hover:bg-gray-50">
+                                <td class="px-3 py-2 text-sm text-gray-900 border border-gray-300">{{ row.district_name }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.total_facilities) }}</td>
+                                <td v-for="col in facilitiesReportTypeColumns" :key="col" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(facilityTypeValue(row, col)) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.active) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.not_active) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.cold_storage_count) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
+
+                <!-- Expiry Report: Tabs (Charts | Table) -->
+                <div v-else-if="isExpiryReport && filteredRows.length > 0" class="space-y-4">
+                    <nav class="flex gap-4" aria-label="Tabs">
+                        <button
+                            type="button"
+                            @click="expiryReportTab = 'charts'"
+                            class="py-2 px-1 font-medium text-sm transition-colors"
+                            :class="expiryReportTab === 'charts' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+                        >
+                            Charts
+                        </button>
+                        <button
+                            type="button"
+                            @click="expiryReportTab = 'table'"
+                            class="py-2 px-1 font-medium text-sm transition-colors"
+                            :class="expiryReportTab === 'table' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+                        >
+                            Table
+                        </button>
+                    </nav>
+
+                    <!-- Expiry Report Chart -->
+                    <div v-show="expiryReportTab === 'charts'" class="space-y-10">
+                        <div class="max-w-2xl">
+                            <div class="bg-white p-8 pt-10">
+                                <h3 class="text-center text-lg font-bold text-black mb-10">Expiring Status</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                    <Chart
+                                        v-if="expiryReportChartData.labels?.length"
+                                        type="bar"
+                                        :data="expiryReportChartData"
+                                        :options="expiryReportChartOptions"
+                                        :plugins="chartPlugins"
+                                        :width="chartSize.width"
+                                        :height="chartSize.height"
+                                        class="w-full"
+                                    />
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Expiry Report Table -->
+                    <div v-show="expiryReportTab === 'table'" class="overflow-x-auto">
+                    <table class="min-w-full border-collapse border border-gray-300">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th v-if="expiryReportHasMixedTypes" rowspan="3" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300 align-middle">Type</th>
+                                <th rowspan="3" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300 align-middle">{{ expiryReportNameColumnHeader }}</th>
+                                <th colspan="6" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Expiring Status</th>
+                            </tr>
+                            <tr class="bg-gray-100">
+                                <th colspan="2" class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Expiring within next 1 Year</th>
+                                <th colspan="2" class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Expiring within next 6 Months</th>
+                                <th colspan="2" class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Expired</th>
+                            </tr>
+                            <tr class="bg-gray-100">
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Item No.</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Total Value</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Item No.</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Total Value</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Item No.</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Total Value</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white">
+                            <tr v-for="(row, index) in filteredRows" :key="index" class="hover:bg-gray-50">
+                                <td v-if="expiryReportHasMixedTypes" class="px-3 py-2 text-sm text-gray-900 border border-gray-300 capitalize">{{ row.type }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 border border-gray-300">{{ row.name || '–' }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.expiring_1_year_item_no) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ (row.expiring_1_year_value != null && row.expiring_1_year_value !== '') ? formatCost(row.expiring_1_year_value) + '$' : '–' }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.expiring_6_months_item_no) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ (row.expiring_6_months_value != null && row.expiring_6_months_value !== '') ? formatCost(row.expiring_6_months_value) + '$' : '–' }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.expired_item_no) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ (row.expired_value != null && row.expired_value !== '') ? formatCost(row.expired_value) + '$' : '–' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
+
                 <!-- Default Inventory Report Table -->
-                <div v-else-if="!isProductReport && reportData.length > 0" class="overflow-x-auto">
+                <div v-else-if="!isProductReport && !isLiquidationDisposalReport && !isExpiryReport && !isFacilitiesReport && reportData.length > 0" class="overflow-x-auto">
                     <table class="min-w-full border-collapse border border-gray-300">
                         <thead class="bg-gray-50">
                             <tr>
@@ -328,9 +619,14 @@ const productReportRows = ref([]);
 const categoryColumns = ref([]);
 const supplyClassColumns = ref([]);
 const generating = ref(false);
-const hasGenerated = ref(false);
-const searchQuery = ref('');
+        const hasGenerated = ref(false);
+        const reportMessage = ref('');
+        const searchQuery = ref('');
 const productReportTab = ref('table');
+const liquidationDisposalTab = ref('table');
+const expiryReportTab = ref('table');
+const facilitiesReportTab = ref('table');
+const facilitiesReportTypeColumns = ref([]);
 
 const filteredDistricts = computed(() => {
     const list = props.districts || [];
@@ -373,7 +669,9 @@ const filteredRows = computed(() => {
         const item = (row.item || '').toLowerCase();
         const facility = (row.facility_name || '').toLowerCase();
         const warehouse = (row.warehouse_name || '').toLowerCase();
-        return item.includes(q) || facility.includes(q) || warehouse.includes(q);
+        const name = (row.name || '').toLowerCase();
+        const district = (row.district_name || '').toLowerCase();
+        return item.includes(q) || facility.includes(q) || warehouse.includes(q) || name.includes(q) || district.includes(q);
     });
 });
 
@@ -384,6 +682,84 @@ const filteredProductRows = computed(() => {
 });
 
 const isProductReport = computed(() => filters.value.report_type === 'product_report');
+const isLiquidationDisposalReport = computed(() => filters.value.report_type === 'liquidation_disposal');
+const isExpiryReport = computed(() => filters.value.report_type === 'expiry_report');
+const isFacilitiesReport = computed(() => filters.value.report_type === 'facilities_report');
+
+const expiryReportHasMixedTypes = computed(() => {
+    if (!isExpiryReport.value || !reportData.value.length) return false;
+    const types = new Set(reportData.value.map(r => r.type));
+    return types.has('facility') && types.has('warehouse');
+});
+
+const expiryReportNameColumnHeader = computed(() => {
+    if (!isExpiryReport.value || !reportData.value.length) return 'Name';
+    const types = new Set(reportData.value.map(r => r.type));
+    if (types.has('facility') && !types.has('warehouse')) return 'Facility Name';
+    if (types.has('warehouse') && !types.has('facility')) return 'Warehouse Name';
+    return 'Name';
+});
+
+const EXPIRY_REPORT_CHART_COLORS = ['rgb(34, 197, 94)', 'rgb(245, 158, 11)', 'rgb(59, 130, 246)'];
+const expiryReportChartData = computed(() => {
+    const rows = reportData.value;
+    if (!rows.length || !isExpiryReport.value) return { labels: [], datasets: [] };
+    const within1Year = rows.reduce((s, r) => s + (Number(r.expiring_1_year_item_no) || 0), 0);
+    const within6Months = rows.reduce((s, r) => s + (Number(r.expiring_6_months_item_no) || 0), 0);
+    const expired = rows.reduce((s, r) => s + (Number(r.expired_item_no) || 0), 0);
+    return {
+        labels: ['Expiring within next 1 Year', 'Expiring within next 6 Months', 'Expired'],
+        datasets: [{
+            label: 'Item count',
+            data: [within1Year, within6Months, expired],
+            backgroundColor: EXPIRY_REPORT_CHART_COLORS,
+            borderColor: EXPIRY_REPORT_CHART_COLORS,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+const expiryReportChartOptions = computed(() => {
+    const data = expiryReportChartData.value?.datasets?.[0]?.data ?? [];
+    const dataMax = data.length ? Math.max(...data) : 0;
+    const yMax = Math.max(dataMax + 2, 10);
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        layout: { padding: { top: 24, right: 12, bottom: 12, left: 6 } },
+        indexAxis: 'x',
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true },
+            datalabels: {
+                anchor: 'end',
+                align: 'top',
+                color: '#000000',
+                font: { weight: 'bold', size: 12 },
+                formatter: (v) => v,
+                padding: 12,
+                offset: 8,
+            },
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: yMax,
+                grid: { color: 'rgba(0,0,0,0.1)', drawTicks: false },
+                border: { display: true, color: '#000000' },
+                ticks: { precision: 0, stepSize: 1, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 4 },
+            },
+            x: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { maxRotation: 45, minRotation: 0, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 6 },
+            },
+        },
+    };
+});
 
 const hasAnyData = computed(() => {
     if (isProductReport.value) return productReportRows.value.length > 0;
@@ -449,7 +825,7 @@ const productReportVerticalBarOptions = computed(() => {
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 400 },
-        layout: { padding: { top: 16, right: 12, bottom: 10, left: 6 } },
+        layout: { padding: { top: 24, right: 12, bottom: 12, left: 6 } },
         indexAxis: 'x',
         plugins: {
             legend: { display: false },
@@ -460,7 +836,8 @@ const productReportVerticalBarOptions = computed(() => {
                 color: '#000000',
                 font: { weight: 'bold', size: 12 },
                 formatter: (v) => v,
-                padding: 1,
+                padding: 12,
+                offset: 8,
             },
         },
         scales: {
@@ -488,18 +865,19 @@ const productReportHorizontalBarOptions = computed(() => {
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 400 },
-        layout: { padding: { top: 6, right: 20, bottom: 10, left: 6 } },
+        layout: { padding: { top: 6, right: 40, bottom: 12, left: 6 } },
         indexAxis: 'y',
         plugins: {
             legend: { display: false },
             tooltip: { enabled: true },
             datalabels: {
                 anchor: 'end',
-                align: 'center',
+                align: 'start',
                 color: '#000000',
                 font: { weight: 'bold', size: 12 },
                 formatter: (v) => v,
-                padding: 1,
+                padding: 8,
+                offset: 16,
             },
         },
         scales: {
@@ -519,6 +897,212 @@ const productReportHorizontalBarOptions = computed(() => {
     };
 });
 
+// Liquidation & Disposal charts: aggregate from report rows
+const LIQUIDATION_DISPOSAL_CHART_COLORS = ['rgb(34, 197, 94)', 'rgb(245, 158, 11)'];
+
+const liquidationDisposalStatusChartData = computed(() => {
+    const rows = reportData.value;
+    if (!rows.length || !isLiquidationDisposalReport.value) return { labels: [], datasets: [] };
+    const liquated = rows.reduce((s, r) => s + (Number(r.total_liquated_item_no) || 0), 0);
+    const disposed = rows.reduce((s, r) => s + (Number(r.total_disposed_item_no) || 0), 0);
+    return {
+        labels: ['Total Liquated Items', 'Total Disposed Items'],
+        datasets: [{
+            label: 'Count',
+            data: [liquated, disposed],
+            backgroundColor: LIQUIDATION_DISPOSAL_CHART_COLORS,
+            borderColor: LIQUIDATION_DISPOSAL_CHART_COLORS,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+
+const liquidationReasonsChartData = computed(() => {
+    const rows = reportData.value;
+    if (!rows.length || !isLiquidationDisposalReport.value) return { labels: [], datasets: [] };
+    const missing = rows.reduce((s, r) => s + (Number(r.liquidation_missing) || 0), 0);
+    const lost = rows.reduce((s, r) => s + (Number(r.liquidation_lost) || 0), 0);
+    return {
+        labels: ['Missing', 'Lost'],
+        datasets: [{
+            label: 'Count',
+            data: [missing, lost],
+            backgroundColor: LIQUIDATION_DISPOSAL_CHART_COLORS,
+            borderColor: LIQUIDATION_DISPOSAL_CHART_COLORS,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+
+const disposalReasonsChartData = computed(() => {
+    const rows = reportData.value;
+    if (!rows.length || !isLiquidationDisposalReport.value) return { labels: [], datasets: [] };
+    const damage = rows.reduce((s, r) => s + (Number(r.disposal_damage) || 0), 0);
+    const expired = rows.reduce((s, r) => s + (Number(r.disposal_expired) || 0), 0);
+    return {
+        labels: ['Damage', 'Expired'],
+        datasets: [{
+            label: 'Count',
+            data: [damage, expired],
+            backgroundColor: LIQUIDATION_DISPOSAL_CHART_COLORS,
+            borderColor: LIQUIDATION_DISPOSAL_CHART_COLORS,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+
+const liquidationDisposalChartOptions = computed(() => {
+    const statusData = liquidationDisposalStatusChartData.value?.datasets?.[0]?.data ?? [];
+    const liqData = liquidationReasonsChartData.value?.datasets?.[0]?.data ?? [];
+    const dispData = disposalReasonsChartData.value?.datasets?.[0]?.data ?? [];
+    const dataMax = Math.max(
+        statusData.length ? Math.max(...statusData) : 0,
+        liqData.length ? Math.max(...liqData) : 0,
+        dispData.length ? Math.max(...dispData) : 0
+    );
+    const yMax = Math.max(dataMax + 2, 10);
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        layout: { padding: { top: 24, right: 12, bottom: 12, left: 6 } },
+        indexAxis: 'x',
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true },
+            datalabels: {
+                anchor: 'end',
+                align: 'top',
+                color: '#000000',
+                font: { weight: 'bold', size: 12 },
+                formatter: (v) => v,
+                padding: 12,
+                offset: 8,
+            },
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: yMax,
+                grid: { color: 'rgba(0,0,0,0.1)', drawTicks: false },
+                border: { display: true, color: '#000000' },
+                ticks: { precision: 0, stepSize: 1, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 4 },
+            },
+            x: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { maxRotation: 45, minRotation: 0, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 6 },
+            },
+        },
+    };
+});
+
+// Facilities Report charts
+const FACILITIES_REPORT_BAR_COLORS = ['rgb(34, 197, 94)', 'rgb(245, 158, 11)', 'rgb(59, 130, 246)', 'rgb(156, 163, 175)', 'rgb(249, 115, 22)'];
+const facilitiesReportTypeChartData = computed(() => {
+    const rows = reportData.value;
+    if (!rows.length || !isFacilitiesReport.value) return { labels: [], datasets: [] };
+    const labels = ['Total Number of Facilities', 'Primary Health Unit', 'Health Center', 'District Hospital', 'Regional Hospital'];
+    const data = [
+        rows.reduce((s, r) => s + (Number(r.total_facilities) || 0), 0),
+        rows.reduce((s, r) => s + (Number(r.primary_health_unit) || 0), 0),
+        rows.reduce((s, r) => s + (Number(r.health_center) || 0), 0),
+        rows.reduce((s, r) => s + (Number(r.district_hospital) || 0), 0),
+        rows.reduce((s, r) => s + (Number(r.regional_hospital) || 0), 0),
+    ];
+    return {
+        labels,
+        datasets: [{
+            label: 'Count',
+            data,
+            backgroundColor: FACILITIES_REPORT_BAR_COLORS,
+            borderColor: FACILITIES_REPORT_BAR_COLORS,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+const facilitiesReportTypeChartOptions = computed(() => {
+    const data = facilitiesReportTypeChartData.value?.datasets?.[0]?.data ?? [];
+    const dataMax = data.length ? Math.max(...data) : 0;
+    const yMax = Math.max(dataMax + 2, 10);
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        layout: { padding: { top: 24, right: 12, bottom: 12, left: 6 } },
+        indexAxis: 'x',
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true },
+            datalabels: {
+                anchor: 'end',
+                align: 'top',
+                color: '#000000',
+                font: { weight: 'bold', size: 12 },
+                formatter: (v) => v,
+                padding: 12,
+                offset: 8,
+            },
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: yMax,
+                grid: { color: 'rgba(0,0,0,0.1)', drawTicks: false },
+                border: { display: true, color: '#000000' },
+                ticks: { precision: 0, stepSize: 1, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 4 },
+            },
+            x: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { maxRotation: 45, minRotation: 0, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 6 },
+            },
+        },
+    };
+});
+const facilitiesReportActivationChartData = computed(() => {
+    const rows = reportData.value;
+    if (!rows.length || !isFacilitiesReport.value) return { labels: [], datasets: [] };
+    const active = rows.reduce((s, r) => s + (Number(r.active) || 0), 0);
+    const inactive = rows.reduce((s, r) => s + (Number(r.not_active) || 0), 0);
+    return {
+        labels: ['Active', 'Inactive'],
+        datasets: [{
+            data: [active, inactive],
+            backgroundColor: ['rgb(34, 197, 94)', 'rgb(249, 115, 22)'],
+            borderWidth: 0,
+            hoverOffset: 4,
+        }],
+    };
+});
+const facilitiesReportDonutOptions = computed(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 400 },
+    layout: { padding: 12 },
+    plugins: {
+        legend: { display: true, position: 'bottom', labels: { font: { size: 11, weight: 'bold' }, color: '#000000', padding: 12 } },
+        tooltip: { enabled: true },
+        datalabels: {
+            color: '#000000',
+            font: { weight: 'bold', size: 12 },
+            formatter: (v) => v,
+        },
+    },
+}));
+
 watch(() => filters.value.region_id, () => {
     filters.value.district_id = null;
     if (filters.value.warehouse_or_facility?.startsWith('facility:')) {
@@ -536,7 +1120,21 @@ watch(() => filters.value.report_type, (reportType) => {
     if (reportType === 'product_report' && filters.value.warehouse_or_facility?.startsWith('warehouse:')) {
         filters.value.warehouse_or_facility = '';
     }
+    if (reportType === 'liquidation_disposal' && filters.value.warehouse_or_facility?.startsWith('facility:')) {
+        filters.value.warehouse_or_facility = '';
+    }
 });
+
+const FACILITY_TYPE_LABEL_TO_KEY = {
+    'Primary Health Unit': 'primary_health_unit',
+    'Health Center': 'health_center',
+    'District Hospital': 'district_hospital',
+    'Regional Hospital': 'regional_hospital',
+};
+function facilityTypeValue(row, label) {
+    const key = FACILITY_TYPE_LABEL_TO_KEY[label];
+    return key != null ? (row[key] ?? 0) : 0;
+}
 
 function formatNum(n) {
     if (n == null || n === '') return '–';
@@ -571,6 +1169,7 @@ async function generateReport() {
             if (type === 'facility') params.facility_id = id;
         }
         const { data } = await axios.get(route('reports.inventoryReportsUnified.data'), { params });
+        reportMessage.value = data.message || '';
         if (data.success) {
             if (filters.value.report_type === 'product_report') {
                 const d = data.data || {};
@@ -578,17 +1177,41 @@ async function generateReport() {
                 categoryColumns.value = d.category_columns || [];
                 supplyClassColumns.value = d.supply_class_columns || [];
                 reportData.value = [];
+                facilitiesReportTypeColumns.value = [];
+            } else if (filters.value.report_type === 'liquidation_disposal') {
+                const d = data.data || {};
+                reportData.value = d.rows || [];
+                productReportRows.value = [];
+                categoryColumns.value = [];
+                supplyClassColumns.value = [];
+                facilitiesReportTypeColumns.value = [];
+            } else if (filters.value.report_type === 'expiry_report') {
+                const d = data.data || {};
+                reportData.value = d.rows || [];
+                productReportRows.value = [];
+                categoryColumns.value = [];
+                supplyClassColumns.value = [];
+                facilitiesReportTypeColumns.value = [];
+            } else if (filters.value.report_type === 'facilities_report') {
+                const d = data.data || {};
+                reportData.value = d.rows || [];
+                facilitiesReportTypeColumns.value = d.facility_type_columns || [];
+                productReportRows.value = [];
+                categoryColumns.value = [];
+                supplyClassColumns.value = [];
             } else {
                 reportData.value = data.data || [];
                 productReportRows.value = [];
                 categoryColumns.value = [];
                 supplyClassColumns.value = [];
+                facilitiesReportTypeColumns.value = [];
             }
         } else {
             reportData.value = [];
             productReportRows.value = [];
             categoryColumns.value = [];
             supplyClassColumns.value = [];
+            facilitiesReportTypeColumns.value = [];
         }
     } catch (e) {
         reportData.value = [];

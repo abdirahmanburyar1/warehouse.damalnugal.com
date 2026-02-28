@@ -688,6 +688,7 @@ Route::controller(LocationController::class)
         Route::get('/inventory-reports/data', [ReportController::class, 'inventoryReportsUnifiedData'])->name('reports.inventoryReportsUnified.data');
 
         // Physical Count
+        Route::get('/facilities-list', [ReportController::class, 'facilitiesList'])->name('reports.facilities-list');
         Route::get('/physicalCount', [ReportController::class, 'physicalCountReport'])->name('reports.physicalCount');
         Route::get('/physical-count-show', [ReportController::class, 'physicalCountShow'])->name('reports.physicalCountShow');
         Route::post('/physical-count/generate', [ReportController::class, 'generatePhysicalCountReport'])->name('reports.physicalCountReport');

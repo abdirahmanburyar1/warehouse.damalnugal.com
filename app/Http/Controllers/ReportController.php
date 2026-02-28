@@ -16,6 +16,7 @@ use App\Models\PackingList;
 use App\Models\Warehouse;
 use App\Models\User;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Facility;
 use App\Models\FacilityInventory;
 use App\Models\FacilityInventoryItem;
@@ -120,6 +121,10 @@ class ReportController extends Controller
             ['value' => 'warehouse_inventory', 'label' => 'Warehouse Inventory Report'],
             ['value' => 'facility_monthly_consumption', 'label' => 'Facility Monthly Consumption'],
             ['value' => 'product_report', 'label' => 'Product Report'],
+            ['value' => 'liquidation_disposal', 'label' => 'Liquidation & Disposal'],
+            ['value' => 'expiry_report', 'label' => 'Expiry Report'],
+            ['value' => 'facilities_report', 'label' => 'Facilities Report'],
+            ['value' => 'order_report', 'label' => 'Order Report'],
         ];
         return Inertia::render('Report/InventoryReportsUnified', [
             'regions' => $regions,
@@ -137,7 +142,7 @@ class ReportController extends Controller
     public function inventoryReportsUnifiedData(Request $request)
     {
         $request->validate([
-            'report_type' => 'required|in:warehouse_inventory,facility_monthly_consumption,product_report',
+            'report_type' => 'required|in:warehouse_inventory,facility_monthly_consumption,product_report,liquidation_disposal,expiry_report,facilities_report,order_report',
             'region_id' => 'nullable|exists:regions,id',
             'district_id' => 'nullable|exists:districts,id',
             'warehouse_id' => 'nullable|exists:warehouses,id',
@@ -162,6 +167,34 @@ class ReportController extends Controller
 
         if ($reportType === 'product_report') {
             $result = $this->getProductReportData($request);
+            return response()->json(['success' => true, 'data' => $result]);
+        }
+
+        if ($reportType === 'liquidation_disposal') {
+            $result = $this->getLiquidationDisposalReportData($request);
+            return response()->json(['success' => true, 'data' => $result]);
+        }
+
+        if ($reportType === 'expiry_report') {
+            $hasFacilityOrWarehouse = $request->filled('facility_id') || $request->filled('warehouse_id');
+            if (!$hasFacilityOrWarehouse) {
+                return response()->json([
+                    'success' => false,
+                    'data' => ['rows' => []],
+                    'message' => 'For Expiry Report, please select a Facility or Warehouse.',
+                ]);
+            }
+            $result = $this->getExpiryReportData($request);
+            return response()->json(['success' => true, 'data' => $result]);
+        }
+
+        if ($reportType === 'facilities_report') {
+            $result = $this->getFacilitiesReportData($request);
+            return response()->json(['success' => true, 'data' => $result]);
+        }
+
+        if ($reportType === 'order_report') {
+            $result = $this->getOrderReportData($request);
             return response()->json(['success' => true, 'data' => $result]);
         }
 
@@ -369,6 +402,469 @@ class ReportController extends Controller
             ->toArray();
 
         return $values;
+    }
+
+    /**
+     * Build Liquidation & Disposal report: one row per warehouse with totals and reasons (Missing, Lost, Damage, Expired).
+     * Liquidation: warehouse from liquidates.warehouse (parent).
+     * Disposal: warehouse from disposal_items.warehouse (parent disposals.warehouse is not set by the app).
+     */
+    private function getLiquidationDisposalReportData(Request $request): array
+    {
+        $warehouseIds = $this->resolveWarehouseIdsFromFilters($request);
+        if (empty($warehouseIds)) {
+            return ['rows' => []];
+        }
+
+        $warehouses = Warehouse::whereIn('id', $warehouseIds)->orderBy('name')->get(['id', 'name']);
+        $warehouseNames = $warehouses->pluck('name')->toArray();
+
+        $monthYear = null;
+        if ($request->filled('year') && $request->filled('month')) {
+            $monthYear = sprintf('%04d-%02d', (int) $request->year, (int) $request->month);
+        } elseif ($request->filled('year')) {
+            $monthYear = (string) $request->year;
+        }
+
+        $rows = [];
+        foreach ($warehouses as $warehouse) {
+            $name = $warehouse->name;
+
+            // Liquidation: parent has warehouse (set e.g. from physical count); some flows only set it on items (liquidate_items has no warehouse column)
+            $liquidateQuery = Liquidate::where('warehouse', $name)->where('status', 'approved');
+            if ($monthYear !== null) {
+                if (strlen($monthYear) === 7) {
+                    $liquidateQuery->whereRaw('DATE_FORMAT(liquidated_at, "%Y-%m") = ?', [$monthYear]);
+                } else {
+                    $liquidateQuery->whereYear('liquidated_at', $monthYear);
+                }
+            }
+            $liquidateIds = $liquidateQuery->pluck('id');
+
+            $liqItemNo = 0;
+            $liqValue = 0;
+            $liqMissing = 0;
+            $liqLost = 0;
+            if ($liquidateIds->isNotEmpty()) {
+                $liqAgg = \App\Models\LiquidateItem::whereIn('liquidate_id', $liquidateIds)
+                    ->selectRaw('COALESCE(SUM(quantity), 0) as item_no, COALESCE(SUM(total_cost), 0) as total_value')
+                    ->first();
+                $liqItemNo = (int) ($liqAgg->item_no ?? 0);
+                $liqValue = (float) ($liqAgg->total_value ?? 0);
+
+                $byType = \App\Models\LiquidateItem::whereIn('liquidate_id', $liquidateIds)
+                    ->select('type', DB::raw('COALESCE(SUM(quantity), 0) as qty'))
+                    ->groupBy('type')
+                    ->get();
+                foreach ($byType as $t) {
+                    $normalized = strtolower(trim((string) $t->type));
+                    if ($normalized === 'missing') {
+                        $liqMissing += (int) $t->qty;
+                    } elseif ($normalized === 'lost') {
+                        $liqLost += (int) $t->qty;
+                    }
+                }
+            }
+
+            // Disposal: warehouse is stored on disposal_items, not on disposals (parent never set in SupplyController/ExpiredController)
+            $disposalItemQuery = \App\Models\DisposalItem::where('warehouse', $name)
+                ->whereHas('disposal', function ($q) use ($monthYear) {
+                    $q->where('status', 'approved');
+                    if ($monthYear !== null) {
+                        if (strlen($monthYear) === 7) {
+                            $q->whereRaw('DATE_FORMAT(disposed_at, "%Y-%m") = ?', [$monthYear]);
+                        } else {
+                            $q->whereYear('disposed_at', $monthYear);
+                        }
+                    }
+                });
+
+            $dispItemNo = 0;
+            $dispValue = 0;
+            $dispDamage = 0;
+            $dispExpired = 0;
+            $dispAgg = (clone $disposalItemQuery)->selectRaw('COALESCE(SUM(quantity), 0) as item_no, COALESCE(SUM(total_cost), 0) as total_value')->first();
+            if ($dispAgg) {
+                $dispItemNo = (int) ($dispAgg->item_no ?? 0);
+                $dispValue = (float) ($dispAgg->total_value ?? 0);
+            }
+            $byType = (clone $disposalItemQuery)->select('type', DB::raw('COALESCE(SUM(quantity), 0) as qty'))->groupBy('type')->get();
+            foreach ($byType as $t) {
+                $normalized = strtolower(trim((string) $t->type));
+                if ($normalized === 'damage' || $normalized === 'damaged') {
+                    $dispDamage += (int) $t->qty;
+                } elseif ($normalized === 'expired') {
+                    $dispExpired += (int) $t->qty;
+                }
+            }
+
+            $rows[] = [
+                'warehouse_name' => $name,
+                'total_liquated_item_no' => $liqItemNo,
+                'total_liquated_value' => round($liqValue, 2),
+                'total_disposed_item_no' => $dispItemNo,
+                'total_disposed_value' => round($dispValue, 2),
+                'liquidation_missing' => $liqMissing,
+                'liquidation_lost' => $liqLost,
+                'disposal_damage' => $dispDamage,
+                'disposal_expired' => $dispExpired,
+            ];
+        }
+
+        return ['rows' => $rows];
+    }
+
+    /**
+     * Build Expiry report: same table for both facility and warehouse inventory.
+     * Only includes the explicitly selected facility and/or warehouse (required by caller).
+     */
+    private function getExpiryReportData(Request $request): array
+    {
+        $facilityIds = $request->filled('facility_id')
+            ? [(int) $request->facility_id]
+            : [];
+        $warehouseIds = $request->filled('warehouse_id')
+            ? [(int) $request->warehouse_id]
+            : [];
+        if (empty($facilityIds) && empty($warehouseIds)) {
+            return ['rows' => []];
+        }
+
+        $today = Carbon::today()->startOfDay();
+        $sixMonths = $today->copy()->addMonths(6);
+        $oneYear = $today->copy()->addYear();
+        $rows = [];
+
+        // Facility inventory (FacilityInventoryItem)
+        foreach (Facility::whereIn('id', $facilityIds)->orderBy('name')->get(['id', 'name']) as $facility) {
+            $baseQuery = FacilityInventoryItem::query()
+                ->whereHas('inventory', fn ($q) => $q->where('facility_id', $facility->id))
+                ->where('quantity', '>', 0)
+                ->whereNotNull('expiry_date');
+
+            $expiredQuery = (clone $baseQuery)->where('expiry_date', '<', $today);
+            $within6Query = (clone $baseQuery)->where('expiry_date', '>=', $today)->where('expiry_date', '<=', $sixMonths);
+            $within1YearQuery = (clone $baseQuery)->where('expiry_date', '>', $sixMonths)->where('expiry_date', '<=', $oneYear);
+
+            $rows[] = [
+                'type' => 'facility',
+                'name' => $facility->name ?: 'Facility #' . $facility->id,
+                'expiring_1_year_item_no' => (int) $within1YearQuery->sum('quantity'),
+                'expiring_1_year_value' => round((float) $within1YearQuery->sum('total_cost'), 2),
+                'expiring_6_months_item_no' => (int) $within6Query->sum('quantity'),
+                'expiring_6_months_value' => round((float) $within6Query->sum('total_cost'), 2),
+                'expired_item_no' => (int) $expiredQuery->sum('quantity'),
+                'expired_value' => round((float) $expiredQuery->sum('total_cost'), 2),
+            ];
+        }
+
+        // Warehouse inventory (InventoryItem), same as Expiry module
+        foreach (Warehouse::whereIn('id', $warehouseIds)->orderBy('name')->get(['id', 'name']) as $warehouse) {
+            $baseQuery = InventoryItem::query()
+                ->where('warehouse_id', $warehouse->id)
+                ->where('quantity', '>', 0)
+                ->whereNotNull('expiry_date');
+
+            $expiredQuery = (clone $baseQuery)->where('expiry_date', '<', $today);
+            $within6Query = (clone $baseQuery)->where('expiry_date', '>=', $today)->where('expiry_date', '<=', $sixMonths);
+            $within1YearQuery = (clone $baseQuery)->where('expiry_date', '>', $sixMonths)->where('expiry_date', '<=', $oneYear);
+
+            $rows[] = [
+                'type' => 'warehouse',
+                'name' => $warehouse->name ?: 'Warehouse #' . $warehouse->id,
+                'expiring_1_year_item_no' => (int) $within1YearQuery->sum('quantity'),
+                'expiring_1_year_value' => round((float) $within1YearQuery->sum('total_cost'), 2),
+                'expiring_6_months_item_no' => (int) $within6Query->sum('quantity'),
+                'expiring_6_months_value' => round((float) $within6Query->sum('total_cost'), 2),
+                'expired_item_no' => (int) $expiredQuery->sum('quantity'),
+                'expired_value' => round((float) $expiredQuery->sum('total_cost'), 2),
+            ];
+        }
+
+        return ['rows' => $rows];
+    }
+
+    /**
+     * Resolve districts for reporting (by region and/or district filter).
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\District>
+     */
+    private function resolveDistrictsFromFilters(Request $request)
+    {
+        $query = District::query()->orderBy('name');
+        if ($request->filled('district_id')) {
+            $query->where('id', $request->district_id);
+        }
+        if ($request->filled('region_id')) {
+            $regionName = Region::find($request->region_id)?->name;
+            if ($regionName) {
+                $query->where('region', $regionName);
+            }
+        }
+        return $query->get();
+    }
+
+    /** Facility type labels for Facilities Report (order and canonical names). */
+    private const FACILITIES_REPORT_TYPES = [
+        'Primary Health Unit',
+        'Health Center',
+        'District Hospital',
+        'Regional Hospital',
+    ];
+
+    /**
+     * Normalize facility_type for grouping (case-insensitive, trim; map "Health Centre" to "Health Center").
+     */
+    private function normalizeFacilityTypeForReport(?string $type): ?string
+    {
+        if ($type === null || $type === '') {
+            return null;
+        }
+        $t = strtolower(trim($type));
+        foreach (self::FACILITIES_REPORT_TYPES as $canonical) {
+            if (strtolower($canonical) === $t || str_replace(' ', '', strtolower($canonical)) === str_replace(' ', '', $t)) {
+                return $canonical;
+            }
+        }
+        if ($t === 'health centre') {
+            return 'Health Center';
+        }
+        return $type;
+    }
+
+    /**
+     * Build Facilities Report: one row per district with total facilities, counts by type, by activation, cold storage.
+     */
+    private function getFacilitiesReportData(Request $request): array
+    {
+        $districts = $this->resolveDistrictsFromFilters($request);
+        if ($districts->isEmpty()) {
+            return ['rows' => [], 'facility_type_columns' => self::FACILITIES_REPORT_TYPES];
+        }
+
+        $rows = [];
+        foreach ($districts as $district) {
+            $districtName = $district->name ?: 'District #' . $district->id;
+            $facilities = Facility::where('district', $districtName)->get();
+
+            $total = $facilities->count();
+            $byType = array_fill_keys(self::FACILITIES_REPORT_TYPES, 0);
+            foreach ($facilities as $f) {
+                $canonical = $this->normalizeFacilityTypeForReport($f->facility_type);
+                if ($canonical && isset($byType[$canonical])) {
+                    $byType[$canonical]++;
+                }
+            }
+            $active = $facilities->where('is_active', true)->count();
+            $notActive = $facilities->where('is_active', false)->count();
+            $coldStorage = $facilities->where('has_cold_storage', true)->count();
+
+            $rows[] = [
+                'district_name' => $districtName,
+                'total_facilities' => $total,
+                'primary_health_unit' => $byType['Primary Health Unit'],
+                'health_center' => $byType['Health Center'],
+                'district_hospital' => $byType['District Hospital'],
+                'regional_hospital' => $byType['Regional Hospital'],
+                'active' => $active,
+                'not_active' => $notActive,
+                'cold_storage_count' => $coldStorage,
+            ];
+        }
+
+        return [
+            'rows' => $rows,
+            'facility_type_columns' => self::FACILITIES_REPORT_TYPES,
+        ];
+    }
+
+    /**
+     * Order Report: one row per facility with Total Orders, Completed/Rejected, Delivery Status (On-time/Late), Items and QTY Fulfillment (Good/Fair/Poor).
+     * Completed = status received; Rejected = status rejected. On-time = received on or before expected_date + 2 days.
+     * Items fulfillment % = (supplied ordered items / ordered items) * 100; QTY % = (quantity_to_release / ordered quantity) * 100.
+     */
+    private function getOrderReportData(Request $request): array
+    {
+        $facilityIds = $this->resolveFacilityIdsFromFilters($request);
+        if (empty($facilityIds)) {
+            return ['rows' => [], 'summary' => $this->getOrderReportSummary([])];
+        }
+
+        $orderQuery = Order::query()->whereIn('facility_id', $facilityIds);
+        if ($request->filled('year') && $request->filled('month')) {
+            $monthStart = sprintf('%04d-%02d-01', (int) $request->year, (int) $request->month);
+            $monthEnd = Carbon::parse($monthStart)->endOfMonth()->format('Y-m-d');
+            $orderQuery->whereBetween('order_date', [$monthStart, $monthEnd]);
+        } elseif ($request->filled('year')) {
+            $orderQuery->whereYear('order_date', (int) $request->year);
+        }
+
+        $facilities = Facility::whereIn('id', $facilityIds)->orderBy('name')->get(['id', 'name']);
+        $rows = [];
+        $allReceived = 0;
+        $allRejected = 0;
+        $allOnTime = 0;
+        $allLate = 0;
+
+        foreach ($facilities as $facility) {
+            $baseOrders = (clone $orderQuery)->where('facility_id', $facility->id);
+            $totalOrders = $baseOrders->count();
+            $receivedOrders = (clone $baseOrders)->where('status', 'received')->count();
+            $rejectedOrders = (clone $baseOrders)->where('status', 'rejected')->count();
+
+            $completedPct = $totalOrders > 0 ? round($receivedOrders / $totalOrders * 100, 1) : 0;
+            $rejectedPct = $totalOrders > 0 ? round($rejectedOrders / $totalOrders * 100, 1) : 0;
+
+            $receivedOrderIds = Order::query()->where('facility_id', $facility->id)->where('status', 'received');
+            if ($request->filled('year') && $request->filled('month')) {
+                $monthStart = sprintf('%04d-%02d-01', (int) $request->year, (int) $request->month);
+                $monthEnd = Carbon::parse($monthStart)->endOfMonth()->format('Y-m-d');
+                $receivedOrderIds->whereBetween('order_date', [$monthStart, $monthEnd]);
+            } elseif ($request->filled('year')) {
+                $receivedOrderIds->whereYear('order_date', (int) $request->year);
+            }
+            $receivedOrderIds = $receivedOrderIds->pluck('id')->toArray();
+
+            $ontimeCount = 0;
+            $lateCount = 0;
+            if (!empty($receivedOrderIds)) {
+                $receivedOrdersWithDate = Order::whereIn('id', $receivedOrderIds)
+                    ->whereNotNull('received_at')
+                    ->whereNotNull('expected_date')
+                    ->get(['id', 'expected_date', 'received_at']);
+                foreach ($receivedOrdersWithDate as $o) {
+                    $cutoff = Carbon::parse($o->expected_date)->addDays(2)->endOfDay();
+                    $receivedAt = $o->received_at ? Carbon::parse($o->received_at) : null;
+                    if ($receivedAt && $receivedAt->lte($cutoff)) {
+                        $ontimeCount++;
+                    } else {
+                        $lateCount++;
+                    }
+                }
+                $receivedNoDate = Order::whereIn('id', $receivedOrderIds)
+                    ->where(function ($q) {
+                        $q->whereNull('received_at')->orWhereNull('expected_date');
+                    })
+                    ->count();
+                $ontimeCount += $receivedNoDate;
+            }
+
+            $deliveredTotal = $ontimeCount + $lateCount;
+            $ontimePct = $deliveredTotal > 0 ? round($ontimeCount / $deliveredTotal * 100, 1) : 0;
+            $latePct = $deliveredTotal > 0 ? round($lateCount / $deliveredTotal * 100, 1) : 0;
+
+            $allReceived += $receivedOrders;
+            $allRejected += $rejectedOrders;
+            $allOnTime += $ontimeCount;
+            $allLate += $lateCount;
+
+            $orderIdsForFacility = (clone $orderQuery)->where('facility_id', $facility->id)->pluck('id')->toArray();
+            $itemsGood = 0;
+            $itemsFair = 0;
+            $itemsPoor = 0;
+            $qtyGood = 0;
+            $qtyFair = 0;
+            $qtyPoor = 0;
+            $ordersWithItems = 0;
+
+            if (!empty($orderIdsForFacility)) {
+                $orderItems = OrderItem::query()
+                    ->whereIn('order_id', $orderIdsForFacility)
+                    ->get(['order_id', 'quantity', 'quantity_to_release', 'received_quantity']);
+                $byOrder = [];
+                foreach ($orderItems as $item) {
+                    $byOrder[$item->order_id][] = $item;
+                }
+                foreach ($byOrder as $oid => $items) {
+                    $totalItems = count($items);
+                    $suppliedItems = 0;
+                    $totalQty = 0;
+                    $releasedQty = 0;
+                    foreach ($items as $it) {
+                        $q = (int) $it->quantity;
+                        $rel = (int) ($it->quantity_to_release ?? 0);
+                        $rec = (int) ($it->received_quantity ?? 0);
+                        $totalQty += $q;
+                        $releasedQty += $rel > 0 ? $rel : $rec;
+                        if ($q <= 0 || $rel >= $q || $rec >= $q) {
+                            $suppliedItems++;
+                        }
+                    }
+                    $ordersWithItems++;
+                    $itemsRate = $totalItems > 0 ? ($suppliedItems / $totalItems) * 100 : 0;
+                    $qtyRate = $totalQty > 0 ? ($releasedQty / $totalQty) * 100 : 0;
+                    if ($itemsRate > 90) {
+                        $itemsGood++;
+                    } elseif ($itemsRate >= 80) {
+                        $itemsFair++;
+                    } else {
+                        $itemsPoor++;
+                    }
+                    if ($qtyRate > 90) {
+                        $qtyGood++;
+                    } elseif ($qtyRate >= 80) {
+                        $qtyFair++;
+                    } else {
+                        $qtyPoor++;
+                    }
+                }
+            }
+
+            $itemsTotal = $itemsGood + $itemsFair + $itemsPoor;
+            $itemsGoodPct = $itemsTotal > 0 ? round($itemsGood / $itemsTotal * 100, 0) : 0;
+            $itemsFairPct = $itemsTotal > 0 ? round($itemsFair / $itemsTotal * 100, 0) : 0;
+            $itemsPoorPct = $itemsTotal > 0 ? round($itemsPoor / $itemsTotal * 100, 0) : 0;
+            $qtyTotal = $qtyGood + $qtyFair + $qtyPoor;
+            $qtyGoodPct = $qtyTotal > 0 ? round($qtyGood / $qtyTotal * 100, 0) : 0;
+            $qtyFairPct = $qtyTotal > 0 ? round($qtyFair / $qtyTotal * 100, 0) : 0;
+            $qtyPoorPct = $qtyTotal > 0 ? round($qtyPoor / $qtyTotal * 100, 0) : 0;
+
+            $rows[] = [
+                'facility_name' => $facility->name ?: 'Facility #' . $facility->id,
+                'total_orders' => $totalOrders,
+                'completed_orders' => $receivedOrders,
+                'completed_pct' => $completedPct,
+                'rejected_orders' => $rejectedOrders,
+                'rejected_pct' => $rejectedPct,
+                'delivery_ontime_count' => $ontimeCount,
+                'delivery_ontime_pct' => $ontimePct,
+                'delivery_late_count' => $lateCount,
+                'delivery_late_pct' => $latePct,
+                'items_good_pct' => $itemsGoodPct,
+                'items_fair_pct' => $itemsFairPct,
+                'items_poor_pct' => $itemsPoorPct,
+                'qty_good_pct' => $qtyGoodPct,
+                'qty_fair_pct' => $qtyFairPct,
+                'qty_poor_pct' => $qtyPoorPct,
+            ];
+        }
+
+        $totalOrdersAll = array_sum(array_column($rows, 'total_orders'));
+        $summary = $this->getOrderReportSummary([
+            'total_orders' => $totalOrdersAll,
+            'received' => $allReceived,
+            'rejected' => $allRejected,
+            'total_delivered' => $allOnTime + $allLate,
+            'on_time' => $allOnTime,
+            'late' => $allLate,
+        ]);
+
+        return ['rows' => $rows, 'summary' => $summary];
+    }
+
+    /**
+     * Summary for Order Report charts (totals across selected facilities).
+     */
+    private function getOrderReportSummary(array $totals): array
+    {
+        return [
+            'total_orders' => $totals['total_orders'] ?? 0,
+            'received' => $totals['received'] ?? 0,
+            'rejected' => $totals['rejected'] ?? 0,
+            'total_delivered' => $totals['total_delivered'] ?? 0,
+            'on_time' => $totals['on_time'] ?? 0,
+            'late' => $totals['late'] ?? 0,
+        ];
     }
 
     /**
@@ -1863,7 +2359,7 @@ class ReportController extends Controller
             return redirect()->route('reports.facility-lmis-report')
                 ->with('error', 'Please select a facility first.');
         }
-        
+
         $facility = Facility::findOrFail($facilityId);
         $reportPeriod = sprintf('%04d-%02d', $year, $month);
         

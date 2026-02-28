@@ -1419,7 +1419,7 @@ class DashboardController extends Controller
                 'priority' => 'medium',
                 'icon' => 'clipboard-check',
                 'color' => 'yellow',
-                'route' => route('reports.facilities-list'),
+                'route' => route('reports.facility-lmis-report'),
                 'category' => 'Reports',
                 'current_stage' => 'Submitted',
                 'next_stage' => 'Review'
@@ -1441,7 +1441,7 @@ class DashboardController extends Controller
                 'priority' => 'medium',
                 'icon' => 'check-circle',
                 'color' => 'green',
-                'route' => route('reports.facilities-list'),
+                'route' => route('reports.facility-lmis-report'),
                 'category' => 'Reports',
                 'current_stage' => 'Reviewed',
                 'next_stage' => 'Approve'
@@ -1463,7 +1463,7 @@ class DashboardController extends Controller
                 'priority' => 'high',
                 'icon' => 'document-text',
                 'color' => 'red',
-                'route' => route('reports.facilities-list'),
+                'route' => route('reports.facility-lmis-report'),
                 'category' => 'Reports',
                 'current_stage' => 'Not Submitted',
                 'next_stage' => 'Submit Report'
