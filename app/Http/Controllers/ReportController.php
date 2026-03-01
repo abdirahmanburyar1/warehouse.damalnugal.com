@@ -51,6 +51,9 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Models\FacilityMonthlyReport;
 use App\Exports\WarehouseMonthlyReportExport;
 use App\Models\PhysicalCountReport;
+use App\Models\Asset;
+use App\Models\AssetItem;
+use App\Models\AssetCategory;
 
 class ReportController extends Controller
 {
@@ -133,6 +136,7 @@ class ReportController extends Controller
             ['value' => 'order_report', 'label' => 'Order Report'],
             ['value' => 'transfer_report', 'label' => 'Transfer Report'],
             ['value' => 'procurement_report', 'label' => 'Procurement Report'],
+            ['value' => 'asset_report', 'label' => 'Asset Report'],
         ];
         return Inertia::render('Report/InventoryReportsUnified', [
             'regions' => $regions,
@@ -150,7 +154,7 @@ class ReportController extends Controller
     public function inventoryReportsUnifiedData(Request $request)
     {
         $request->validate([
-            'report_type' => 'required|in:warehouse_inventory,facility_monthly_consumption,product_report,liquidation_disposal,expiry_report,facilities_report,order_report,transfer_report,procurement_report',
+            'report_type' => 'required|in:warehouse_inventory,facility_monthly_consumption,product_report,liquidation_disposal,expiry_report,facilities_report,order_report,transfer_report,procurement_report,asset_report',
             'region_id' => 'nullable|exists:regions,id',
             'district_id' => 'nullable|exists:districts,id',
             'warehouse_id' => 'nullable|exists:warehouses,id',
@@ -221,6 +225,19 @@ class ReportController extends Controller
                 ]);
             }
             $result = $this->getProcurementReportData($request, $warehouseIds);
+            return response()->json(['success' => true, 'data' => $result]);
+        }
+
+        if ($reportType === 'asset_report') {
+            $facilityIds = $this->resolveFacilityIdsFromFilters($request);
+            if (empty($facilityIds)) {
+                return response()->json([
+                    'success' => false,
+                    'data' => ['rows' => [], 'summary' => $this->getAssetReportSummary([]), 'category_columns' => []],
+                    'message' => 'Asset Report requires Region, District or Facility.',
+                ]);
+            }
+            $result = $this->getAssetReportData($request, $facilityIds);
             return response()->json(['success' => true, 'data' => $result]);
         }
 
@@ -1303,6 +1320,69 @@ class ReportController extends Controller
             'qty_good' => $totals['qty_good'] ?? 0,
             'qty_fair' => $totals['qty_fair'] ?? 0,
             'qty_poor' => $totals['qty_poor'] ?? 0,
+        ];
+    }
+
+    /**
+     * Asset Report: one row per facility with Total Assets and counts by asset category.
+     * Optionally includes functioning/not functioning per category.
+     */
+    private function getAssetReportData(Request $request, array $facilityIds): array
+    {
+        $facilities = Facility::whereIn('id', $facilityIds)->orderBy('name')->get(['id', 'name']);
+        $categoryNames = AssetCategory::orderBy('name')->pluck('name')->toArray();
+        $rows = [];
+        $summaryTotal = 0;
+        $summaryByCategory = [];
+
+        foreach ($facilities as $facility) {
+            $itemCounts = AssetItem::query()
+                ->whereHas('asset', function ($q) use ($facility) {
+                    $q->where('facility_id', $facility->id);
+                })
+                ->join('asset_categories', 'asset_items.asset_category_id', '=', 'asset_categories.id')
+                ->selectRaw('asset_categories.name as category_name, count(asset_items.id) as cnt')
+                ->groupBy('asset_categories.name')
+                ->pluck('cnt', 'category_name')
+                ->toArray();
+
+            $totalAssets = (int) AssetItem::query()
+                ->whereHas('asset', function ($q) use ($facility) {
+                    $q->where('facility_id', $facility->id);
+                })
+                ->count();
+
+            $row = [
+                'facility_id' => $facility->id,
+                'facility_name' => $facility->name,
+                'total_assets' => $totalAssets,
+            ];
+            foreach ($categoryNames as $catName) {
+                $row['category_' . preg_replace('/\s+/', '_', strtolower($catName))] = $itemCounts[$catName] ?? 0;
+                $summaryByCategory[$catName] = ($summaryByCategory[$catName] ?? 0) + ($itemCounts[$catName] ?? 0);
+            }
+            $rows[] = $row;
+            $summaryTotal += $totalAssets;
+        }
+
+        $summary = $this->getAssetReportSummary([
+            'total_assets' => $summaryTotal,
+            'by_category' => $summaryByCategory,
+        ]);
+
+        return [
+            'rows' => $rows,
+            'summary' => $summary,
+            'category_columns' => $categoryNames,
+        ];
+    }
+
+    private function getAssetReportSummary(array $totals): array
+    {
+        $byCategory = $totals['by_category'] ?? [];
+        return [
+            'total_assets' => $totals['total_assets'] ?? 0,
+            'by_category' => $byCategory,
         ];
     }
 

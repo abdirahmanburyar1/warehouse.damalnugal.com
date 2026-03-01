@@ -778,6 +778,41 @@
                     </div>
                 </div>
 
+                <!-- Asset Report: Tabs (Charts | Table) -->
+                <div v-else-if="isAssetReport && filteredRows.length > 0" class="space-y-4">
+                    <nav class="flex gap-4" aria-label="Tabs">
+                        <button type="button" @click="assetReportTab = 'charts'" class="py-2 px-1 font-medium text-sm transition-colors" :class="assetReportTab === 'charts' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'">Charts</button>
+                        <button type="button" @click="assetReportTab = 'table'" class="py-2 px-1 font-medium text-sm transition-colors" :class="assetReportTab === 'table' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'">Table</button>
+                    </nav>
+                    <div v-show="assetReportTab === 'charts'" class="space-y-10">
+                        <div class="bg-white p-8 pt-10 max-w-2xl">
+                            <h3 class="text-center text-lg font-bold text-black mb-10">Assets Category</h3>
+                            <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                <Chart v-if="assetReportChartData.labels?.length" type="bar" :data="assetReportChartData" :options="assetReportChartOptions" :plugins="chartPlugins" :width="chartSize.width" :height="chartSize.height" class="w-full" />
+                                <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-show="assetReportTab === 'table'" class="overflow-x-auto">
+                        <table class="min-w-full border-collapse border border-gray-300">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">Facility Name</th>
+                                    <th class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Total Assets</th>
+                                    <th v-for="cat in assetReportCategoryColumns" :key="cat" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">{{ cat }}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white">
+                                <tr v-for="(row, index) in filteredRows" :key="index" class="hover:bg-gray-50">
+                                    <td class="px-3 py-2 text-sm text-gray-900 border border-gray-300">{{ row.facility_name }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.total_assets) }}</td>
+                                    <td v-for="cat in assetReportCategoryColumns" :key="cat" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row[assetReportCategoryKey(cat)]) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <!-- Expiry Report: Tabs (Charts | Table) -->
                 <div v-else-if="isExpiryReport && filteredRows.length > 0" class="space-y-4">
                     <nav class="flex gap-4" aria-label="Tabs">
@@ -861,7 +896,7 @@
                 </div>
 
                 <!-- Default Inventory Report Table -->
-                <div v-else-if="!isProductReport && !isLiquidationDisposalReport && !isExpiryReport && !isFacilitiesReport && reportData.length > 0" class="overflow-x-auto">
+                <div v-else-if="!isProductReport && !isLiquidationDisposalReport && !isExpiryReport && !isFacilitiesReport && !isOrderReport && !isTransferReport && !isProcurementReport && !isAssetReport && reportData.length > 0" class="overflow-x-auto">
                     <table class="min-w-full border-collapse border border-gray-300">
                         <thead class="bg-gray-50">
                             <tr>
@@ -971,6 +1006,9 @@ const transferReportTab = ref('table');
 const transferReportSummary = ref({ total_transfers: 0, received: 0, rejected: 0, reason_wrong_item: 0, reason_overstock: 0, reason_slow_moving: 0, warehouse_to_facility: 0, warehouse_to_warehouse: 0, facility_to_warehouse: 0, facility_to_facility: 0 });
 const procurementReportTab = ref('table');
 const procurementReportSummary = ref({ total_pos: 0, completed: 0, rejected: 0, total_delivered: 0, on_time: 0, late: 0, total_cost: 0, qty_good: 0, qty_fair: 0, qty_poor: 0 });
+const assetReportTab = ref('table');
+const assetReportCategoryColumns = ref([]);
+const assetReportSummary = ref({ total_assets: 0, by_category: {} });
 
 const filteredDistricts = computed(() => {
     const list = props.districts || [];
@@ -1033,6 +1071,11 @@ const isFacilitiesReport = computed(() => filters.value.report_type === 'facilit
 const isOrderReport = computed(() => filters.value.report_type === 'order_report');
 const isTransferReport = computed(() => filters.value.report_type === 'transfer_report');
 const isProcurementReport = computed(() => filters.value.report_type === 'procurement_report');
+const isAssetReport = computed(() => filters.value.report_type === 'asset_report');
+
+function assetReportCategoryKey(catName) {
+    return 'category_' + (catName || '').replace(/\s+/g, '_').toLowerCase();
+}
 
 const expiryReportHasMixedTypes = computed(() => {
     if (!isExpiryReport.value || !reportData.value.length) return false;
@@ -1939,6 +1982,67 @@ const procurementQtyChartOptions = computed(() => {
     };
 });
 
+const ASSET_REPORT_CHART_COLORS = ['rgb(34, 197, 94)', 'rgb(245, 158, 11)', 'rgb(59, 130, 246)', 'rgb(14, 165, 233)', 'rgb(139, 92, 246)'];
+const assetReportChartData = computed(() => {
+    if (!isAssetReport.value) return { labels: [], datasets: [] };
+    const byCat = assetReportSummary.value.by_category || {};
+    const cats = assetReportCategoryColumns.value.length ? assetReportCategoryColumns.value : Object.keys(byCat);
+    if (!cats.length) return { labels: [], datasets: [] };
+    const data = cats.map(cat => Number(byCat[cat]) || 0);
+    const colors = cats.map((_, i) => ASSET_REPORT_CHART_COLORS[i % ASSET_REPORT_CHART_COLORS.length]);
+    return {
+        labels: cats,
+        datasets: [{
+            label: 'Assets',
+            data,
+            backgroundColor: colors,
+            borderColor: colors,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+const assetReportChartOptions = computed(() => {
+    const data = assetReportChartData.value?.datasets?.[0]?.data ?? [];
+    const yMax = data.length ? Math.max(...data) + 2 : 10;
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        layout: { padding: { top: 24, right: 12, bottom: 12, left: 6 } },
+        indexAxis: 'x',
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true },
+            datalabels: {
+                anchor: 'end',
+                align: 'top',
+                color: '#000000',
+                font: { weight: 'bold', size: 12 },
+                formatter: (v) => v,
+                padding: 12,
+                offset: 8,
+            },
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: yMax,
+                grid: { color: 'rgba(0,0,0,0.1)', drawTicks: false },
+                border: { display: true, color: '#000000' },
+                ticks: { precision: 0, stepSize: 1, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 4 },
+            },
+            x: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { maxRotation: 45, minRotation: 0, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 6 },
+            },
+        },
+    };
+});
+
 watch(() => filters.value.region_id, () => {
     filters.value.district_id = null;
     if (filters.value.warehouse_or_facility?.startsWith('facility:')) {
@@ -2077,6 +2181,20 @@ async function generateReport() {
                 facilitiesReportTypeColumns.value = [];
                 orderReportSummary.value = {};
                 transferReportSummary.value = {};
+                assetReportCategoryColumns.value = [];
+                assetReportSummary.value = {};
+            } else if (filters.value.report_type === 'asset_report') {
+                const d = data.data || {};
+                reportData.value = d.rows || [];
+                assetReportCategoryColumns.value = d.category_columns || [];
+                assetReportSummary.value = d.summary || {};
+                productReportRows.value = [];
+                categoryColumns.value = [];
+                supplyClassColumns.value = [];
+                facilitiesReportTypeColumns.value = [];
+                orderReportSummary.value = {};
+                transferReportSummary.value = {};
+                procurementReportSummary.value = {};
             } else {
                 reportData.value = data.data || [];
                 productReportRows.value = [];
@@ -2086,6 +2204,8 @@ async function generateReport() {
                 orderReportSummary.value = {};
                 transferReportSummary.value = {};
                 procurementReportSummary.value = {};
+                assetReportCategoryColumns.value = [];
+                assetReportSummary.value = {};
             }
         } else {
             reportData.value = [];
@@ -2096,6 +2216,8 @@ async function generateReport() {
             orderReportSummary.value = {};
             transferReportSummary.value = {};
             procurementReportSummary.value = {};
+            assetReportCategoryColumns.value = [];
+            assetReportSummary.value = {};
         }
     } catch (e) {
         reportData.value = [];

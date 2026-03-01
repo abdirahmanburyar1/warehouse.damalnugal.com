@@ -393,6 +393,17 @@ const handleSubLocationSelect = (selected) => {
     form.value.sub_location = selected;
 };
 
+const handleFacilitySelect = (selected) => {
+    if (!selected) return;
+    form.value.facility_id = selected.id;
+    form.value.facility = selected;
+};
+
+const handleFacilityClear = () => {
+    form.value.facility_id = null;
+    form.value.facility = null;
+};
+
 const isNewLocation = ref(false);
 const createLocation = async () => {
     if (!newLocation.value) return;
@@ -748,6 +759,7 @@ const submit = async () => {
             region_id: form.value.region_id,
             asset_location_id: form.value.asset_location_id,
             sub_location_id: form.value.sub_location_id || null,
+            facility_id: form.value.facility_id || null,
             asset_items: form.value.asset_items
         };
 
@@ -894,147 +906,126 @@ const submit = async () => {
                                 </div>
                             </div>
                         </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-4">
+                            <div class="md:col-span-2">
+                                <InputLabel for="facility" value="Facility (optional)" />
+                                <Multiselect id="facility" v-model="form.facility" :options="facilityOptions"
+                                    :searchable="true" :close-on-select="true" :show-labels="false"
+                                    :allow-empty="true" placeholder="Select Facility" track-by="id" label="name"
+                                    @select="handleFacilitySelect"
+                                    @clear="handleFacilityClear">
+                                    <template v-slot:option="{ option }">
+                                        <span>{{ option.name }}</span>
+                                        <span v-if="option.district || option.region" class="text-gray-500 text-xs block">{{ [option.district, option.region].filter(Boolean).join(' · ') }}</span>
+                                    </template>
+                                </Multiselect>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Asset Items Section -->
-                    <div class="bg-white p-2">
-                        <div class="flex items-center justify-between mb-4">
+                    <div class="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
+                        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                             <h3 class="text-lg font-semibold text-gray-800">Asset Items</h3>
-                            <button type="button" @click="addAssetItem"
-                                class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 4v16m8-8H4" />
+                            <div class="flex items-center gap-3">
+                                <span class="text-sm text-gray-500">{{ form.asset_items.length }} item(s)</span>
+                                <button type="button" @click="addAssetItem"
+                                class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                                 </svg>
                                 Add Item
-                            </button>
+                                </button>
+                            </div>
                         </div>
 
-                        <div v-if="form.asset_items.length === 0" class="text-center py-8 text-gray-500">
-                            <p>No asset items added yet. Click "Add Item" to start.</p>
+                        <div v-if="form.asset_items.length === 0" class="text-center py-12 text-gray-500 bg-gray-50/50">
+                            <p class="text-sm">No asset items added yet.</p>
+                            <p class="text-sm mt-1">Click "Add Item" above to add the first line.</p>
                         </div>
 
-                        <div v-else class="space-y-3">
-                            <!-- Asset Items Table -->
-                            <table class="divide-y divide-gray-200 w-full">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th
-                                            class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
-                                            Asset Tag</th>
-                                        <th
-                                            class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
-                                            Asset Name</th>
-                                        <th
-                                            class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
-                                            Serial Number</th>
-                                        <th
-                                            class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
-                                            Category</th>
-                                        <th
-                                            class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
-                                            Type
-                                        </th>
-                                        <th
-                                            class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
-                                            Assignee</th>
-                                        <th
-                                            class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-                                            Value</th>
-                                        <th
-                                            class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
-                                            Action</th>
+                        <div v-else class="overflow-x-auto">
+                            <table class="min-w-[900px] w-full border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200">
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-12">#</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">Asset Tag</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[140px]">Asset Name</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[110px]">Serial Number</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[130px]">Category</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">Type</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">Assignee</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-28">Value</th>
+                                        <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-20">Action</th>
                                     </tr>
                                 </thead>
-                                <tbody class="bg-white divide-y divide-gray-200">
-                                    <tr v-for="(item, index) in form.asset_items" :key="index" class="hover:bg-gray-50">
-
-                                        <!-- Asset Tag -->
-                                        <td class="px-3 py-3 whitespace-nowrap w-32">
+                                <tbody class="bg-white divide-y divide-gray-100">
+                                    <tr v-for="(item, index) in form.asset_items" :key="index" class="hover:bg-gray-50/80 transition-colors">
+                                        <td class="px-3 py-2.5 text-sm text-gray-500 font-medium">{{ index + 1 }}</td>
+                                        <td class="px-3 py-2.5">
                                             <input :id="`asset_tag_${index}`" type="text"
-                                                class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                                placeholder="e.g., INV-000123" v-model="item.asset_tag" required />
+                                                class="w-full min-w-[100px] px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                                placeholder="e.g. INV-000123" v-model="item.asset_tag" required />
                                         </td>
-
-                                        <!-- Asset Name -->
-                                        <td class="px-3 py-3 whitespace-nowrap w-40">
+                                        <td class="px-3 py-2.5">
                                             <input :id="`asset_name_${index}`" type="text"
-                                                class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                                placeholder="e.g., Dell Latitude 7420" v-model="item.asset_name"
-                                                required />
+                                                class="w-full min-w-[120px] px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                                placeholder="e.g. Dell Latitude 7420" v-model="item.asset_name" required />
                                         </td>
-
-                                        <!-- Serial Number -->
-                                        <td class="px-3 py-3 whitespace-nowrap w-32">
+                                        <td class="px-3 py-2.5">
                                             <input :id="`serial_number_${index}`" type="text"
-                                                class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                                placeholder="Manufacturer SN" v-model="item.serial_number" required />
+                                                class="w-full min-w-[90px] px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                                placeholder="Serial no." v-model="item.serial_number" required />
                                         </td>
-
-                                        <!-- Category -->
-                                        <td class="px-3 py-3 whitespace-nowrap w-32">
+                                        <td class="px-3 py-2.5">
                                             <Multiselect v-model="item.asset_category" :options="categoryOptions"
                                                 :searchable="true" :close-on-select="true" :show-labels="false"
-                                                :allow-empty="true" placeholder="Select Category" track-by="id"
-                                                label="name" class="text-sm"
+                                                :allow-empty="true" placeholder="Category" track-by="id" label="name"
+                                                class="text-sm multiselect-compact"
                                                 @select="(selected) => handleItemCategorySelect(selected, index)">
                                                 <template v-slot:option="{ option }">
                                                     <div :class="{ 'add-new-option': option.isAddNew }">
-                                                        <span v-if="option.isAddNew"
-                                                            class="text-indigo-600 font-medium">+ Add New
-                                                            Category</span>
+                                                        <span v-if="option.isAddNew" class="text-indigo-600 font-medium">+ Add New Category</span>
                                                         <span v-else>{{ option.name }}</span>
                                                     </div>
                                                 </template>
                                             </Multiselect>
                                         </td>
-
-                                        <!-- Type -->
-                                        <td class="px-3 py-3 whitespace-nowrap w-32">
+                                        <td class="px-3 py-2.5">
                                             <Multiselect v-model="item.asset_type"
                                                 :options="getFilteredTypeOptions(item.asset_category)"
                                                 :searchable="true" :close-on-select="true" :show-labels="false"
-                                                :allow-empty="true" placeholder="Select Type" track-by="id" label="name"
-                                                :disabled="!item.asset_category" class="text-sm"
+                                                :allow-empty="true" placeholder="Type" track-by="id" label="name"
+                                                :disabled="!item.asset_category" class="text-sm multiselect-compact"
                                                 @select="(selected) => handleItemTypeSelect(selected, index)">
                                                 <template v-slot:option="{ option }">
                                                     <div :class="{ 'add-new-option': option.isAddNew }">
-                                                        <span v-if="option.isAddNew"
-                                                            class="text-indigo-600 font-medium">+ Add New Type</span>
+                                                        <span v-if="option.isAddNew" class="text-indigo-600 font-medium">+ Add New Type</span>
                                                         <span v-else>{{ option.name }}</span>
                                                     </div>
                                                 </template>
                                             </Multiselect>
                                         </td>
-
-                                        <!-- Assignee -->
-                                        <td class="px-3 py-3 whitespace-nowrap w-32">
+                                        <td class="px-3 py-2.5">
                                             <Multiselect v-model="item.assignee" :options="assigneeOptions"
                                                 :searchable="true" :close-on-select="true" :show-labels="false"
-                                                :allow-empty="true" placeholder="Select Assignee" track-by="id"
-                                                label="name" class="text-sm"
+                                                :allow-empty="true" placeholder="Assignee" track-by="id" label="name"
+                                                class="text-sm multiselect-compact"
                                                 @select="(selected) => handleItemAssigneeSelect(selected, index)"
                                                 @clear="() => handleItemAssigneeClear(index)" />
                                         </td>
-
-                                        <!-- Original Value -->
-                                        <td class="px-3 py-3 whitespace-nowrap w-24">
-                                            <input :id="`original_value_${index}`" type="number" step="0.01"
-                                                class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                        <td class="px-3 py-2.5">
+                                            <input :id="`original_value_${index}`" type="number" step="0.01" min="0"
+                                                class="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                                 placeholder="0.00" v-model="item.original_value" required />
                                         </td>
-
-                                        <!-- Action -->
-                                        <td class="px-3 py-3 whitespace-nowrap text-center w-20">
+                                        <td class="px-3 py-2.5 text-center">
                                             <button type="button" @click="removeAssetItem(index)"
-                                                class="text-red-600 hover:text-red-800 p-1"
-                                                :disabled="form.asset_items.length === 1">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                                                    viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                class="inline-flex items-center justify-center w-8 h-8 rounded-md text-red-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                :disabled="form.asset_items.length === 1"
+                                                title="Remove row">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                 </svg>
                                             </button>
                                         </td>

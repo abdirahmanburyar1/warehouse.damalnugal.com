@@ -25,6 +25,7 @@ const props = defineProps({
     fundSources: { type: Array, required: true, default: () => [] },
     regions: { type: Array, required: true, default: () => [] },
     assignees: { type: Array, required: false, default: () => [] },
+    facilities: { type: Array, required: false, default: () => [] },
 });
 
 const toast = useToast();
@@ -56,6 +57,8 @@ watch(() => props.regions, (list) => {
 watch(() => props.types, (list) => {
     typeOptions.value = [{ id: 'new', name: '+ Add New Type', isAddNew: true }, ...(list || [])];
 }, { immediate: true, deep: true });
+
+const facilityOptions = computed(() => (props.facilities || []).map(f => ({ id: f.id, name: f.name, district: f.district, region: f.region })));
 
 const filteredTypeOptions = computed(() => {
     const categoryId = form.value.asset_category_id || form.value.category?.id;
@@ -328,6 +331,17 @@ const handleSubLocationSelect = (selected) => {
     form.value.sub_location = selected;
 };
 
+const handleFacilitySelect = (selected) => {
+    if (!selected) return;
+    form.value.facility_id = selected.id;
+    form.value.facility = selected;
+};
+
+const handleFacilityClear = () => {
+    form.value.facility_id = null;
+    form.value.facility = null;
+};
+
 const createLocation = async () => {
     if (!newLocation.value) { toast.error('Please enter a location name'); return; }
     isNewLocation.value = true;
@@ -408,6 +422,7 @@ const submit = async () => {
         region_id: form.value.region_id,
         asset_location_id: form.value.asset_location_id,
         sub_location_id: form.value.sub_location_id,
+        facility_id: form.value.facility_id || null,
         fund_source_id: form.value.fund_source_id,
         acquisition_date: form.value.acquisition_date, // Already in YYYY-MM-DD format from HTML input
         
@@ -567,6 +582,28 @@ const submit = async () => {
                                     </template>
                                 </Multiselect>
                             </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mt-4">
+                        <div class="md:col-span-2">
+                            <label for="facility" class="block text-sm font-medium text-gray-700">Facility (optional)</label>
+                            <Multiselect id="facility" v-model="form.facility" :options="facilityOptions" :searchable="true" :close-on-select="true" :show-labels="false" :allow-empty="true" placeholder="Select Facility" track-by="id" label="name" @select="handleFacilitySelect" @clear="handleFacilityClear">
+                                <template v-slot:option="{ option }">
+                                    <span>{{ option.name }}</span>
+                                    <span v-if="option.district || option.region" class="text-gray-500 text-xs block">{{ [option.district, option.region].filter(Boolean).join(' · ') }}</span>
+                                </template>
+                            </Multiselect>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mt-4">
+                        <div class="md:col-span-2">
+                            <label for="facility" class="block text-sm font-medium text-gray-700">Facility (optional)</label>
+                            <Multiselect id="facility" v-model="form.facility" :options="facilityOptions" :searchable="true" :close-on-select="true" :show-labels="false" :allow-empty="true" placeholder="Select Facility" track-by="id" label="name" @select="handleFacilitySelect" @clear="handleFacilityClear">
+                                <template v-slot:option="{ option }">
+                                    <span>{{ option.name }}</span>
+                                    <span v-if="option.district || option.region" class="text-gray-500 text-xs block">{{ [option.district, option.region].filter(Boolean).join(' · ') }}</span>
+                                </template>
+                            </Multiselect>
                         </div>
                     </div>
 
