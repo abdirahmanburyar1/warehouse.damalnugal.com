@@ -117,6 +117,12 @@
                                 <input type="date" v-model="form.po_date" :disabled="form.approved_at"
                                     class="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400" />
                             </div>
+                            <div class="flex items-center gap-2">
+                                <label class="text-sm text-slate-500 min-w-[90px]">Expected Date</label>
+                                <input type="date" v-model="form.expected_date" :disabled="form.approved_at"
+                                    :min="form.po_date"
+                                    class="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400" />
+                            </div>
                         </div>
                     </div>
                     <div class="flex flex-wrap items-center gap-2 pt-1">
@@ -437,6 +443,7 @@ const form = ref({
     notes: "",
     po_number: props.po_number,
     po_date: new Date().toISOString().split('T')[0],
+    expected_date: null,
     // Preload one empty item row
     items: [
         { product_id: null, product: null, uom: "", quantity: 1, unit_cost: 0, total_cost: 0 }
@@ -472,7 +479,8 @@ async function handleFileUpload(event) {
         const poPayload = {
             supplier_id: form.value.supplier_id,
             po_date: moment(form.value.po_date).format('YYYY-MM-DD'),
-            po_number: form.value.po_number
+            po_number: form.value.po_number,
+            expected_date: form.value.expected_date ? moment(form.value.expected_date).format('YYYY-MM-DD') : null
         };
 
         const poResponse = await axios.post(route('purchase-orders.store'), poPayload);

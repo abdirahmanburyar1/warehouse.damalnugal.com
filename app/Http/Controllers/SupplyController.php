@@ -69,7 +69,7 @@ class SupplyController extends Controller
             ->when($request->filled('status'), function($query) use ($request) {
                 $query->where('status', $request->status);
             })
-            ->orderBy('po_date', 'desc')
+            ->orderBy('po_number', 'desc')
             ->orderBy('created_at', 'desc');
 
         // Calculate lead times as difference between packing list confirm_at and PO po_date
@@ -1067,6 +1067,7 @@ class SupplyController extends Controller
                     'supplier_id' => 'required|exists:suppliers,id',
                     'po_number' => 'required|unique:purchase_orders,po_number,' . $request->id,
                     'po_date' => 'required|date',
+                    'expected_date' => 'nullable|date',
                     'original_po_no' => 'nullable',
                     'notes' => 'nullable',
                     'items' => 'required|array|min:1',
@@ -1085,6 +1086,7 @@ class SupplyController extends Controller
                     'notes' => $validated['notes'],
                     'original_po_no' => $validated['original_po_no'],
                     'po_date' => $validated['po_date'],
+                    'expected_date' => $validated['expected_date'] ?? null,
                     'supplier_id' => $validated['supplier_id'],
                     'created_by' => auth()->id()
                 ]);
@@ -1591,6 +1593,7 @@ class SupplyController extends Controller
                 'po_number' => 'required|string',
                 'original_po_no' => 'nullable|string',
                 'po_date' => 'required|date',
+                'expected_date' => 'nullable|date',
                 'items' => 'required|array|min:1',                
                 'items.*.product_id' => 'required|exists:products,id',
                 'items.*.id' => 'nullable|exists:purchase_order_items,id',
@@ -1615,6 +1618,7 @@ class SupplyController extends Controller
                     'supplier_id' => $validated['supplier_id'],
                     'original_po_no' => $validated['original_po_no'],
                     'po_date' => $validated['po_date'],
+                    'expected_date' => $validated['expected_date'] ?? null,
                     'notes' => $validated['notes'],
                     'updated_by' => auth()->id()
                 ]);

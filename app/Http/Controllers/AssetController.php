@@ -13,6 +13,7 @@ use App\Models\AssetCategory;
 use App\Models\AssetType;
 use App\Models\AssetHistory;
 use App\Models\FundSource;
+use App\Models\Facility;
 use App\Http\Resources\AssetResource;
 use App\Http\Resources\AssetItemResource;
 use Illuminate\Http\Request;
@@ -189,6 +190,7 @@ class AssetController extends Controller
         $types = AssetType::all();
         $users = User::select('id','name','email')->get();
         $assignees = Assignee::select('id','name')->orderBy('name')->get();
+        $facilities = Facility::orderBy('name')->get(['id', 'name', 'district', 'region']);
         
         return Inertia::render('Assets/Create', [
             'locations' => $locations,
@@ -198,6 +200,7 @@ class AssetController extends Controller
             'types' => $types,
             'users' => $users,
             'assignees' => $assignees,
+            'facilities' => $facilities,
         ]);
     }
 
@@ -221,6 +224,7 @@ class AssetController extends Controller
                     'region_id' => 'required|exists:regions,id',
                     'asset_location_id' => 'required|exists:asset_locations,id',
                     'sub_location_id' => 'nullable|exists:sub_locations,id',
+                    'facility_id' => 'nullable|exists:facilities,id',
                 ]);
 
                 // Validate asset items array
@@ -251,6 +255,11 @@ class AssetController extends Controller
                 // Handle nullable sub_location_id
                 if (empty($validatedAsset['sub_location_id'])) {
                     $validatedAsset['sub_location_id'] = null;
+                }
+
+                // Handle nullable facility_id
+                if (empty($validatedAsset['facility_id'])) {
+                    $validatedAsset['facility_id'] = null;
                 }
 
                 // Create the main asset record
@@ -345,7 +354,7 @@ class AssetController extends Controller
     public function edit(Asset $asset)
     {
         // Load the asset with its actual relationships, filtered by organization through asset items
-        $asset = Asset::with(['region', 'assetLocation', 'subLocation', 'fundSource'])
+        $asset = Asset::with(['region', 'assetLocation', 'subLocation', 'fundSource', 'facility'])
             ->whereHas('assetItems', function($query) {
                 if (auth()->check() && auth()->user() && !empty(auth()->user()->organization)) {
                     $query->where('organization', auth()->user()->organization);
@@ -362,6 +371,7 @@ class AssetController extends Controller
         $regions = Region::orderBy('name')->get();
         $types = AssetType::orderBy('name')->get();
         $assignees = Assignee::select('id','name')->orderBy('name')->get();
+        $facilities = Facility::orderBy('name')->get(['id', 'name', 'district', 'region']);
         
         return Inertia::render('Assets/Edit', [
             'asset' => $asset,
@@ -372,6 +382,7 @@ class AssetController extends Controller
             'regions' => $regions,
             'types' => $types,
             'assignees' => $assignees,
+            'facilities' => $facilities,
         ]);
     }
 
@@ -383,9 +394,13 @@ class AssetController extends Controller
                 'region_id' => 'required|exists:regions,id',
                 'asset_location_id' => 'required|exists:asset_locations,id',
                 'sub_location_id' => 'required|exists:sub_locations,id',
+                'facility_id' => 'nullable|exists:facilities,id',
                 'fund_source_id' => 'required|exists:fund_sources,id',
                 'acquisition_date' => 'required|date',
             ]);
+            if (empty($assetValidated['facility_id'])) {
+                $assetValidated['facility_id'] = null;
+            }
 
             // Update the asset
             $asset->update($assetValidated);

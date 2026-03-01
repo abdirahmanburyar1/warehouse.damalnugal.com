@@ -53,6 +53,11 @@ const props = defineProps({
         required: false,
         default: () => [],
     },
+    facilities: {
+        type: Array,
+        required: false,
+        default: () => [],
+    },
 });
 
 const locationOptions = ref([]);
@@ -254,6 +259,10 @@ watch(
     { immediate: true, deep: true }
 );
 
+const facilityOptions = computed(() =>
+    (props.facilities || []).map((f) => ({ id: f.id, name: f.name, district: f.district, region: f.region }))
+);
+
 const form = ref({
     asset_number: "",
     acquisition_date: "",
@@ -261,6 +270,8 @@ const form = ref({
     region_id: "",
     asset_location_id: "",
     sub_location_id: "",
+    facility_id: null,
+    facility: null,
     asset_items: [
         {
             asset_tag: "",

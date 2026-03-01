@@ -166,6 +166,16 @@
                                         class="text-sm border-0 bg-transparent focus:ring-0 focus:border-b-2 focus:border-indigo-500"
                                     />
                                 </div>
+                                <div class="flex items-center">
+                                    <span class="text-sm text-gray-600 mr-2">Expected Date:</span>
+                                    <input
+                                        type="date"
+                                        v-model="form.expected_date"
+                                        :disabled="form.approved_at"
+                                        :min="form.po_date"
+                                        class="text-sm border-0 bg-transparent focus:ring-0 focus:border-b-2 focus:border-indigo-500"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -615,6 +625,7 @@ const form = ref({
     notes: props.po?.notes,
     po_number: props.po?.po_number,
     po_date: props.po?.po_date ? new Date(props.po.po_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    expected_date: props.po?.expected_date ? new Date(props.po.expected_date).toISOString().split('T')[0] : null,
     items: props.po?.items || [],
     reviewed_at: props.po?.reviewed_at,
     reviewed_by: props.po?.reviewed_by,

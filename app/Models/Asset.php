@@ -37,6 +37,7 @@ class Asset extends Model
         'region_id',
         'asset_location_id',
         'sub_location_id',
+        'facility_id',
         'submitted_by',
         'submitted_at',
         'reviewed_by',
@@ -104,6 +105,11 @@ class Asset extends Model
     public function subLocation(): BelongsTo
     {
         return $this->belongsTo(SubLocation::class, 'sub_location_id');
+    }
+
+    public function facility(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Facility::class, 'facility_id');
     }
 
     public function submittedBy(): BelongsTo
