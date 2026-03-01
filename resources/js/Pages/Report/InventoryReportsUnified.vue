@@ -440,6 +440,344 @@
                     </div>
                 </div>
 
+                <!-- Order Report: Tabs (Charts | Table) -->
+                <div v-else-if="isOrderReport && filteredRows.length > 0" class="space-y-4">
+                    <nav class="flex gap-4" aria-label="Tabs">
+                        <button
+                            type="button"
+                            @click="orderReportTab = 'charts'"
+                            class="py-2 px-1 font-medium text-sm transition-colors"
+                            :class="orderReportTab === 'charts' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+                        >
+                            Charts
+                        </button>
+                        <button
+                            type="button"
+                            @click="orderReportTab = 'table'"
+                            class="py-2 px-1 font-medium text-sm transition-colors"
+                            :class="orderReportTab === 'table' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+                        >
+                            Table
+                        </button>
+                    </nav>
+
+                    <div v-show="orderReportTab === 'charts'" class="space-y-10">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                            <div class="bg-white p-8 pt-10">
+                                <h3 class="text-center text-lg font-bold text-black mb-10">Order Status</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                    <Chart
+                                        v-if="orderStatusChartData.labels?.length"
+                                        type="bar"
+                                        :data="orderStatusChartData"
+                                        :options="orderStatusChartOptions"
+                                        :plugins="chartPlugins"
+                                        :width="chartSize.width"
+                                        :height="chartSize.height"
+                                        class="w-full"
+                                    />
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-8 pt-10">
+                                <h3 class="text-center text-lg font-bold text-black mb-10">Order Delivery Status</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                    <Chart
+                                        v-if="orderDeliveryChartData.labels?.length"
+                                        type="bar"
+                                        :data="orderDeliveryChartData"
+                                        :options="orderDeliveryChartOptions"
+                                        :plugins="chartPlugins"
+                                        :width="chartSize.width"
+                                        :height="chartSize.height"
+                                        class="w-full"
+                                    />
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-show="orderReportTab === 'table'" class="overflow-x-auto">
+                        <table class="min-w-full border-collapse border border-gray-300">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300 align-middle">Facility Name</th>
+                                    <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Total Orders</th>
+                                    <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Completed Orders</th>
+                                    <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Rejected Orders</th>
+                                    <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Order Delivery Status</th>
+                                    <th colspan="3" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Order Items Fulfillment Rate</th>
+                                    <th colspan="3" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Order QTY Fulfillment Rate</th>
+                                </tr>
+                                <tr class="bg-gray-100">
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Ontime</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Late</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Good</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Fair</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Poor</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Good</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Fair</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Poor</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white">
+                                <tr v-for="(row, index) in filteredRows" :key="index" class="hover:bg-gray-50">
+                                    <td class="px-3 py-2 text-sm text-gray-900 border border-gray-300">{{ row.facility_name }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.total_orders) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.completed_orders) }} ({{ row.completed_pct }}%)</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.rejected_orders) }} ({{ row.rejected_pct }}%)</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.delivery_ontime_count) }} ({{ row.delivery_ontime_pct }}%)</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.delivery_late_count) }} ({{ row.delivery_late_pct }}%)</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.items_good_pct }}%</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.items_fair_pct }}%</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.items_poor_pct }}%</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.qty_good_pct }}%</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.qty_fair_pct }}%</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.qty_poor_pct }}%</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Transfer Report: Tabs (Charts | Table) -->
+                <div v-else-if="isTransferReport && filteredRows.length > 0" class="space-y-4">
+                    <nav class="flex gap-4" aria-label="Tabs">
+                        <button
+                            type="button"
+                            @click="transferReportTab = 'charts'"
+                            class="py-2 px-1 font-medium text-sm transition-colors"
+                            :class="transferReportTab === 'charts' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+                        >
+                            Charts
+                        </button>
+                        <button
+                            type="button"
+                            @click="transferReportTab = 'table'"
+                            class="py-2 px-1 font-medium text-sm transition-colors"
+                            :class="transferReportTab === 'table' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+                        >
+                            Table
+                        </button>
+                    </nav>
+
+                    <div v-show="transferReportTab === 'charts'" class="space-y-10">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                            <div class="bg-white p-8 pt-10">
+                                <h3 class="text-center text-lg font-bold text-black mb-10">Transfer Status</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                    <Chart
+                                        v-if="transferStatusChartData.labels?.length"
+                                        type="bar"
+                                        :data="transferStatusChartData"
+                                        :options="transferStatusChartOptions"
+                                        :plugins="chartPlugins"
+                                        :width="chartSize.width"
+                                        :height="chartSize.height"
+                                        class="w-full"
+                                    />
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-8 pt-10">
+                                <h3 class="text-center text-lg font-bold text-black mb-10">Transfer Type</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                    <Chart
+                                        v-if="transferTypeChartData.labels?.length"
+                                        type="bar"
+                                        :data="transferTypeChartData"
+                                        :options="transferTypeChartOptions"
+                                        :plugins="chartPlugins"
+                                        :width="chartSize.width"
+                                        :height="chartSize.height"
+                                        class="w-full"
+                                    />
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-8 pt-10">
+                            <h3 class="text-center text-lg font-bold text-black mb-10">Transfer Reason</h3>
+                            <div class="min-h-[220px] w-full mt-2 max-w-2xl mx-auto" style="position: relative;">
+                                <Chart
+                                    v-if="transferReasonChartData.labels?.length"
+                                    type="bar"
+                                    :data="transferReasonChartData"
+                                    :options="transferReasonChartOptions"
+                                    :plugins="chartPlugins"
+                                    :width="chartSize.width"
+                                    :height="chartSize.height"
+                                    class="w-full"
+                                />
+                                <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-show="transferReportTab === 'table'" class="overflow-x-auto">
+                        <table class="min-w-full border-collapse border border-gray-300">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300 align-middle">Facility Name</th>
+                                    <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Total Transfers</th>
+                                    <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Completed Transfers</th>
+                                    <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Rejected Transfers</th>
+                                    <th colspan="4" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Transfer Reasons</th>
+                                    <th colspan="4" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Transfer Type</th>
+                                </tr>
+                                <tr class="bg-gray-100">
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Wrong Item</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Overstock</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Soon to Expire</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Slow Moving</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Warehouse to Facility</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Warehouse to Warehouse</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Facility to Warehouse</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Facility to Facility</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white">
+                                <tr v-for="(row, index) in filteredRows" :key="index" class="hover:bg-gray-50">
+                                    <td class="px-3 py-2 text-sm text-gray-900 border border-gray-300">{{ row.facility_name }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.total_transfers) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.completed_transfers) }} ({{ row.completed_pct }}%)</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.rejected_transfers) }} ({{ row.rejected_pct }}%)</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.reason_wrong_item) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.reason_overstock) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.reason_soon_to_expire) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.reason_slow_moving) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.type_warehouse_to_facility) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.type_warehouse_to_warehouse) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.type_facility_to_warehouse) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.type_facility_to_facility) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Procurement Report: Tabs (Charts | Table) -->
+                <div v-else-if="isProcurementReport && filteredRows.length > 0" class="space-y-4">
+                    <nav class="flex gap-4" aria-label="Tabs">
+                        <button
+                            type="button"
+                            @click="procurementReportTab = 'charts'"
+                            class="py-2 px-1 font-medium text-sm transition-colors"
+                            :class="procurementReportTab === 'charts' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+                        >
+                            Charts
+                        </button>
+                        <button
+                            type="button"
+                            @click="procurementReportTab = 'table'"
+                            class="py-2 px-1 font-medium text-sm transition-colors"
+                            :class="procurementReportTab === 'table' ? 'text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+                        >
+                            Table
+                        </button>
+                    </nav>
+
+                    <div v-show="procurementReportTab === 'charts'" class="space-y-10">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                            <div class="bg-white p-8 pt-10">
+                                <h3 class="text-center text-lg font-bold text-black mb-10">POs Status</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                    <Chart
+                                        v-if="procurementStatusChartData.labels?.length"
+                                        type="bar"
+                                        :data="procurementStatusChartData"
+                                        :options="procurementStatusChartOptions"
+                                        :plugins="chartPlugins"
+                                        :width="chartSize.width"
+                                        :height="chartSize.height"
+                                        class="w-full"
+                                    />
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-8 pt-10">
+                                <h3 class="text-center text-lg font-bold text-black mb-10">POs Delivery Status</h3>
+                                <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                    <Chart
+                                        v-if="procurementDeliveryChartData.labels?.length"
+                                        type="bar"
+                                        :data="procurementDeliveryChartData"
+                                        :options="procurementDeliveryChartOptions"
+                                        :plugins="chartPlugins"
+                                        :width="chartSize.width"
+                                        :height="chartSize.height"
+                                        class="w-full"
+                                    />
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-8 pt-10 max-w-2xl mx-auto">
+                            <h3 class="text-center text-lg font-bold text-black mb-10">POs QTY Fulfillment</h3>
+                            <div class="min-h-[220px] w-full mt-2" style="position: relative;">
+                                <Chart
+                                    v-if="procurementQtyChartData.labels?.length"
+                                    type="bar"
+                                    :data="procurementQtyChartData"
+                                    :options="procurementQtyChartOptions"
+                                    :plugins="chartPlugins"
+                                    :width="chartSize.width"
+                                    :height="chartSize.height"
+                                    class="w-full"
+                                />
+                                <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">No data</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-show="procurementReportTab === 'table'" class="overflow-x-auto">
+                        <table class="min-w-full border-collapse border border-gray-300">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300 align-middle">Warehouse Name</th>
+                                    <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Total POs</th>
+                                    <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Completed POs</th>
+                                    <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Rejected POs</th>
+                                    <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Avg Lead Time</th>
+                                    <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">POs Delivery Status</th>
+                                    <th colspan="3" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">POs Items Fulfillment Rate</th>
+                                    <th colspan="3" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Order QTY Fulfillment Rate</th>
+                                    <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Total POs Cost</th>
+                                </tr>
+                                <tr class="bg-gray-100">
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Ontime</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Late</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Good</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Fair</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Poor</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Good</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Fair</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">Poor</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white">
+                                <tr v-for="(row, index) in filteredRows" :key="index" class="hover:bg-gray-50">
+                                    <td class="px-3 py-2 text-sm text-gray-900 border border-gray-300">{{ row.warehouse_name }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.total_pos) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.completed_pos) }} ({{ row.completed_pct }}%)</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.rejected_pos) }} ({{ row.rejected_pct }}%)</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.avg_lead_time_days }} days</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.delivery_ontime_count) }} ({{ row.delivery_ontime_pct }}%)</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.delivery_late_count) }} ({{ row.delivery_late_pct }}%)</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.items_good_pct }}%</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.items_fair_pct }}%</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.items_poor_pct }}%</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.qty_good_pct }}%</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.qty_fair_pct }}%</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.qty_poor_pct }}%</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">${{ formatNum(row.total_pos_cost) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <!-- Expiry Report: Tabs (Charts | Table) -->
                 <div v-else-if="isExpiryReport && filteredRows.length > 0" class="space-y-4">
                     <nav class="flex gap-4" aria-label="Tabs">
@@ -627,6 +965,12 @@ const liquidationDisposalTab = ref('table');
 const expiryReportTab = ref('table');
 const facilitiesReportTab = ref('table');
 const facilitiesReportTypeColumns = ref([]);
+const orderReportTab = ref('table');
+const orderReportSummary = ref({ total_orders: 0, received: 0, rejected: 0, total_delivered: 0, on_time: 0, late: 0 });
+const transferReportTab = ref('table');
+const transferReportSummary = ref({ total_transfers: 0, received: 0, rejected: 0, reason_wrong_item: 0, reason_overstock: 0, reason_slow_moving: 0, warehouse_to_facility: 0, warehouse_to_warehouse: 0, facility_to_warehouse: 0, facility_to_facility: 0 });
+const procurementReportTab = ref('table');
+const procurementReportSummary = ref({ total_pos: 0, completed: 0, rejected: 0, total_delivered: 0, on_time: 0, late: 0, total_cost: 0, qty_good: 0, qty_fair: 0, qty_poor: 0 });
 
 const filteredDistricts = computed(() => {
     const list = props.districts || [];
@@ -671,7 +1015,8 @@ const filteredRows = computed(() => {
         const warehouse = (row.warehouse_name || '').toLowerCase();
         const name = (row.name || '').toLowerCase();
         const district = (row.district_name || '').toLowerCase();
-        return item.includes(q) || facility.includes(q) || warehouse.includes(q) || name.includes(q) || district.includes(q);
+        const whName = (row.warehouse_name || '').toLowerCase();
+        return item.includes(q) || facility.includes(q) || warehouse.includes(q) || name.includes(q) || district.includes(q) || whName.includes(q);
     });
 });
 
@@ -685,6 +1030,9 @@ const isProductReport = computed(() => filters.value.report_type === 'product_re
 const isLiquidationDisposalReport = computed(() => filters.value.report_type === 'liquidation_disposal');
 const isExpiryReport = computed(() => filters.value.report_type === 'expiry_report');
 const isFacilitiesReport = computed(() => filters.value.report_type === 'facilities_report');
+const isOrderReport = computed(() => filters.value.report_type === 'order_report');
+const isTransferReport = computed(() => filters.value.report_type === 'transfer_report');
+const isProcurementReport = computed(() => filters.value.report_type === 'procurement_report');
 
 const expiryReportHasMixedTypes = computed(() => {
     if (!isExpiryReport.value || !reportData.value.length) return false;
@@ -1103,6 +1451,494 @@ const facilitiesReportDonutOptions = computed(() => ({
     },
 }));
 
+// Order Report charts (from summary)
+const ORDER_STATUS_CHART_COLORS = ['rgb(59, 130, 246)', 'rgb(34, 197, 94)', 'rgb(245, 158, 11)'];
+const orderStatusChartData = computed(() => {
+    if (!isOrderReport.value) return { labels: [], datasets: [] };
+    const s = orderReportSummary.value;
+    const total = Number(s.total_orders) || 0;
+    const received = Number(s.received) || 0;
+    const rejected = Number(s.rejected) || 0;
+    if (total === 0 && received === 0 && rejected === 0) return { labels: [], datasets: [] };
+    return {
+        labels: ['Total Orders', 'Received', 'Rejected'],
+        datasets: [{
+            label: 'Count',
+            data: [total, received, rejected],
+            backgroundColor: ORDER_STATUS_CHART_COLORS,
+            borderColor: ORDER_STATUS_CHART_COLORS,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+const orderStatusChartOptions = computed(() => {
+    const data = orderStatusChartData.value?.datasets?.[0]?.data ?? [];
+    const yMax = data.length ? Math.max(...data) + 2 : 10;
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        layout: { padding: { top: 24, right: 12, bottom: 12, left: 6 } },
+        indexAxis: 'x',
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true },
+            datalabels: {
+                anchor: 'end',
+                align: 'top',
+                color: '#000000',
+                font: { weight: 'bold', size: 12 },
+                formatter: (v) => v,
+                padding: 12,
+                offset: 8,
+            },
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: yMax,
+                grid: { color: 'rgba(0,0,0,0.1)', drawTicks: false },
+                border: { display: true, color: '#000000' },
+                ticks: { precision: 0, stepSize: 1, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 4 },
+            },
+            x: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { maxRotation: 45, minRotation: 0, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 6 },
+            },
+        },
+    };
+});
+const ORDER_DELIVERY_CHART_COLORS = ['rgb(59, 130, 246)', 'rgb(249, 115, 22)', 'rgb(14, 165, 233)'];
+const orderDeliveryChartData = computed(() => {
+    if (!isOrderReport.value) return { labels: [], datasets: [] };
+    const s = orderReportSummary.value;
+    const totalDelivered = Number(s.total_delivered) || 0;
+    const onTime = Number(s.on_time) || 0;
+    const late = Number(s.late) || 0;
+    if (totalDelivered === 0 && onTime === 0 && late === 0) return { labels: [], datasets: [] };
+    return {
+        labels: ['Total Delivered Orders', 'On-time', 'Late'],
+        datasets: [{
+            label: 'Count',
+            data: [totalDelivered, onTime, late],
+            backgroundColor: ORDER_DELIVERY_CHART_COLORS,
+            borderColor: ORDER_DELIVERY_CHART_COLORS,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+const orderDeliveryChartOptions = computed(() => {
+    const data = orderDeliveryChartData.value?.datasets?.[0]?.data ?? [];
+    const xMax = data.length ? Math.max(...data) + 2 : 10;
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        layout: { padding: { top: 6, right: 40, bottom: 12, left: 6 } },
+        indexAxis: 'y',
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true },
+            datalabels: {
+                anchor: 'end',
+                align: 'start',
+                color: '#000000',
+                font: { weight: 'bold', size: 12 },
+                formatter: (v) => v,
+                padding: 8,
+                offset: 16,
+            },
+        },
+        scales: {
+            x: {
+                beginAtZero: true,
+                max: xMax,
+                grid: { color: 'rgba(0,0,0,0.1)', drawTicks: false },
+                border: { display: true, color: '#000000' },
+                ticks: { precision: 0, stepSize: 1, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 4 },
+            },
+            y: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { autoSkip: false, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 6 },
+            },
+        },
+    };
+});
+
+// Transfer Report charts
+const TRANSFER_STATUS_CHART_COLORS = ['rgb(59, 130, 246)', 'rgb(34, 197, 94)', 'rgb(245, 158, 11)'];
+const transferStatusChartData = computed(() => {
+    if (!isTransferReport.value) return { labels: [], datasets: [] };
+    const s = transferReportSummary.value;
+    const total = Number(s.total_transfers) || 0;
+    const received = Number(s.received) || 0;
+    const rejected = Number(s.rejected) || 0;
+    if (total === 0 && received === 0 && rejected === 0) return { labels: [], datasets: [] };
+    return {
+        labels: ['Total Transfers', 'Received', 'Rejected'],
+        datasets: [{
+            label: 'Count',
+            data: [total, received, rejected],
+            backgroundColor: TRANSFER_STATUS_CHART_COLORS,
+            borderColor: TRANSFER_STATUS_CHART_COLORS,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+const transferStatusChartOptions = computed(() => {
+    const data = transferStatusChartData.value?.datasets?.[0]?.data ?? [];
+    const yMax = data.length ? Math.max(...data) + 2 : 10;
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        layout: { padding: { top: 24, right: 12, bottom: 12, left: 6 } },
+        indexAxis: 'x',
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true },
+            datalabels: {
+                anchor: 'end',
+                align: 'top',
+                color: '#000000',
+                font: { weight: 'bold', size: 12 },
+                formatter: (v) => v,
+                padding: 12,
+                offset: 8,
+            },
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: yMax,
+                grid: { color: 'rgba(0,0,0,0.1)', drawTicks: false },
+                border: { display: true, color: '#000000' },
+                ticks: { precision: 0, stepSize: 1, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 4 },
+            },
+            x: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { maxRotation: 45, minRotation: 0, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 6 },
+            },
+        },
+    };
+});
+const TRANSFER_TYPE_CHART_COLORS = ['rgb(245, 158, 11)', 'rgb(34, 197, 94)', 'rgb(59, 130, 246)', 'rgb(156, 163, 175)'];
+const transferTypeChartData = computed(() => {
+    if (!isTransferReport.value) return { labels: [], datasets: [] };
+    const s = transferReportSummary.value;
+    const w2f = Number(s.warehouse_to_facility) || 0;
+    const w2w = Number(s.warehouse_to_warehouse) || 0;
+    const f2w = Number(s.facility_to_warehouse) || 0;
+    const f2f = Number(s.facility_to_facility) || 0;
+    if (w2f === 0 && w2w === 0 && f2w === 0 && f2f === 0) return { labels: [], datasets: [] };
+    return {
+        labels: ['Warehouse to Facility', 'Warehouse to Warehouse', 'Facility to Warehouse', 'Facility to Facility'],
+        datasets: [{
+            label: 'Count',
+            data: [w2f, w2w, f2w, f2f],
+            backgroundColor: TRANSFER_TYPE_CHART_COLORS,
+            borderColor: TRANSFER_TYPE_CHART_COLORS,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+const transferTypeChartOptions = computed(() => {
+    const data = transferTypeChartData.value?.datasets?.[0]?.data ?? [];
+    const yMax = data.length ? Math.max(...data) + 2 : 10;
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        layout: { padding: { top: 24, right: 12, bottom: 12, left: 6 } },
+        indexAxis: 'x',
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true },
+            datalabels: {
+                anchor: 'end',
+                align: 'top',
+                color: '#000000',
+                font: { weight: 'bold', size: 12 },
+                formatter: (v) => v,
+                padding: 12,
+                offset: 8,
+            },
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: yMax,
+                grid: { color: 'rgba(0,0,0,0.1)', drawTicks: false },
+                border: { display: true, color: '#000000' },
+                ticks: { precision: 0, stepSize: 1, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 4 },
+            },
+            x: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { maxRotation: 45, minRotation: 0, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 6 },
+            },
+        },
+    };
+});
+// Transfer Reason: horizontal bar (Wrong Item, Slow Moving Item, Overstock Item)
+const TRANSFER_REASON_CHART_COLORS = ['rgb(245, 158, 11)', 'rgb(14, 165, 233)', 'rgb(34, 197, 94)'];
+const transferReasonChartData = computed(() => {
+    if (!isTransferReport.value) return { labels: [], datasets: [] };
+    const s = transferReportSummary.value;
+    const wrongItem = Number(s.reason_wrong_item) || 0;
+    const slowMoving = Number(s.reason_slow_moving) || 0;
+    const overstock = Number(s.reason_overstock) || 0;
+    if (wrongItem === 0 && slowMoving === 0 && overstock === 0) return { labels: [], datasets: [] };
+    return {
+        labels: ['Wrong Item', 'Slow Moving Item', 'Overstock Item'],
+        datasets: [{
+            label: 'Count',
+            data: [wrongItem, slowMoving, overstock],
+            backgroundColor: TRANSFER_REASON_CHART_COLORS,
+            borderColor: TRANSFER_REASON_CHART_COLORS,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+const transferReasonChartOptions = computed(() => {
+    const data = transferReasonChartData.value?.datasets?.[0]?.data ?? [];
+    const xMax = data.length ? Math.max(...data) + 2 : 12;
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        layout: { padding: { top: 6, right: 40, bottom: 12, left: 6 } },
+        indexAxis: 'y',
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true },
+            datalabels: {
+                anchor: 'end',
+                align: 'start',
+                color: '#000000',
+                font: { weight: 'bold', size: 12 },
+                formatter: (v) => v,
+                padding: 8,
+                offset: 16,
+            },
+        },
+        scales: {
+            x: {
+                beginAtZero: true,
+                max: xMax,
+                grid: { color: 'rgba(0,0,0,0.1)', drawTicks: false },
+                border: { display: true, color: '#000000' },
+                ticks: { precision: 0, stepSize: 2, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 4 },
+            },
+            y: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { autoSkip: false, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 6 },
+            },
+        },
+    };
+});
+
+// Procurement Report charts
+const PROCUREMENT_STATUS_COLORS = ['rgb(59, 130, 246)', 'rgb(34, 197, 94)', 'rgb(245, 158, 11)'];
+const procurementStatusChartData = computed(() => {
+    if (!isProcurementReport.value) return { labels: [], datasets: [] };
+    const s = procurementReportSummary.value;
+    const total = Number(s.total_pos) || 0;
+    const completed = Number(s.completed) || 0;
+    const rejected = Number(s.rejected) || 0;
+    if (total === 0 && completed === 0 && rejected === 0) return { labels: [], datasets: [] };
+    return {
+        labels: ['Total POs', 'Received', 'Rejected'],
+        datasets: [{
+            label: 'Count',
+            data: [total, completed, rejected],
+            backgroundColor: PROCUREMENT_STATUS_COLORS,
+            borderColor: PROCUREMENT_STATUS_COLORS,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+const procurementStatusChartOptions = computed(() => {
+    const data = procurementStatusChartData.value?.datasets?.[0]?.data ?? [];
+    const yMax = data.length ? Math.max(...data) + 2 : 10;
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        layout: { padding: { top: 24, right: 12, bottom: 12, left: 6 } },
+        indexAxis: 'x',
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true },
+            datalabels: {
+                anchor: 'end',
+                align: 'top',
+                color: '#000000',
+                font: { weight: 'bold', size: 12 },
+                formatter: (v) => v,
+                padding: 12,
+                offset: 8,
+            },
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: yMax,
+                grid: { color: 'rgba(0,0,0,0.1)', drawTicks: false },
+                border: { display: true, color: '#000000' },
+                ticks: { precision: 0, stepSize: 1, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 4 },
+            },
+            x: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { maxRotation: 45, minRotation: 0, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 6 },
+            },
+        },
+    };
+});
+const PROCUREMENT_DELIVERY_COLORS = ['rgb(59, 130, 246)', 'rgb(249, 115, 22)', 'rgb(14, 165, 233)'];
+const procurementDeliveryChartData = computed(() => {
+    if (!isProcurementReport.value) return { labels: [], datasets: [] };
+    const s = procurementReportSummary.value;
+    const totalDelivered = Number(s.total_delivered) || 0;
+    const onTime = Number(s.on_time) || 0;
+    const late = Number(s.late) || 0;
+    if (totalDelivered === 0 && onTime === 0 && late === 0) return { labels: [], datasets: [] };
+    return {
+        labels: ['Total Delivered POs', 'On-time', 'Late'],
+        datasets: [{
+            label: 'Count',
+            data: [totalDelivered, onTime, late],
+            backgroundColor: PROCUREMENT_DELIVERY_COLORS,
+            borderColor: PROCUREMENT_DELIVERY_COLORS,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+const procurementDeliveryChartOptions = computed(() => {
+    const data = procurementDeliveryChartData.value?.datasets?.[0]?.data ?? [];
+    const xMax = data.length ? Math.max(...data) + 2 : 10;
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        layout: { padding: { top: 6, right: 40, bottom: 12, left: 6 } },
+        indexAxis: 'y',
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true },
+            datalabels: {
+                anchor: 'end',
+                align: 'start',
+                color: '#000000',
+                font: { weight: 'bold', size: 12 },
+                formatter: (v) => v,
+                padding: 8,
+                offset: 16,
+            },
+        },
+        scales: {
+            x: {
+                beginAtZero: true,
+                max: xMax,
+                grid: { color: 'rgba(0,0,0,0.1)', drawTicks: false },
+                border: { display: true, color: '#000000' },
+                ticks: { precision: 0, stepSize: 1, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 4 },
+            },
+            y: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { autoSkip: false, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 6 },
+            },
+        },
+    };
+});
+const PROCUREMENT_QTY_COLORS = ['rgb(34, 197, 94)', 'rgb(245, 158, 11)', 'rgb(14, 165, 233)'];
+const procurementQtyChartData = computed(() => {
+    if (!isProcurementReport.value) return { labels: [], datasets: [] };
+    const s = procurementReportSummary.value;
+    const good = Number(s.qty_good) || 0;
+    const fair = Number(s.qty_fair) || 0;
+    const poor = Number(s.qty_poor) || 0;
+    if (good === 0 && fair === 0 && poor === 0) return { labels: [], datasets: [] };
+    return {
+        labels: ['Good', 'Fair', 'Poor'],
+        datasets: [{
+            label: 'POs',
+            data: [good, fair, poor],
+            backgroundColor: PROCUREMENT_QTY_COLORS,
+            borderColor: PROCUREMENT_QTY_COLORS,
+            borderWidth: 0,
+            borderRadius: 0,
+            barPercentage: 0.65,
+            categoryPercentage: 0.8,
+        }],
+    };
+});
+const procurementQtyChartOptions = computed(() => {
+    const data = procurementQtyChartData.value?.datasets?.[0]?.data ?? [];
+    const yMax = data.length ? Math.max(...data) + 2 : 10;
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        layout: { padding: { top: 24, right: 12, bottom: 12, left: 6 } },
+        indexAxis: 'x',
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true },
+            datalabels: {
+                anchor: 'end',
+                align: 'top',
+                color: '#000000',
+                font: { weight: 'bold', size: 12 },
+                formatter: (v) => v,
+                padding: 12,
+                offset: 8,
+            },
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: yMax,
+                grid: { color: 'rgba(0,0,0,0.1)', drawTicks: false },
+                border: { display: true, color: '#000000' },
+                ticks: { precision: 0, stepSize: 1, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 4 },
+            },
+            x: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { maxRotation: 45, minRotation: 0, font: { size: 10, weight: 'bold' }, color: '#000000', padding: 6 },
+            },
+        },
+    };
+});
+
 watch(() => filters.value.region_id, () => {
     filters.value.district_id = null;
     if (filters.value.warehouse_or_facility?.startsWith('facility:')) {
@@ -1178,6 +2014,9 @@ async function generateReport() {
                 supplyClassColumns.value = d.supply_class_columns || [];
                 reportData.value = [];
                 facilitiesReportTypeColumns.value = [];
+                orderReportSummary.value = {};
+                transferReportSummary.value = {};
+                procurementReportSummary.value = {};
             } else if (filters.value.report_type === 'liquidation_disposal') {
                 const d = data.data || {};
                 reportData.value = d.rows || [];
@@ -1185,6 +2024,9 @@ async function generateReport() {
                 categoryColumns.value = [];
                 supplyClassColumns.value = [];
                 facilitiesReportTypeColumns.value = [];
+                orderReportSummary.value = {};
+                transferReportSummary.value = {};
+                procurementReportSummary.value = {};
             } else if (filters.value.report_type === 'expiry_report') {
                 const d = data.data || {};
                 reportData.value = d.rows || [];
@@ -1192,6 +2034,9 @@ async function generateReport() {
                 categoryColumns.value = [];
                 supplyClassColumns.value = [];
                 facilitiesReportTypeColumns.value = [];
+                orderReportSummary.value = {};
+                transferReportSummary.value = {};
+                procurementReportSummary.value = {};
             } else if (filters.value.report_type === 'facilities_report') {
                 const d = data.data || {};
                 reportData.value = d.rows || [];
@@ -1199,12 +2044,48 @@ async function generateReport() {
                 productReportRows.value = [];
                 categoryColumns.value = [];
                 supplyClassColumns.value = [];
+                orderReportSummary.value = {};
+                transferReportSummary.value = {};
+                procurementReportSummary.value = {};
+            } else if (filters.value.report_type === 'order_report') {
+                const d = data.data || {};
+                reportData.value = d.rows || [];
+                orderReportSummary.value = d.summary || {};
+                productReportRows.value = [];
+                categoryColumns.value = [];
+                supplyClassColumns.value = [];
+                facilitiesReportTypeColumns.value = [];
+                transferReportSummary.value = {};
+                procurementReportSummary.value = {};
+            } else if (filters.value.report_type === 'transfer_report') {
+                const d = data.data || {};
+                reportData.value = d.rows || [];
+                transferReportSummary.value = d.summary || {};
+                productReportRows.value = [];
+                categoryColumns.value = [];
+                supplyClassColumns.value = [];
+                facilitiesReportTypeColumns.value = [];
+                orderReportSummary.value = {};
+                procurementReportSummary.value = {};
+            } else if (filters.value.report_type === 'procurement_report') {
+                const d = data.data || {};
+                reportData.value = d.rows || [];
+                procurementReportSummary.value = d.summary || {};
+                productReportRows.value = [];
+                categoryColumns.value = [];
+                supplyClassColumns.value = [];
+                facilitiesReportTypeColumns.value = [];
+                orderReportSummary.value = {};
+                transferReportSummary.value = {};
             } else {
                 reportData.value = data.data || [];
                 productReportRows.value = [];
                 categoryColumns.value = [];
                 supplyClassColumns.value = [];
                 facilitiesReportTypeColumns.value = [];
+                orderReportSummary.value = {};
+                transferReportSummary.value = {};
+                procurementReportSummary.value = {};
             }
         } else {
             reportData.value = [];
@@ -1212,6 +2093,9 @@ async function generateReport() {
             categoryColumns.value = [];
             supplyClassColumns.value = [];
             facilitiesReportTypeColumns.value = [];
+            orderReportSummary.value = {};
+            transferReportSummary.value = {};
+            procurementReportSummary.value = {};
         }
     } catch (e) {
         reportData.value = [];

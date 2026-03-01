@@ -17,6 +17,9 @@ use App\Models\Warehouse;
 use App\Models\User;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Transfer;
+use App\Models\TransferItem;
+use App\Models\InventoryAllocation;
 use App\Models\Facility;
 use App\Models\FacilityInventory;
 use App\Models\FacilityInventoryItem;
@@ -30,6 +33,8 @@ use App\Models\ReceivedBackorder;
 use App\Models\Liquidate;
 use App\Models\Disposal;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
+use App\Models\PackingListItem;
 use App\Models\ReceivedQuantity;
 use App\Jobs\ProcessPhysicalCountApprovalJob;
 use App\Models\IssueQuantityReport;
@@ -40,6 +45,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Mail;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Models\FacilityMonthlyReport;
@@ -125,6 +131,8 @@ class ReportController extends Controller
             ['value' => 'expiry_report', 'label' => 'Expiry Report'],
             ['value' => 'facilities_report', 'label' => 'Facilities Report'],
             ['value' => 'order_report', 'label' => 'Order Report'],
+            ['value' => 'transfer_report', 'label' => 'Transfer Report'],
+            ['value' => 'procurement_report', 'label' => 'Procurement Report'],
         ];
         return Inertia::render('Report/InventoryReportsUnified', [
             'regions' => $regions,
@@ -142,7 +150,7 @@ class ReportController extends Controller
     public function inventoryReportsUnifiedData(Request $request)
     {
         $request->validate([
-            'report_type' => 'required|in:warehouse_inventory,facility_monthly_consumption,product_report,liquidation_disposal,expiry_report,facilities_report,order_report',
+            'report_type' => 'required|in:warehouse_inventory,facility_monthly_consumption,product_report,liquidation_disposal,expiry_report,facilities_report,order_report,transfer_report,procurement_report',
             'region_id' => 'nullable|exists:regions,id',
             'district_id' => 'nullable|exists:districts,id',
             'warehouse_id' => 'nullable|exists:warehouses,id',
@@ -195,6 +203,24 @@ class ReportController extends Controller
 
         if ($reportType === 'order_report') {
             $result = $this->getOrderReportData($request);
+            return response()->json(['success' => true, 'data' => $result]);
+        }
+
+        if ($reportType === 'transfer_report') {
+            $result = $this->getTransferReportData($request);
+            return response()->json(['success' => true, 'data' => $result]);
+        }
+
+        if ($reportType === 'procurement_report') {
+            $warehouseIds = $this->resolveWarehouseIdsFromFilters($request);
+            if (empty($warehouseIds)) {
+                return response()->json([
+                    'success' => false,
+                    'data' => ['rows' => [], 'summary' => $this->getProcurementReportSummary([])],
+                    'message' => 'Procurement Report requires Region, District or Warehouse.',
+                ]);
+            }
+            $result = $this->getProcurementReportData($request, $warehouseIds);
             return response()->json(['success' => true, 'data' => $result]);
         }
 
@@ -680,8 +706,6 @@ class ReportController extends Controller
 
     /**
      * Order Report: one row per facility with Total Orders, Completed/Rejected, Delivery Status (On-time/Late), Items and QTY Fulfillment (Good/Fair/Poor).
-     * Completed = status received; Rejected = status rejected. On-time = received on or before expected_date + 2 days.
-     * Items fulfillment % = (supplied ordered items / ordered items) * 100; QTY % = (quantity_to_release / ordered quantity) * 100.
      */
     private function getOrderReportData(Request $request): array
     {
@@ -734,19 +758,13 @@ class ReportController extends Controller
                     ->get(['id', 'expected_date', 'received_at']);
                 foreach ($receivedOrdersWithDate as $o) {
                     $cutoff = Carbon::parse($o->expected_date)->addDays(2)->endOfDay();
-                    $receivedAt = $o->received_at ? Carbon::parse($o->received_at) : null;
-                    if ($receivedAt && $receivedAt->lte($cutoff)) {
+                    $receivedAt = Carbon::parse($o->received_at);
+                    if ($receivedAt->lte($cutoff)) {
                         $ontimeCount++;
                     } else {
                         $lateCount++;
                     }
                 }
-                $receivedNoDate = Order::whereIn('id', $receivedOrderIds)
-                    ->where(function ($q) {
-                        $q->whereNull('received_at')->orWhereNull('expected_date');
-                    })
-                    ->count();
-                $ontimeCount += $receivedNoDate;
             }
 
             $deliveredTotal = $ontimeCount + $lateCount;
@@ -765,7 +783,6 @@ class ReportController extends Controller
             $qtyGood = 0;
             $qtyFair = 0;
             $qtyPoor = 0;
-            $ordersWithItems = 0;
 
             if (!empty($orderIdsForFacility)) {
                 $orderItems = OrderItem::query()
@@ -775,7 +792,7 @@ class ReportController extends Controller
                 foreach ($orderItems as $item) {
                     $byOrder[$item->order_id][] = $item;
                 }
-                foreach ($byOrder as $oid => $items) {
+                foreach ($byOrder as $items) {
                     $totalItems = count($items);
                     $suppliedItems = 0;
                     $totalQty = 0;
@@ -790,7 +807,6 @@ class ReportController extends Controller
                             $suppliedItems++;
                         }
                     }
-                    $ordersWithItems++;
                     $itemsRate = $totalItems > 0 ? ($suppliedItems / $totalItems) * 100 : 0;
                     $qtyRate = $totalQty > 0 ? ($releasedQty / $totalQty) * 100 : 0;
                     if ($itemsRate > 90) {
@@ -852,9 +868,6 @@ class ReportController extends Controller
         return ['rows' => $rows, 'summary' => $summary];
     }
 
-    /**
-     * Summary for Order Report charts (totals across selected facilities).
-     */
     private function getOrderReportSummary(array $totals): array
     {
         return [
@@ -864,6 +877,432 @@ class ReportController extends Controller
             'total_delivered' => $totals['total_delivered'] ?? 0,
             'on_time' => $totals['on_time'] ?? 0,
             'late' => $totals['late'] ?? 0,
+        ];
+    }
+
+    /** Transfer type labels for Transfer Report (chart and table). */
+    private const TRANSFER_TYPE_W2F = 'Warehouse to Facility';
+    private const TRANSFER_TYPE_W2W = 'Warehouse to Warehouse';
+    private const TRANSFER_TYPE_F2W = 'Facility to Warehouse';
+    private const TRANSFER_TYPE_F2F = 'Facility to Facility';
+
+    /**
+     * Derive transfer type from from/to warehouse/facility IDs.
+     */
+    private function deriveTransferType(Transfer $t): ?string
+    {
+        if ($t->from_warehouse_id && $t->to_facility_id) {
+            return self::TRANSFER_TYPE_W2F;
+        }
+        if ($t->from_warehouse_id && $t->to_warehouse_id) {
+            return self::TRANSFER_TYPE_W2W;
+        }
+        if ($t->from_facility_id && $t->to_warehouse_id) {
+            return self::TRANSFER_TYPE_F2W;
+        }
+        if ($t->from_facility_id && $t->to_facility_id) {
+            return self::TRANSFER_TYPE_F2F;
+        }
+        return null;
+    }
+
+    /**
+     * Normalize transfer reason for report. All values are read from inventory_allocations.transfer_reason.
+     * Maps stored reason text to report categories: Wrong Item, Overstock, Soon to Expire, Slow Moving.
+     */
+    private function normalizeTransferReason(?string $reason): ?string
+    {
+        if ($reason === null || $reason === '') {
+            return null;
+        }
+        $r = strtolower(trim($reason));
+        // Wrong Item: from transfer_reason (e.g. "Wrong Item" from reasons table)
+        if (str_contains($r, 'wrong item') || str_contains($r, 'wrong')) {
+            return 'Wrong Item';
+        }
+        if (str_contains($r, 'overstock')) {
+            return 'Overstock';
+        }
+        if (str_contains($r, 'expire') || str_contains($r, 'expir')) {
+            return 'Soon to Expire';
+        }
+        if (str_contains($r, 'slow')) {
+            return 'Slow Moving';
+        }
+        return $reason;
+    }
+
+    /**
+     * Transfer Report: one row per facility with Total/Completed/Rejected transfers, Transfer Reasons (Overstock, Soon to Expire, Slow Moving), Transfer Type counts.
+     */
+    private function getTransferReportData(Request $request): array
+    {
+        $facilityIds = $this->resolveFacilityIdsFromFilters($request);
+        if (empty($facilityIds)) {
+            return ['rows' => [], 'summary' => $this->getTransferReportSummary([])];
+        }
+
+        $baseQuery = Transfer::query()->where(function ($q) use ($facilityIds) {
+            $q->whereIn('from_facility_id', $facilityIds)->orWhereIn('to_facility_id', $facilityIds);
+        });
+        if ($request->filled('year') && $request->filled('month')) {
+            $monthStart = sprintf('%04d-%02d-01', (int) $request->year, (int) $request->month);
+            $monthEnd = Carbon::parse($monthStart)->endOfMonth()->format('Y-m-d');
+            $baseQuery->whereBetween('transfer_date', [$monthStart, $monthEnd]);
+        } elseif ($request->filled('year')) {
+            $baseQuery->whereYear('transfer_date', (int) $request->year);
+        }
+
+        $facilities = Facility::whereIn('id', $facilityIds)->orderBy('name')->get(['id', 'name']);
+        $rows = [];
+        $summaryTotal = 0;
+        $summaryReceived = 0;
+        $summaryRejected = 0;
+        $summaryWrongItem = 0;
+        $summaryOverstock = 0;
+        $summarySlowMoving = 0;
+        $summaryW2F = 0;
+        $summaryW2W = 0;
+        $summaryF2W = 0;
+        $summaryF2F = 0;
+
+        foreach ($facilities as $facility) {
+            $q = (clone $baseQuery)->where(function ($q) use ($facility) {
+                $q->where('from_facility_id', $facility->id)->orWhere('to_facility_id', $facility->id);
+            });
+            $totalTransfers = $q->count();
+            $received = (clone $q)->where('status', 'received')->count();
+            $rejected = (clone $q)->where('status', 'rejected')->count();
+            $completedPct = $totalTransfers > 0 ? round($received / $totalTransfers * 100, 1) : 0;
+            $rejectedPct = $totalTransfers > 0 ? round($rejected / $totalTransfers * 100, 1) : 0;
+
+            $transferIds = (clone $q)->pluck('id')->toArray();
+            $wrongItem = 0;
+            $overstock = 0;
+            $soonToExpire = 0;
+            $slowMoving = 0;
+            $w2f = 0;
+            $w2w = 0;
+            $f2w = 0;
+            $f2f = 0;
+
+            if (!empty($transferIds)) {
+                $transferItemIds = TransferItem::whereIn('transfer_id', $transferIds)->pluck('id')->toArray();
+                if (!empty($transferItemIds)) {
+                    $reasonColumn = Schema::hasColumn('inventory_allocations', 'transfer_reason')
+                        ? 'transfer_reason'
+                        : (Schema::hasColumn('inventory_allocations', 'reason') ? 'reason' : null);
+                    if ($reasonColumn) {
+                        $reasonValues = DB::table('inventory_allocations')
+                            ->whereIn('transfer_item_id', $transferItemIds)
+                            ->whereNotNull($reasonColumn)
+                            ->where($reasonColumn, '!=', '')
+                            ->pluck($reasonColumn);
+                        foreach ($reasonValues as $reasonText) {
+                            $norm = $this->normalizeTransferReason($reasonText);
+                            if ($norm === 'Wrong Item') {
+                                $wrongItem++;
+                            } elseif ($norm === 'Overstock') {
+                                $overstock++;
+                            } elseif ($norm === 'Soon to Expire') {
+                                $soonToExpire++;
+                            } elseif ($norm === 'Slow Moving') {
+                                $slowMoving++;
+                            }
+                        }
+                    }
+                }
+                $transfersForType = Transfer::whereIn('id', $transferIds)->get(['from_warehouse_id', 'to_warehouse_id', 'from_facility_id', 'to_facility_id']);
+                foreach ($transfersForType as $t) {
+                    $type = $this->deriveTransferType($t);
+                    if ($type === self::TRANSFER_TYPE_W2F) {
+                        $w2f++;
+                    } elseif ($type === self::TRANSFER_TYPE_W2W) {
+                        $w2w++;
+                    } elseif ($type === self::TRANSFER_TYPE_F2W) {
+                        $f2w++;
+                    } elseif ($type === self::TRANSFER_TYPE_F2F) {
+                        $f2f++;
+                    }
+                }
+            }
+
+            $summaryTotal += $totalTransfers;
+            $summaryReceived += $received;
+            $summaryRejected += $rejected;
+            $summaryWrongItem += $wrongItem;
+            $summaryOverstock += $overstock;
+            $summarySlowMoving += $slowMoving;
+            $summaryW2F += $w2f;
+            $summaryW2W += $w2w;
+            $summaryF2W += $f2w;
+            $summaryF2F += $f2f;
+
+            $rows[] = [
+                'facility_name' => $facility->name ?: 'Facility #' . $facility->id,
+                'total_transfers' => $totalTransfers,
+                'completed_transfers' => $received,
+                'completed_pct' => $completedPct,
+                'rejected_transfers' => $rejected,
+                'rejected_pct' => $rejectedPct,
+                'reason_wrong_item' => $wrongItem,
+                'reason_overstock' => $overstock,
+                'reason_soon_to_expire' => $soonToExpire,
+                'reason_slow_moving' => $slowMoving,
+                'type_warehouse_to_facility' => $w2f,
+                'type_warehouse_to_warehouse' => $w2w,
+                'type_facility_to_warehouse' => $f2w,
+                'type_facility_to_facility' => $f2f,
+            ];
+        }
+
+        $summary = $this->getTransferReportSummary([
+            'total_transfers' => $summaryTotal,
+            'received' => $summaryReceived,
+            'rejected' => $summaryRejected,
+            'reason_wrong_item' => $summaryWrongItem,
+            'reason_overstock' => $summaryOverstock,
+            'reason_slow_moving' => $summarySlowMoving,
+            'warehouse_to_facility' => $summaryW2F,
+            'warehouse_to_warehouse' => $summaryW2W,
+            'facility_to_warehouse' => $summaryF2W,
+            'facility_to_facility' => $summaryF2F,
+        ]);
+
+        return ['rows' => $rows, 'summary' => $summary];
+    }
+
+    private function getTransferReportSummary(array $totals): array
+    {
+        return [
+            'total_transfers' => $totals['total_transfers'] ?? 0,
+            'received' => $totals['received'] ?? 0,
+            'rejected' => $totals['rejected'] ?? 0,
+            'reason_wrong_item' => $totals['reason_wrong_item'] ?? 0,
+            'reason_overstock' => $totals['reason_overstock'] ?? 0,
+            'reason_slow_moving' => $totals['reason_slow_moving'] ?? 0,
+            'warehouse_to_facility' => $totals['warehouse_to_facility'] ?? 0,
+            'warehouse_to_warehouse' => $totals['warehouse_to_warehouse'] ?? 0,
+            'facility_to_warehouse' => $totals['facility_to_warehouse'] ?? 0,
+            'facility_to_facility' => $totals['facility_to_facility'] ?? 0,
+        ];
+    }
+
+    /**
+     * Procurement Report: one row per warehouse (POs + Packing Lists). Total POs, Completed/Rejected, Avg Lead Time,
+     * Delivery Status (On-time/Late), Items & QTY Fulfillment (Good/Fair/Poor), Total POs Cost.
+     */
+    private function getProcurementReportData(Request $request, array $warehouseIds): array
+    {
+        $warehouses = Warehouse::whereIn('id', $warehouseIds)->orderBy('name')->get(['id', 'name']);
+        $rows = [];
+        $summaryTotal = 0;
+        $summaryCompleted = 0;
+        $summaryRejected = 0;
+        $summaryOnTime = 0;
+        $summaryLate = 0;
+        $summaryCost = 0.0;
+        $qtyGood = 0;
+        $qtyFair = 0;
+        $qtyPoor = 0;
+
+        $poDateFilter = function ($q) use ($request) {
+            if ($request->filled('year') && $request->filled('month')) {
+                $monthStart = sprintf('%04d-%02d-01', (int) $request->year, (int) $request->month);
+                $monthEnd = Carbon::parse($monthStart)->endOfMonth()->format('Y-m-d');
+                $q->whereBetween('po_date', [$monthStart, $monthEnd]);
+            } elseif ($request->filled('year')) {
+                $q->whereYear('po_date', (int) $request->year);
+            }
+        };
+
+        foreach ($warehouses as $warehouse) {
+            $poIds = PurchaseOrder::query()
+                ->whereHas('packingLists.items', fn ($q) => $q->where('warehouse_id', $warehouse->id))
+                ->when($request->filled('year') || $request->filled('month'), $poDateFilter)
+                ->pluck('id')
+                ->toArray();
+
+            $totalPos = count($poIds);
+            $completed = $totalPos > 0 ? PurchaseOrder::whereIn('id', $poIds)->where('status', 'completed')->count() : 0;
+            $rejected = $totalPos > 0 ? PurchaseOrder::whereIn('id', $poIds)->where('status', 'rejected')->count() : 0;
+            $completedPct = $totalPos > 0 ? round($completed / $totalPos * 100, 1) : 0;
+            $rejectedPct = $totalPos > 0 ? round($rejected / $totalPos * 100, 1) : 0;
+
+            $avgLeadTime = 0;
+            $onTimeCount = 0;
+            $lateCount = 0;
+            $itemsGoodPct = 0;
+            $itemsFairPct = 0;
+            $itemsPoorPct = 0;
+            $qtyGoodPct = 0;
+            $qtyFairPct = 0;
+            $qtyPoorPct = 0;
+            $totalCost = 0.0;
+            $whLeadTimeSum = 0;
+            $whLeadTimeCount = 0;
+
+            if ($totalPos > 0) {
+                $pos = PurchaseOrder::with(['items', 'packingLists' => fn ($q) => $q->whereHas('items', fn ($q2) => $q2->where('warehouse_id', $warehouse->id))])
+                    ->whereIn('id', $poIds)
+                    ->get();
+
+                $itemsGood = 0;
+                $itemsFair = 0;
+                $itemsPoor = 0;
+                $qtyGoodN = 0;
+                $qtyFairN = 0;
+                $qtyPoorN = 0;
+
+                foreach ($pos as $po) {
+                    $totalCost += (float) $po->total_amount;
+
+                    $plIds = $po->packingLists->pluck('id')->toArray();
+                    $plReceivedDate = null;
+                    if (!empty($plIds)) {
+                        $latest = PackingList::whereIn('id', $plIds)->whereNotNull('approved_at')->orderByDesc('approved_at')->first();
+                        $plReceivedDate = $latest?->approved_at;
+                    }
+
+                    if ($po->approved_at && $plReceivedDate) {
+                        $days = (int) Carbon::parse($po->approved_at)->diffInDays(Carbon::parse($plReceivedDate), false);
+                        $whLeadTimeSum += abs($days);
+                        $whLeadTimeCount++;
+                    }
+
+                    if ($po->status === 'completed' && $po->expected_date && $plReceivedDate) {
+                        $cutoff = Carbon::parse($po->expected_date)->addDays(2)->endOfDay();
+                        if (Carbon::parse($plReceivedDate)->lte($cutoff)) {
+                            $onTimeCount++;
+                        } else {
+                            $lateCount++;
+                        }
+                    }
+
+                    $poItemIds = $po->items->pluck('id')->toArray();
+                    $receivedByPoItem = PackingListItem::whereIn('po_item_id', $poItemIds)
+                        ->where('warehouse_id', $warehouse->id)
+                        ->selectRaw('po_item_id, SUM(quantity) as received_qty')
+                        ->groupBy('po_item_id')
+                        ->pluck('received_qty', 'po_item_id');
+
+                    $totalOrderedQty = 0;
+                    $totalReceivedQty = 0;
+                    $suppliedItems = 0;
+                    $totalItems = $po->items->count();
+                    foreach ($po->items as $item) {
+                        $ordered = (int) $item->quantity;
+                        $received = (int) ($receivedByPoItem[$item->id] ?? 0);
+                        $totalOrderedQty += $ordered;
+                        $totalReceivedQty += $received;
+                        if ($ordered <= 0 || $received >= $ordered) {
+                            $suppliedItems++;
+                        }
+                    }
+
+                    $itemsRate = $totalItems > 0 ? ($suppliedItems / $totalItems) * 100 : 0;
+                    $qtyRate = $totalOrderedQty > 0 ? ($totalReceivedQty / $totalOrderedQty) * 100 : 0;
+
+                    if ($itemsRate > 90) {
+                        $itemsGood++;
+                    } elseif ($itemsRate >= 80) {
+                        $itemsFair++;
+                    } else {
+                        $itemsPoor++;
+                    }
+                    if ($qtyRate > 90) {
+                        $qtyGoodN++;
+                    } elseif ($qtyRate >= 80) {
+                        $qtyFairN++;
+                    } else {
+                        $qtyPoorN++;
+                    }
+                }
+
+                $ordersWithItems = $itemsGood + $itemsFair + $itemsPoor;
+                if ($ordersWithItems > 0) {
+                    $itemsGoodPct = round($itemsGood / $ordersWithItems * 100, 0);
+                    $itemsFairPct = round($itemsFair / $ordersWithItems * 100, 0);
+                    $itemsPoorPct = round($itemsPoor / $ordersWithItems * 100, 0);
+                }
+                $ordersWithQty = $qtyGoodN + $qtyFairN + $qtyPoorN;
+                if ($ordersWithQty > 0) {
+                    $qtyGoodPct = round($qtyGoodN / $ordersWithQty * 100, 0);
+                    $qtyFairPct = round($qtyFairN / $ordersWithQty * 100, 0);
+                    $qtyPoorPct = round($qtyPoorN / $ordersWithQty * 100, 0);
+                }
+
+                $avgLeadTime = $whLeadTimeCount > 0 ? (int) round($whLeadTimeSum / $whLeadTimeCount) : 0;
+            }
+
+            $summaryTotal += $totalPos;
+            $summaryCompleted += $completed;
+            $summaryRejected += $rejected;
+            $summaryOnTime += $onTimeCount;
+            $summaryLate += $lateCount;
+            $summaryCost += $totalCost;
+            if ($totalPos > 0) {
+                $qtyGood += (int) round($totalPos * $qtyGoodPct / 100);
+                $qtyFair += (int) round($totalPos * $qtyFairPct / 100);
+                $qtyPoor += (int) round($totalPos * $qtyPoorPct / 100);
+            }
+
+            $deliveredTotal = $onTimeCount + $lateCount;
+            $onTimePct = $deliveredTotal > 0 ? round($onTimeCount / $deliveredTotal * 100, 1) : 0;
+            $latePct = $deliveredTotal > 0 ? round($lateCount / $deliveredTotal * 100, 1) : 0;
+
+            $rows[] = [
+                'warehouse_name' => $warehouse->name ?: 'Warehouse #' . $warehouse->id,
+                'total_pos' => $totalPos,
+                'completed_pos' => $completed,
+                'completed_pct' => $completedPct,
+                'rejected_pos' => $rejected,
+                'rejected_pct' => $rejectedPct,
+                'avg_lead_time_days' => $avgLeadTime,
+                'delivery_ontime_count' => $onTimeCount,
+                'delivery_ontime_pct' => $onTimePct,
+                'delivery_late_count' => $lateCount,
+                'delivery_late_pct' => $latePct,
+                'items_good_pct' => $itemsGoodPct,
+                'items_fair_pct' => $itemsFairPct,
+                'items_poor_pct' => $itemsPoorPct,
+                'qty_good_pct' => $qtyGoodPct,
+                'qty_fair_pct' => $qtyFairPct,
+                'qty_poor_pct' => $qtyPoorPct,
+                'total_pos_cost' => round($totalCost, 2),
+            ];
+        }
+
+        $totalDelivered = $summaryOnTime + $summaryLate;
+        $summary = $this->getProcurementReportSummary([
+            'total_pos' => $summaryTotal,
+            'completed' => $summaryCompleted,
+            'rejected' => $summaryRejected,
+            'total_delivered' => $totalDelivered,
+            'on_time' => $summaryOnTime,
+            'late' => $summaryLate,
+            'total_cost' => $summaryCost,
+            'qty_good' => $qtyGood,
+            'qty_fair' => $qtyFair,
+            'qty_poor' => $qtyPoor,
+        ]);
+
+        return ['rows' => $rows, 'summary' => $summary];
+    }
+
+    private function getProcurementReportSummary(array $totals): array
+    {
+        return [
+            'total_pos' => $totals['total_pos'] ?? 0,
+            'completed' => $totals['completed'] ?? 0,
+            'rejected' => $totals['rejected'] ?? 0,
+            'total_delivered' => $totals['total_delivered'] ?? 0,
+            'on_time' => $totals['on_time'] ?? 0,
+            'late' => $totals['late'] ?? 0,
+            'total_cost' => $totals['total_cost'] ?? 0,
+            'qty_good' => $totals['qty_good'] ?? 0,
+            'qty_fair' => $totals['qty_fair'] ?? 0,
+            'qty_poor' => $totals['qty_poor'] ?? 0,
         ];
     }
 

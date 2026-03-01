@@ -18,6 +18,7 @@ class PurchaseOrder extends Model
         'status',
         'approved_by',
         'approved_at',
+        'expected_date',
         'rejected_by',
         'rejected_at',
         'reviewed_by',
@@ -32,6 +33,7 @@ class PurchaseOrder extends Model
 
     protected $casts = [
         'po_date' => 'date',
+        'expected_date' => 'date',
         'approved_at' => 'datetime',
         'rejected_at' => 'datetime',
         'reviewed_at' => 'datetime',
