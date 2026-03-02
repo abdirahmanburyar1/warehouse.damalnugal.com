@@ -15,7 +15,17 @@ class ReportScheduleController extends Controller
         'monthly_received_report' => ['key' => 'monthly_received_report_schedule', 'method' => 'monthlyReceivedReportSchedule', 'default' => ['day_of_month' => 1, 'time' => '01:00']],
         'issue_quantities' => ['key' => 'issue_quantities_schedule', 'method' => 'issueQuantitiesSchedule', 'default' => ['day_of_month' => 1, 'time' => '02:00']],
         'monthly_consumption' => ['key' => 'monthly_consumption_schedule', 'method' => 'monthlyConsumptionSchedule', 'default' => ['day_of_month' => 1, 'time' => '02:00']],
-        'inventory_monthly_report' => ['key' => 'inventory_monthly_report_schedule', 'method' => 'inventoryMonthlyReportSchedule', 'default' => ['day_of_month' => 1, 'time' => '06:00']],
+        'inventory_monthly_report' => [
+            'key' => 'inventory_monthly_report_schedule',
+            'method' => 'inventoryMonthlyReportSchedule',
+            'default' => [
+                'day_of_month' => 1,
+                'time' => '06:00',
+                'expected_number_of_reports' => 1,
+                'ontime_day_start' => 1,
+                'ontime_day_end' => 3,
+            ],
+        ],
         'orders_quarterly' => ['key' => 'orders_quarterly_schedule', 'method' => 'ordersQuarterlySchedule', 'default' => ['time' => '01:00'], 'quarterly' => true],
         'warehouse_amc' => ['key' => 'warehouse_amc_schedule', 'method' => 'warehouseAmcSchedule', 'default' => ['day_of_month' => 1, 'time' => '03:00']],
     ];
@@ -37,6 +47,11 @@ class ReportScheduleController extends Controller
             if (!empty($def['quarterly'])) {
                 unset($schedules[$slug]['day_of_month']);
             }
+            if ($slug === 'inventory_monthly_report') {
+                $schedules[$slug]['expected_number_of_reports'] = (int) ($config['expected_number_of_reports'] ?? $default['expected_number_of_reports'] ?? 1);
+                $schedules[$slug]['ontime_day_start'] = (int) ($config['ontime_day_start'] ?? $default['ontime_day_start'] ?? 1);
+                $schedules[$slug]['ontime_day_end'] = (int) ($config['ontime_day_end'] ?? $default['ontime_day_end'] ?? 3);
+            }
         }
 
         return Inertia::render('Settings/ReportSchedules/Index', [
@@ -57,6 +72,11 @@ class ReportScheduleController extends Controller
             if (empty($def['quarterly'])) {
                 $rules["{$slug}.day_of_month"] = 'required|integer|min:1|max:28';
             }
+            if ($slug === 'inventory_monthly_report') {
+                $rules["{$slug}.expected_number_of_reports"] = 'nullable|integer|min:1|max:99';
+                $rules["{$slug}.ontime_day_start"] = 'nullable|integer|min:1|max:28';
+                $rules["{$slug}.ontime_day_end"] = 'nullable|integer|min:1|max:28';
+            }
         }
         $validated = $request->validate($rules);
 
@@ -73,6 +93,14 @@ class ReportScheduleController extends Controller
             $config = ['time' => $time];
             if (empty($def['quarterly'])) {
                 $config['day_of_month'] = (int) ($data['day_of_month'] ?? 1);
+            }
+            if ($slug === 'inventory_monthly_report') {
+                $default = $def['default'];
+                $config['expected_number_of_reports'] = (int) ($data['expected_number_of_reports'] ?? $default['expected_number_of_reports'] ?? 1);
+                $start = (int) ($data['ontime_day_start'] ?? $default['ontime_day_start'] ?? 1);
+                $end = (int) ($data['ontime_day_end'] ?? $default['ontime_day_end'] ?? 3);
+                $config['ontime_day_start'] = max(1, min(28, $start));
+                $config['ontime_day_end'] = max($config['ontime_day_start'], min(28, $end));
             }
             EmailNotificationSetting::updateOrCreate(
                 ['key' => $def['key']],

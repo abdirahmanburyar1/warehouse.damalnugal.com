@@ -66,6 +66,49 @@
                                 <p v-if="scheduleDef.quarterly" class="mt-0.5 text-xs text-slate-500">Runs on quarter start dates only: Dec 1, Mar 1, Jun 1, Sep 1.</p>
                             </div>
                         </div>
+                        <!-- Inventory monthly report: submission expectations (for report submitting time status) -->
+                        <div v-if="slug === 'inventory_monthly_report'" class="pt-4 mt-4 border-t border-slate-200 space-y-4">
+                            <p class="text-sm font-medium text-slate-700">Report submission expectations</p>
+                            <p class="text-xs text-slate-500">Used to determine expected number of reports and on-time vs late submission (e.g. for Report Submitting Time Status).</p>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div>
+                                    <label :for="`expected_${slug}`" class="block text-sm font-medium text-slate-700 mb-1">Expected number of reports</label>
+                                    <input
+                                        :id="`expected_${slug}`"
+                                        v-model.number="form[slug].expected_number_of_reports"
+                                        type="number"
+                                        min="1"
+                                        max="99"
+                                        class="block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400"
+                                    />
+                                    <p class="mt-0.5 text-xs text-slate-500">Default: 1</p>
+                                </div>
+                                <div>
+                                    <label :for="`ontime_start_${slug}`" class="block text-sm font-medium text-slate-700 mb-1">Ontime submission: from day</label>
+                                    <input
+                                        :id="`ontime_start_${slug}`"
+                                        v-model.number="form[slug].ontime_day_start"
+                                        type="number"
+                                        min="1"
+                                        max="28"
+                                        class="block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400"
+                                    />
+                                    <p class="mt-0.5 text-xs text-slate-500">Day of month (e.g. 1)</p>
+                                </div>
+                                <div>
+                                    <label :for="`ontime_end_${slug}`" class="block text-sm font-medium text-slate-700 mb-1">Ontime submission: to day</label>
+                                    <input
+                                        :id="`ontime_end_${slug}`"
+                                        v-model.number="form[slug].ontime_day_end"
+                                        type="number"
+                                        min="1"
+                                        max="28"
+                                        class="block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400"
+                                    />
+                                    <p class="mt-0.5 text-xs text-slate-500">Day of month (e.g. 3 = ontime 1–3)</p>
+                                </div>
+                            </div>
+                        </div>
                         <!-- Run now: all schedules -->
                         <div class="pt-2 border-t border-slate-100">
                             <p class="text-xs text-slate-500 mb-2">Run this task now (uses previous month for monthly reports).</p>
@@ -177,6 +220,11 @@ function buildFormFromSchedules() {
             day_of_month: def.quarterly ? undefined : Math.max(1, Math.min(28, parseInt(s.day_of_month, 10) || 1)),
             time: normalizeTime(s.time || '01:00'),
         };
+        if (slug === 'inventory_monthly_report') {
+            f[slug].expected_number_of_reports = Math.max(1, Math.min(99, parseInt(s.expected_number_of_reports, 10) || 1));
+            f[slug].ontime_day_start = Math.max(1, Math.min(28, parseInt(s.ontime_day_start, 10) || 1));
+            f[slug].ontime_day_end = Math.max(1, Math.min(28, parseInt(s.ontime_day_end, 10) || 3));
+        }
     }
     return f;
 }
@@ -200,6 +248,11 @@ function submit() {
         };
         if (!def.quarterly) {
             payload[slug].day_of_month = Math.max(1, Math.min(28, parseInt(form.value[slug].day_of_month, 10) || 1));
+        }
+        if (slug === 'inventory_monthly_report') {
+            payload[slug].expected_number_of_reports = Math.max(1, Math.min(99, parseInt(form.value[slug].expected_number_of_reports, 10) || 1));
+            payload[slug].ontime_day_start = Math.max(1, Math.min(28, parseInt(form.value[slug].ontime_day_start, 10) || 1));
+            payload[slug].ontime_day_end = Math.max(1, Math.min(28, parseInt(form.value[slug].ontime_day_end, 10) || 3));
         }
     }
     router.put(route('settings.report-schedules.update'), payload, {
