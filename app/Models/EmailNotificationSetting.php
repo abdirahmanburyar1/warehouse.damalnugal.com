@@ -79,4 +79,10 @@ class EmailNotificationSetting extends Model
     {
         return static::getForKey('warehouse_amc_schedule');
     }
+
+    /** Schedule for facility monthly (LMIS) report (day_of_month, time in config). */
+    public static function facilityMonthlyReportSchedule(): ?self
+    {
+        return static::getForKey('facility_monthly_report_schedule');
+    }
 }

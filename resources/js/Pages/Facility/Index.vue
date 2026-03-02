@@ -502,29 +502,28 @@
                         </button>
                     </div>
 
-                    <!-- Upload Progress -->
+                    <!-- Upload Progress (while request is in flight) -->
                     <div v-if="isUploading" class="mb-6">
-                        <h4 class="text-sm font-medium text-gray-900 mb-3">Upload Progress</h4>
+                        <h4 class="text-sm font-medium text-gray-900 mb-3">Importing facilities...</h4>
                         <div class="w-full bg-gray-200 rounded-full h-2">
                             <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" :style="{ width: uploadProgress + '%' }"></div>
                         </div>
-                        <p class="text-sm text-gray-600 mt-2">{{ uploadProgress }}% complete</p>
+                        <p class="text-sm text-gray-600 mt-2">{{ uploadProgress < 100 ? 'Uploading file...' : 'Processing rows...' }} {{ uploadProgress }}%</p>
                     </div>
 
-                    <!-- Upload Results -->
+                    <!-- Upload Results (synchronous import completed) -->
                     <div v-if="uploadResults && !isUploading" class="mb-6">
                         <div class="bg-green-50 border border-green-200 rounded-md p-4">
-                            <h3 class="text-sm font-medium text-green-800">Upload Results</h3>
+                            <h3 class="text-sm font-medium text-green-800">Import Results</h3>
                             <p class="text-sm text-green-700 mt-1">{{ uploadResults.message }}</p>
-                            <div v-if="uploadResults.import_id" class="mt-2 text-xs text-gray-600">
-                                <p>Import ID: {{ uploadResults.import_id }}</p>
-                                <p v-if="uploadResults.status">Status: {{ uploadResults.status }}</p>
-                                <p v-if="uploadResults.completed_at">Completed at: {{ formatDate(uploadResults.completed_at) }}</p>
+                            <div class="mt-2 text-xs text-gray-600">
+                                <p v-if="uploadResults.imported != null">Imported: {{ uploadResults.imported }}</p>
+                                <p v-if="uploadResults.skipped != null">Skipped: {{ uploadResults.skipped }}</p>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Upload Errors -->
+                    <!-- Upload / validation errors -->
                     <div v-if="uploadErrors.length > 0" class="mb-6">
                         <div class="bg-red-50 border border-red-200 rounded-md p-4">
                             <h3 class="text-sm font-medium text-red-800">Upload Errors</h3>
@@ -558,7 +557,7 @@
                         <svg v-else class="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
                         </svg>
-                        {{ isUploading ? 'Uploading...' : 'Upload File' }}
+                        {{ isUploading ? 'Importing...' : 'Upload & Import' }}
                     </button>
                 </div>
             </div>
@@ -591,7 +590,6 @@ const showUploadModal = ref(false)
 const fileInput = ref(null)
 const uploadProgress = ref(0)
 const uploadResults = ref(null)
-const importId = ref(null)
 const isDownloadingTemplate = ref(false)
 
 // Facility type creation modal
@@ -760,6 +758,7 @@ const uploadFile = async () => {
     }
 
     try {
+        isUploading.value = true;
         uploadProgress.value = 0;
         uploadResults.value = null;
         uploadErrors.value = [];
@@ -767,8 +766,8 @@ const uploadFile = async () => {
         const formData = new FormData();
         formData.append('file', file);
 
-        // Show loading toast
-        const loadingToast = toast.info("Uploading file...", {
+        // Show loading toast (import runs synchronously; may take 10–60s for large files)
+        const loadingToast = toast.info("Importing facilities... This may take a moment for large files.", {
             timeout: false,
             closeOnClick: false,
             draggable: false,
@@ -778,6 +777,7 @@ const uploadFile = async () => {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
+            timeout: 120000, // 2 minutes for large imports (e.g. 400+ rows)
             onUploadProgress: (progressEvent) => {
                 uploadProgress.value = Math.round((progressEvent.loaded * 100) / progressEvent.total);
             }
@@ -788,68 +788,43 @@ const uploadFile = async () => {
         if (response.data.success) {
             uploadResults.value = {
                 message: response.data.message,
-                import_id: response.data.import_id
+                imported: response.data.imported,
+                skipped: response.data.skipped,
             };
-            
-            // Start progress tracking
-            if (response.data.import_id) {
-                importId.value = response.data.import_id;
-                startProgressTracking();
-            }
-            
+            uploadErrors.value = Array.isArray(response.data.errors) ? response.data.errors : [];
+
             toast.success(response.data.message);
-            
+            if (uploadErrors.value.length > 0) {
+                toast.warning(`${uploadErrors.value.length} warning(s) or message(s) — see details below.`);
+            }
+
             // Clear file input
             fileInput.value.value = '';
-            
-            // Close modal after successful upload
+
+            // Close modal after a short delay so user can see results
             setTimeout(() => {
                 closeUploadModal();
-            }, 2000);
-            
+            }, 3000);
         } else {
             uploadErrors.value = [response.data.message];
             toast.error(response.data.message);
         }
-
     } catch (error) {
         console.error('Upload error:', error);
-        
-        if (error.response?.data?.message) {
+
+        if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+            uploadErrors.value = ['Import took too long. Try a smaller file or try again.'];
+            toast.error('Import timed out. Try fewer rows or try again.');
+        } else if (error.response?.data?.message) {
             uploadErrors.value = [error.response.data.message];
             toast.error(error.response.data.message);
         } else {
-            uploadErrors.value = ['An unexpected error occurred during upload'];
-            toast.error('Upload failed. Please try again.');
+            uploadErrors.value = ['An unexpected error occurred during import.'];
+            toast.error('Import failed. Please try again.');
         }
+    } finally {
+        isUploading.value = false;
     }
-};
-
-// Progress tracking function
-const startProgressTracking = () => {
-    if (!importId.value) return;
-    
-    const checkProgress = async () => {
-        try {
-            // You can implement a progress endpoint here if needed
-            // For now, we'll just show a generic progress message
-            uploadProgress.value = 100;
-            uploadResults.value = {
-                message: 'Import completed successfully!',
-                import_id: importId.value
-            };
-        } catch (error) {
-            console.error('Progress tracking error:', error);
-        }
-    };
-    
-    // Check progress every 2 seconds
-    const progressInterval = setInterval(checkProgress, 2000);
-    
-    // Stop tracking after 5 minutes
-    setTimeout(() => {
-        clearInterval(progressInterval);
-    }, 300000);
 };
 
 // Download template function
@@ -903,7 +878,6 @@ const openUploadModal = () => {
     }
     uploadErrors.value = [];
     uploadResults.value = null;
-    importId.value = null;
     uploadProgress.value = 0;
 };
 
@@ -916,7 +890,6 @@ const closeUploadModal = () => {
     }
     uploadErrors.value = [];
     uploadResults.value = null;
-    importId.value = null;
     uploadProgress.value = 0;
 };
 

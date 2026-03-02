@@ -18,10 +18,7 @@ use Illuminate\Validation\ValidationException;
 use Throwable;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Str;
 use App\Imports\ProductsImport;
-use App\Events\UpdateProductUpload;
 
 class ProductController extends Controller
 {
@@ -364,29 +361,27 @@ class ProductController extends Controller
                 ], 422);
             }
     
-            $importId = (string) Str::uuid();
-    
-            Log::info('Queueing product import with Maatwebsite Excel', [
-                'import_id' => $importId,
+            Log::info('Starting product import (synchronous)', [
                 'original_name' => $file->getClientOriginalName(),
                 'file_size' => $file->getSize(),
                 'extension' => $extension
             ]);
-    
-            // Initialize cache progress to 0
-            Cache::put($importId, 0);
-    
-            // Queue the import job
-            Excel::queueImport(new ProductsImport($importId), $file)
-                ->onQueue('imports'); // optional: define a specific queue
 
-            // broadcast(new UpdateProductUpload($importId, 0));
+            $import = new ProductsImport();
+            Excel::import($import, $file);
 
-    
+            $results = $import->getResults();
+
             return response()->json([
                 'success' => true,
-                'message' => 'Import has been queued successfully',
-                'import_id' => $importId
+                'message' => sprintf(
+                    'Import completed: %d product(s) imported, %d skipped.',
+                    $results['imported'],
+                    $results['skipped']
+                ),
+                'imported' => $results['imported'],
+                'skipped' => $results['skipped'],
+                'errors' => $results['errors'],
             ]);
     
         } catch (\Exception $e) {

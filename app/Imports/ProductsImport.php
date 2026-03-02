@@ -7,10 +7,6 @@ use App\Models\Category;
 use App\Models\Dosage;
 use App\Models\EligibleItem;
 use App\Models\FacilityType;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
@@ -20,31 +16,25 @@ use Maatwebsite\Excel\Concerns\WithValidation;
 use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterImport;
-use App\Events\UpdateProductUpload;
 
-class ProductsImport implements 
-    ToModel, 
-    WithHeadingRow, 
-    WithChunkReading, 
-    WithBatchInserts, 
-    WithValidation, 
-    SkipsEmptyRows, 
-    WithEvents, 
-    ShouldQueue
+class ProductsImport implements
+    ToModel,
+    WithHeadingRow,
+    WithChunkReading,
+    WithBatchInserts,
+    WithValidation,
+    SkipsEmptyRows,
+    WithEvents
 {
-    use Queueable, InteractsWithQueue;
-
     protected $importedCount = 0;
     protected $skippedCount = 0;
     protected $errors = [];
     protected $categoryCache = [];
     protected $dosageCache = [];
     protected $facilityTypeCache = [];
-    protected $importId;
 
-    public function __construct(string $importId)
+    public function __construct()
     {
-        $this->importId = $importId;
     }
 
     public function model(array $row)
@@ -101,11 +91,6 @@ class ProductsImport implements
             }
 
             $this->importedCount++;
-
-            // Update progress in cache
-            Cache::increment($this->importId);
-
-            // event(new UpdateProductUpload($this->importId, Cache::get($this->importId)));
 
             $product = Product::updateOrCreate([
                 'name' => $itemName,
@@ -195,9 +180,11 @@ class ProductsImport implements
     {
         return [
             AfterImport::class => function (AfterImport $event) {
-                Cache::forget($this->importId);
-                Log::info('Product import completed', ['importId' => $this->importId]);
-                // event(new UpdateProductUpload($this->importId, 'completed'));
+                Log::info('Product import completed', [
+                    'imported' => $this->importedCount,
+                    'skipped' => $this->skippedCount,
+                    'errors' => count($this->errors),
+                ]);
             },
         ];
     }

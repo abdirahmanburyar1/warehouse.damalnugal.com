@@ -132,6 +132,9 @@
                     <p v-if="filters.report_type === 'warehouse_inventory'" class="mt-3 text-sm text-gray-500">
                         For Warehouse Inventory Report: select Report Period (year and month), then Generate Report. You may optionally filter by Region, District, or Warehouse. If you see no data, generate the monthly reports first in Settings → Report Schedules (Monthly received quantities → Issue quantities → Inventory monthly report).
                     </p>
+                    <p v-else-if="filters.report_type === 'facility_monthly_consumption'" class="mt-3 text-sm text-gray-500">
+                        For Facility LMIS report: select Report Period (year and month) and at least one Facility (or Region/District), then Generate Report. Data comes from facility monthly reports for the selected period.
+                    </p>
                 </div>
 
                 <!-- Product Report: Tabs (Charts | Table) -->

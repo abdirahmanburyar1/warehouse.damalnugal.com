@@ -56,6 +56,10 @@ $emailOnFailure(Schedule::command('warehouse:generate-amc')
     ->everyMinute()
     ->appendOutputTo(storage_path('logs/warehouse-amc.log')));
 
+$emailOnFailure(Schedule::command('facility:generate-monthly-report')
+    ->everyMinute()
+    ->appendOutputTo(storage_path('logs/facility-monthly-report.log')));
+
 $emailOnFailure(Schedule::command('report:generate-inventory')
     ->monthlyOn(28, '23:55')
     ->appendOutputTo(storage_path('logs/monthly-inventory-report.log')));

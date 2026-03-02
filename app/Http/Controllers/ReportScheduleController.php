@@ -28,6 +28,7 @@ class ReportScheduleController extends Controller
         ],
         'orders_quarterly' => ['key' => 'orders_quarterly_schedule', 'method' => 'ordersQuarterlySchedule', 'default' => ['time' => '01:00'], 'quarterly' => true],
         'warehouse_amc' => ['key' => 'warehouse_amc_schedule', 'method' => 'warehouseAmcSchedule', 'default' => ['day_of_month' => 1, 'time' => '03:00']],
+        'facility_monthly_report' => ['key' => 'facility_monthly_report_schedule', 'method' => 'facilityMonthlyReportSchedule', 'default' => ['day_of_month' => 1, 'time' => '04:00']],
     ];
 
     public function index()
@@ -121,6 +122,7 @@ class ReportScheduleController extends Controller
         'inventory_monthly_report' => ['command' => 'inventory:generate-monthly-report', 'options' => ['--month' => null]],
         'orders_quarterly' => ['command' => 'orders:generate-quarterly', 'options' => []],
         'warehouse_amc' => ['command' => 'warehouse:generate-amc', 'options' => ['--month' => null]],
+        'facility_monthly_report' => ['command' => 'facility:generate-monthly-report', 'options' => ['--month' => null]],
     ];
 
     /**

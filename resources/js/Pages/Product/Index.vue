@@ -373,7 +373,8 @@
                                 <button
                                     v-if="$page.props.auth.can.product_manage || $page.props.auth.isAdmin"
                                     @click="downloadTemplate"
-                                    class="mt-3 inline-flex items-center px-3 py-2 bg-green-600 border border-transparent rounded-md font-medium text-xs text-white uppercase tracking-widest hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                                    :disabled="isDownloadingTemplate"
+                                    class="mt-3 inline-flex items-center px-3 py-2 bg-green-600 border border-transparent rounded-md font-medium text-xs text-white uppercase tracking-widest hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition ease-in-out duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
@@ -390,7 +391,7 @@
                             <ul class="space-y-2 text-sm text-gray-600">
                                 <li class="flex items-center">
                                     <span class="w-2 h-2 bg-indigo-500 rounded-full mr-3"></span>
-                                    <span class="font-medium">item description</span>
+                                    <span class="font-medium">item_description</span>
                                     <span class="text-gray-400 ml-2">(required)</span>
                                 </li>
                                 <li class="flex items-center">
@@ -400,8 +401,13 @@
                                 </li>
                                 <li class="flex items-center">
                                     <span class="w-2 h-2 bg-gray-400 rounded-full mr-3"></span>
-                                    <span class="font-medium">dosage form</span>
+                                    <span class="font-medium">dosage_form</span>
                                     <span class="text-gray-400 ml-2">(optional)</span>
+                                </li>
+                                <li class="flex items-center">
+                                    <span class="w-2 h-2 bg-gray-400 rounded-full mr-3"></span>
+                                    <span class="font-medium">eligibility_level</span>
+                                    <span class="text-gray-400 ml-2">(optional, comma-separated)</span>
                                 </li>
                             </ul>
                         </div>
@@ -490,7 +496,7 @@
 
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
-import { defineProps, ref, h, watch, onMounted } from "vue";
+import { defineProps, ref, h, watch } from "vue";
 import { Link, router } from "@inertiajs/vue3";
 import Swal from "sweetalert2";
 import { useToast } from "vue-toastification";
@@ -537,6 +543,7 @@ const showUploadModal = ref(false);
 const loadingProducts = ref(new Set());
 const selectedFile = ref(null);
 const isUploading = ref(false);
+const isDownloadingTemplate = ref(false);
 
 function updateRoute() {
     const query = {};
@@ -627,23 +634,13 @@ const removeSelectedFile = () => {
     }
 };
 
-const importId = ref(null);
-
-onMounted(() => {
-    Echo.private(`import-progress.${importId}`)
-        .listen('.ImportProgressUpdated', (e) => {
-            console.log(e);
-        });
-});
-
 const uploadFile = async () => {
     if (!selectedFile.value) {
         toast.error("Please select a file to upload");
         return;
     }
 
-    // Show loading toast
-    const loadingToast = toast.info("Preparing to upload file...", {
+    const loadingToast = toast.info("Importing products... This may take a moment for large files.", {
         timeout: false,
         closeOnClick: false,
         draggable: false,
@@ -653,23 +650,34 @@ const uploadFile = async () => {
     const formData = new FormData();
     formData.append("file", selectedFile.value);
 
-    await axios.post(
-        route("products.import-excel"),
-        formData,
-    )
-    .then(response => {
-        isUploading.value = false;
-        importId.value = response.data.import_id;
-        console.log('Upload response:', response.data);
-    })
-    .catch(error => {
-        isUploading.value = false;
-        console.error('Upload error:', error);
-        closeUploadModal();
+    try {
+        const response = await axios.post(
+            route("products.import-excel"),
+            formData,
+            { timeout: 120000 }
+        );
         toast.dismiss(loadingToast);
-        toast.error(error.response.data.message || "Failed to start import");
-    });
-
+        if (response.data.success) {
+            toast.success(response.data.message);
+            if (Array.isArray(response.data.errors) && response.data.errors.length > 0) {
+                toast.warning(`${response.data.errors.length} warning(s) — check console or support.`);
+            }
+            selectedFile.value = null;
+            if (fileInput.value) fileInput.value.value = null;
+            setTimeout(() => closeUploadModal(), 2000);
+        } else {
+            toast.error(response.data.message || "Import failed");
+        }
+    } catch (error) {
+        toast.dismiss(loadingToast);
+        const msg = error.code === "ECONNABORTED" || error.message?.includes("timeout")
+            ? "Import timed out. Try a smaller file or try again."
+            : (error.response?.data?.message || "Import failed. Please try again.");
+        toast.error(msg);
+        closeUploadModal();
+    } finally {
+        isUploading.value = false;
+    }
 };
 
 const confirmToggleStatus = (product) => {
@@ -706,44 +714,31 @@ const confirmToggleStatus = (product) => {
     });
 };
 
-// Download template function
-const downloadTemplate = () => {
-    // Create a proper Excel file using HTML table format that Excel can interpret
-    const headers = ['item description', 'category', 'dosage form'];
-    
-    // Create an HTML table that Excel can open as XLSX
-    const htmlContent = `
-        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-        <head>
-            <meta charset="utf-8">
-            <!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Sheet1</x:Name><x:WorksheetSource HRef="sheet001.htm"/></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
-        </head>
-        <body>
-            <table>
-                <tr>
-                    ${headers.map(header => `<th>${header}</th>`).join('')}
-                </tr>
-            </table>
-        </body>
-        </html>
-    `;
-    
-    // Create blob with proper Excel MIME type
-    const blob = new Blob([htmlContent], { 
-        type: 'application/vnd.ms-excel' 
-    });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'products_import_template.xlsx');
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    toast.success('Empty template downloaded successfully!');
+// Download template function (XLSX with columns matching ProductsImport)
+const downloadTemplate = async () => {
+    if (isDownloadingTemplate.value) return;
+    try {
+        isDownloadingTemplate.value = true;
+        const loadingToast = toast.info("Generating XLSX template...", {
+            timeout: false,
+            closeOnClick: false,
+            draggable: false,
+        });
+        const XLSX = await import("xlsx");
+        // Headers must match ProductsImport: item_description, category, dosage_form, eligibility_level
+        const headers = ["item_description", "category", "dosage_form", "eligibility_level"];
+        const workbook = XLSX.utils.book_new();
+        const worksheet = XLSX.utils.aoa_to_sheet([headers]);
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Products Template");
+        XLSX.writeFile(workbook, "products_import_template.xlsx");
+        toast.dismiss(loadingToast);
+        toast.success("XLSX template downloaded. Fill in rows and upload.");
+    } catch (error) {
+        console.error("Error generating template:", error);
+        toast.error("Failed to generate template. Please try again.");
+    } finally {
+        isDownloadingTemplate.value = false;
+    }
 };
 
 </script>

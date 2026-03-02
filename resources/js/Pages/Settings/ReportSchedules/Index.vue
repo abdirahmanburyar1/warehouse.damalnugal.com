@@ -184,6 +184,11 @@ const scheduleDefs = {
         description: 'Generates AMC and reorder levels from issue quantity data (warehouse:generate-amc).',
         quarterly: false,
     },
+    facility_monthly_report: {
+        title: 'Facility LMIS report',
+        description: 'Generates facility monthly (LMIS) reports for all facilities for the previous month (facility:generate-monthly-report).',
+        quarterly: false,
+    },
 };
 
 const props = defineProps({

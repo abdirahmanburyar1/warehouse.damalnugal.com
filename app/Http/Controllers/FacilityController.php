@@ -12,9 +12,7 @@ use App\Http\Resources\FacilityResource;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\DB;
 use App\Imports\FacilitiesImport;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 
 class FacilityController extends Controller
 {
@@ -48,26 +46,27 @@ class FacilityController extends Controller
                 ], 422);
             }
 
-            $importId = (string) Str::uuid();
-
-            Log::info('Queueing facilities import with Maatwebsite Excel', [
-                'import_id' => $importId,
+            Log::info('Starting facilities import (synchronous)', [
                 'original_name' => $file->getClientOriginalName(),
                 'file_size' => $file->getSize(),
                 'extension' => $extension
             ]);
 
-            // Initialize cache progress to 0
-            Cache::put($importId, 0);
+            $import = new FacilitiesImport();
+            Excel::import($import, $file);
 
-            // Queue the import job
-            Excel::queueImport(new FacilitiesImport($importId), $file)
-                ->onQueue('imports'); // optional: define a specific queue
+            $results = $import->getResults();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Import has been queued successfully',
-                'import_id' => $importId
+                'message' => sprintf(
+                    'Import completed: %d facility(ies) imported, %d skipped.',
+                    $results['imported'],
+                    $results['skipped']
+                ),
+                'imported' => $results['imported'],
+                'skipped' => $results['skipped'],
+                'errors' => $results['errors'],
             ]);
 
         } catch (\Exception $e) {
