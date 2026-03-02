@@ -92,7 +92,7 @@
                             v-model="filters.report_period"
                             class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2"
                         >
-                            <option v-for="opt in reportPeriodOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                            <option v-for="opt in (reportPeriodOptions.length ? reportPeriodOptions : [{ value: 'monthly', label: 'Monthly' }, { value: 'bi-monthly', label: 'Bi-monthly' }, { value: 'quarterly', label: 'Quarterly' }, { value: 'six_months', label: 'Six months' }, { value: 'yearly', label: 'Yearly' }])" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                         </select>
                     </div>
                 </div>
@@ -144,6 +144,42 @@
                     <p v-else-if="filters.report_type === 'facility_monthly_consumption'" class="mt-3 text-sm text-gray-500">
                         For Facility LMIS report: select Report Period (year and month) and at least one Facility (or Region/District), then Generate Report. Data comes from facility monthly reports for the selected period.
                     </p>
+                    <p v-else-if="filters.report_type === 'report_submission_rate'" class="mt-3 text-sm text-gray-500">
+                        Select Year, Report Period (expected frequency), and at least one Region, District or Facility. Data is based on facility monthly report submission dates.
+                    </p>
+                </div>
+
+                <!-- Report Submission Rate: table -->
+                <div v-else-if="isSubmissionRateReport && filteredSubmissionRateRows.length > 0" class="overflow-x-auto">
+                    <table class="min-w-full border-collapse border border-gray-300">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">Facility Name</th>
+                                <th class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Total Number of Expected Reports to Submit</th>
+                                <th class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Total Number of Actual Submitted Reports</th>
+                                <th class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Report Submission Rate</th>
+                                <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Report Submitting Time Status</th>
+                            </tr>
+                            <tr class="bg-gray-50">
+                                <th class="border border-gray-300"></th>
+                                <th class="border border-gray-300"></th>
+                                <th class="border border-gray-300"></th>
+                                <th class="border border-gray-300"></th>
+                                <th class="px-3 py-1 text-right text-xs font-medium text-gray-600 border border-gray-300">On-time Report Submission</th>
+                                <th class="px-3 py-1 text-right text-xs font-medium text-gray-600 border border-gray-300">Late Report Submission</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white">
+                            <tr v-for="(row, index) in filteredSubmissionRateRows" :key="index" class="hover:bg-gray-50">
+                                <td class="px-3 py-2 text-sm text-gray-900 border border-gray-300">{{ row.facility_name }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.expected }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.actual }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.submission_rate }}%</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.on_time_count }} ({{ row.on_time_pct }}%)</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ row.late_count }} ({{ row.late_pct }}%)</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
 
                 <!-- Product Report: Tabs (Charts | Table) -->
@@ -981,7 +1017,7 @@
                     </div>
                 </div>
                 <!-- Default Inventory Report Table -->
-                <div v-else-if="!isProductReport && !isLiquidationDisposalReport && !isExpiryReport && !isFacilitiesReport && !isOrderReport && !isTransferReport && !isProcurementReport && !isAssetReport && reportData.length > 0" class="overflow-x-auto">
+                <div v-else-if="!isProductReport && !isLiquidationDisposalReport && !isExpiryReport && !isFacilitiesReport && !isOrderReport && !isTransferReport && !isProcurementReport && !isAssetReport && !isSubmissionRateReport && reportData.length > 0" class="overflow-x-auto">
                     <table class="min-w-full border-collapse border border-gray-300">
                         <thead class="bg-gray-50">
                             <tr>
@@ -1202,6 +1238,14 @@ const isTransferReport = computed(() => filters.value.report_type === 'transfer_
 const isProcurementReport = computed(() => filters.value.report_type === 'procurement_report');
 const isAssetReport = computed(() => filters.value.report_type === 'asset_report');
 const isSubmissionRateReport = computed(() => filters.value.report_type === 'report_submission_rate');
+
+const filteredSubmissionRateRows = computed(() => {
+    if (!isSubmissionRateReport.value) return [];
+    const rows = reportData.value || [];
+    if (!searchQuery.value.trim()) return rows;
+    const q = searchQuery.value.toLowerCase();
+    return rows.filter(row => (row.facility_name || '').toLowerCase().includes(q));
+});
 
 function assetReportCategoryKey(catName) {
     return 'category_' + (catName || '').replace(/\s+/g, '_').toLowerCase();
@@ -2346,6 +2390,9 @@ async function generateReport() {
             if (type === 'warehouse') params.warehouse_id = id;
             if (type === 'facility') params.facility_id = id;
         }
+        if (filters.value.report_type === 'report_submission_rate') {
+            params.report_period = filters.value.report_period || 'monthly';
+        }
         const { data } = await axios.get(route('reports.inventoryReportsUnified.data'), { params });
         reportMessage.value = data.message || '';
         if (data.success) {
@@ -2433,6 +2480,18 @@ async function generateReport() {
                 orderReportSummary.value = {};
                 transferReportSummary.value = {};
                 procurementReportSummary.value = {};
+            } else if (filters.value.report_type === 'report_submission_rate') {
+                const d = data.data || {};
+                reportData.value = d.rows || [];
+                productReportRows.value = [];
+                categoryColumns.value = [];
+                supplyClassColumns.value = [];
+                facilitiesReportTypeColumns.value = [];
+                orderReportSummary.value = {};
+                transferReportSummary.value = {};
+                procurementReportSummary.value = {};
+                assetReportCategoryColumns.value = [];
+                assetReportSummary.value = {};
             } else {
                 let rows = data.data || [];
                 if (filters.value.report_type === 'warehouse_inventory' && rows.length === 0) {
