@@ -1483,14 +1483,16 @@ class OrderController extends Controller
         }
         try {
             DB::beginTransaction();
+            // Load order with items and inventory_allocations so the frontend gets allocation location (and other allocation fields).
+            // Do not eager load items.inventory_allocations.location (relation) so the allocation's string column 'location' is serialized.
             $order = Order::where('orders.id', $id)
-                ->with(['items.product.category','dispatch.driver','dispatch.logistic_company', 'items.inventory_allocations.warehouse', 'items.inventory_allocations.location','items.inventory_allocations.back_order', 'facility', 'user','reviewedBy', 'approvedBy', 'processedBy','dispatchedBy','deliveredBy','receivedBy','rejectedBy'])
+                ->with(['items.product.category', 'dispatch.driver', 'dispatch.logistic_company', 'items.inventory_allocations.warehouse', 'items.inventory_allocations.back_order', 'facility', 'user', 'reviewedBy', 'approvedBy', 'processedBy', 'dispatchedBy', 'deliveredBy', 'receivedBy', 'rejectedBy'])
                 ->first();
 
-            // Get items with SOH using subquery
-            $items = DB::table('order_items')
+            // Get SOH (and product_name) per order_item for display; merge onto existing items so we keep inventory_allocations.
+            $itemsWithSoh = DB::table('order_items')
                 ->select([
-                    'order_items.*',
+                    'order_items.id',
                     'products.name as product_name',
                     'inventory_sums.total_quantity as soh'
                 ])
@@ -1501,9 +1503,16 @@ class OrderController extends Controller
                     GROUP BY product_id
                 ) as inventory_sums'), 'products.id', '=', 'inventory_sums.product_id')
                 ->where('order_items.order_id', $id)
-                ->get();
+                ->get()
+                ->keyBy('id');
 
-            $order->items = $items;
+            foreach ($order->items as $item) {
+                $row = $itemsWithSoh->get($item->id);
+                if ($row) {
+                    $item->soh = $row->soh;
+                    $item->product_name = $row->product_name;
+                }
+            }
             $products = Product::select('id','name')->get();
             
             // Get drivers with their companies

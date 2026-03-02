@@ -86,6 +86,15 @@
                             />
                         </div>
                     </div>
+                    <div v-if="filters.report_type === 'report_submission_rate'" class="lg:col-span-1">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Report Period (expected)</label>
+                        <select
+                            v-model="filters.report_period"
+                            class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2"
+                        >
+                            <option v-for="opt in reportPeriodOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                        </select>
+                    </div>
                 </div>
                 <!-- Row 2: Generate Report button below first three filters (aligned with Report Period to its right in row 1) -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-5 mt-4 items-end">
@@ -1088,6 +1097,7 @@ const props = defineProps({
     warehouses: { type: Array, default: () => [] },
     facilities: { type: Array, default: () => [] },
     reportTypes: { type: Array, default: () => [] },
+    reportPeriodOptions: { type: Array, default: () => [] },
     filters: { type: Object, default: () => ({}) },
 });
 
@@ -1099,6 +1109,7 @@ const filters = ref({
     district_id: props.filters?.district_id ?? null,
     warehouse_or_facility: props.filters?.warehouse_or_facility ?? '',
     report_type: props.filters?.report_type ?? 'warehouse_inventory',
+    report_period: props.filters?.report_period ?? 'monthly',
     monthYear: props.filters?.monthYear ?? defaultMonthYear,
 });
 const reportData = ref([]);
@@ -1190,6 +1201,7 @@ const isOrderReport = computed(() => filters.value.report_type === 'order_report
 const isTransferReport = computed(() => filters.value.report_type === 'transfer_report');
 const isProcurementReport = computed(() => filters.value.report_type === 'procurement_report');
 const isAssetReport = computed(() => filters.value.report_type === 'asset_report');
+const isSubmissionRateReport = computed(() => filters.value.report_type === 'report_submission_rate');
 
 function assetReportCategoryKey(catName) {
     return 'category_' + (catName || '').replace(/\s+/g, '_').toLowerCase();

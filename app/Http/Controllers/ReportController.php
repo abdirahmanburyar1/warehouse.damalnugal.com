@@ -136,6 +136,7 @@ class ReportController extends Controller
         $reportTypes = [
             ['value' => 'warehouse_inventory', 'label' => 'Warehouse Inventory Report'],
             ['value' => 'facility_monthly_consumption', 'label' => 'Facility LMIS report'],
+            ['value' => 'report_submission_rate', 'label' => 'Report Submission Rate'],
             ['value' => 'product_report', 'label' => 'Product Report'],
             ['value' => 'liquidation_disposal', 'label' => 'Liquidation & Disposal'],
             ['value' => 'expiry_report', 'label' => 'Expiry Report'],
@@ -145,13 +146,21 @@ class ReportController extends Controller
             ['value' => 'procurement_report', 'label' => 'Procurement Report'],
             ['value' => 'asset_report', 'label' => 'Asset Report'],
         ];
+        $reportPeriodOptions = [
+            ['value' => 'monthly', 'label' => 'Monthly'],
+            ['value' => 'bi-monthly', 'label' => 'Bi-monthly'],
+            ['value' => 'quarterly', 'label' => 'Quarterly'],
+            ['value' => 'six_months', 'label' => 'Six months'],
+            ['value' => 'yearly', 'label' => 'Yearly'],
+        ];
         return Inertia::render('Report/InventoryReportsUnified', [
             'regions' => $regions,
             'districts' => $districts,
             'warehouses' => $warehouses,
             'facilities' => $facilities,
             'reportTypes' => $reportTypes,
-            'filters' => $request->only(['region_id', 'district_id', 'warehouse_id', 'facility_id', 'report_type', 'year', 'month']),
+            'reportPeriodOptions' => $reportPeriodOptions,
+            'filters' => $request->only(['region_id', 'district_id', 'warehouse_id', 'facility_id', 'report_type', 'report_period', 'year', 'month']),
         ]);
     }
 
@@ -161,11 +170,12 @@ class ReportController extends Controller
     public function inventoryReportsUnifiedData(Request $request)
     {
         $request->validate([
-            'report_type' => 'required|in:warehouse_inventory,facility_monthly_consumption,product_report,liquidation_disposal,expiry_report,facilities_report,order_report,transfer_report,procurement_report,asset_report',
+            'report_type' => 'required|in:warehouse_inventory,facility_monthly_consumption,report_submission_rate,product_report,liquidation_disposal,expiry_report,facilities_report,order_report,transfer_report,procurement_report,asset_report',
             'region_id' => 'nullable|exists:regions,id',
             'district_id' => 'nullable|exists:districts,id',
             'warehouse_id' => 'nullable|exists:warehouses,id',
             'facility_id' => 'nullable|exists:facilities,id',
+            'report_period' => 'nullable|in:monthly,bi-monthly,quarterly,six_months,yearly',
             'year' => 'nullable|integer|min:2000|max:2100',
             'month' => 'nullable|integer|min:1|max:12',
         ]);
@@ -252,6 +262,26 @@ class ReportController extends Controller
                 ]);
             }
             $result = $this->getAssetReportData($request, $facilityIds);
+            return response()->json(['success' => true, 'data' => $result]);
+        }
+
+        if ($reportType === 'report_submission_rate') {
+            $facilityIds = $this->resolveFacilityIdsFromFilters($request);
+            if (empty($facilityIds)) {
+                return response()->json([
+                    'success' => false,
+                    'data' => ['rows' => []],
+                    'message' => 'Report Submission Rate requires Region, District or Facility.',
+                ]);
+            }
+            if (!$request->filled('year')) {
+                return response()->json([
+                    'success' => false,
+                    'data' => ['rows' => []],
+                    'message' => 'Report Submission Rate requires a Year.',
+                ]);
+            }
+            $result = $this->getReportSubmissionRateData($request, $facilityIds);
             return response()->json(['success' => true, 'data' => $result]);
         }
 
@@ -502,6 +532,65 @@ class ReportController extends Controller
             }
         }
         return $query->pluck('id')->toArray();
+    }
+
+    /**
+     * Report Submission Rate: per-facility expected vs actual submitted facility_monthly_reports,
+     * with on-time vs late breakdown. Uses submitted_at and report_period.
+     * Filter: report_period = monthly|bi-monthly|quarterly|six_months|yearly (expected reports per facility).
+     */
+    private function getReportSubmissionRateData(Request $request, array $facilityIds): array
+    {
+        $year = (int) $request->year;
+        $periodType = $request->input('report_period', 'monthly');
+
+        $expectedByPeriod = [
+            'monthly' => 12,
+            'bi-monthly' => 6,
+            'quarterly' => 4,
+            'six_months' => 2,
+            'yearly' => 1,
+        ];
+        $expectedCount = $expectedByPeriod[$periodType] ?? 12;
+
+        $facilities = Facility::whereIn('id', $facilityIds)->orderBy('name')->get(['id', 'name']);
+        $rows = [];
+
+        foreach ($facilities as $facility) {
+            $reports = FacilityMonthlyReport::query()
+                ->where('facility_id', $facility->id)
+                ->where('report_period', 'like', $year . '-%')
+                ->whereIn('status', ['submitted', 'approved'])
+                ->whereNotNull('submitted_at')
+                ->get(['id', 'report_period', 'submitted_at']);
+
+            $actualCount = $reports->count();
+            $onTimeCount = 0;
+            foreach ($reports as $r) {
+                $periodEnd = Carbon::parse($r->report_period . '-01')->endOfMonth();
+                if ($r->submitted_at && $r->submitted_at->lte($periodEnd)) {
+                    $onTimeCount++;
+                }
+            }
+            $lateCount = $actualCount - $onTimeCount;
+            $rate = $expectedCount > 0 ? round(($actualCount / $expectedCount) * 100, 1) : 0;
+            $onTimePct = $actualCount > 0 ? round(($onTimeCount / $actualCount) * 100, 1) : 0;
+            $latePct = $actualCount > 0 ? round(($lateCount / $actualCount) * 100, 1) : 0;
+
+            $rows[] = [
+                'facility_id' => $facility->id,
+                'facility_name' => $facility->name,
+                'expected' => $expectedCount,
+                'actual' => $actualCount,
+                'submission_rate' => $rate,
+                'on_time_count' => $onTimeCount,
+                'on_time_pct' => $onTimePct,
+                'late_count' => $lateCount,
+                'late_pct' => $latePct,
+            ];
+        }
+
+        return ['rows' => $rows];
     }
 
     /**
