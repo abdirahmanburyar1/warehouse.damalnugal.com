@@ -127,8 +127,11 @@
                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
                     <p class="mt-4 text-gray-600">Loading report...</p>
                 </div>
-                <div v-else-if="!hasAnyData && hasGenerated" class="p-8 text-center text-gray-500">
-                    {{ reportMessage || 'No data found for the selected filters. Try a different report type or period.' }}
+                <div v-else-if="!hasAnyData && hasGenerated" class="p-8 text-center text-gray-600 max-w-xl mx-auto">
+                    <p>{{ reportMessage || 'No data found for the selected filters. Try a different report type or period.' }}</p>
+                    <p v-if="filters.report_type === 'warehouse_inventory'" class="mt-3 text-sm text-gray-500">
+                        For Warehouse Inventory Report: select Report Period (year and month), then Generate Report. You may optionally filter by Region, District, or Warehouse. If you see no data, generate the monthly reports first in Settings → Report Schedules (Monthly received quantities → Issue quantities → Inventory monthly report).
+                    </p>
                 </div>
 
                 <!-- Product Report: Tabs (Charts | Table) -->
@@ -895,6 +898,76 @@
                     </div>
                 </div>
 
+                <!-- Warehouse Inventory: approval workflow bar (from inventory_report) -->
+                <div v-if="filters.report_type === 'warehouse_inventory' && warehouseReportMeta" class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                    <span class="text-sm font-medium text-gray-700">Report status:</span>
+                    <span
+                        :class="{
+                            'bg-amber-100 text-amber-800': warehouseReportMeta.report_status === 'pending',
+                            'bg-blue-100 text-blue-800': warehouseReportMeta.report_status === 'submitted',
+                            'bg-indigo-100 text-indigo-800': warehouseReportMeta.report_status === 'under_review',
+                            'bg-green-100 text-green-800': warehouseReportMeta.report_status === 'approved',
+                            'bg-red-100 text-red-800': warehouseReportMeta.report_status === 'rejected',
+                        }"
+                        class="rounded-full px-3 py-1 text-xs font-semibold"
+                    >
+                        {{ workflowStatusLabel(warehouseReportMeta.report_status) }}
+                    </span>
+                    <span v-if="warehouseReportMeta.rejection_reason" class="ml-2 flex items-center gap-2">
+                        <span class="text-sm text-gray-500">Rejection reason:</span>
+                        <span class="text-sm text-gray-700">{{ warehouseReportMeta.rejection_reason }}</span>
+                    </span>
+                    <div class="ml-auto flex flex-wrap items-center gap-2">
+                        <button
+                            v-if="warehouseReportMeta.report_can_submit"
+                            type="button"
+                            class="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+                            :disabled="workflowActionLoading"
+                            @click="workflowAction('submit')"
+                        >
+                            Submit for review
+                        </button>
+                        <button
+                            v-if="warehouseReportMeta.report_can_review"
+                            type="button"
+                            class="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+                            :disabled="workflowActionLoading"
+                            @click="workflowAction('review')"
+                        >
+                            Mark under review
+                        </button>
+                        <button
+                            v-if="warehouseReportMeta.report_can_approve_reject"
+                            type="button"
+                            class="rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700"
+                            :disabled="workflowActionLoading"
+                            @click="workflowAction('approve')"
+                        >
+                            Approve
+                        </button>
+                        <button
+                            v-if="warehouseReportMeta.report_can_approve_reject"
+                            type="button"
+                            class="rounded border border-red-600 bg-white px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
+                            :disabled="workflowActionLoading"
+                            @click="showRejectModal = true"
+                        >
+                            Reject
+                        </button>
+                    </div>
+                </div>
+                <!-- Reject reason modal -->
+                <div v-if="showRejectModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showRejectModal = false">
+                    <div class="w-full max-w-md rounded-lg bg-white p-4 shadow-xl">
+                        <h3 class="text-lg font-semibold text-gray-900">Reject report</h3>
+                        <p class="mt-1 text-sm text-gray-500">Optionally provide a reason for rejection (shown to the report owner).</p>
+                        <textarea v-model="rejectReason" rows="3" class="mt-3 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" placeholder="Reason for rejection..."></textarea>
+                        <div class="mt-4 flex justify-end gap-2">
+                            <button type="button" class="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50" @click="showRejectModal = false">Cancel</button>
+                            <button type="button" class="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700" :disabled="workflowActionLoading" @click="workflowAction('reject')">Reject report</button>
+                        </div>
+                    </div>
+                </div>
                 <!-- Default Inventory Report Table -->
                 <div v-else-if="!isProductReport && !isLiquidationDisposalReport && !isExpiryReport && !isFacilitiesReport && !isOrderReport && !isTransferReport && !isProcurementReport && !isAssetReport && reportData.length > 0" class="overflow-x-auto">
                     <table class="min-w-full border-collapse border border-gray-300">
@@ -903,22 +976,24 @@
                                 <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">Item</th>
                                 <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">Category</th>
                                 <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">UoM</th>
-                                <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Item Details</th>
+                                <th colspan="3" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Item Details (batch level)</th>
                                 <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Beginning<br>Balance</th>
                                 <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">QTY<br>Received</th>
                                 <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">QTY<br>Issued</th>
-                                <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Adjust<br>ments</th>
+                                <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Adjustments</th>
                                 <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Closing<br>Balance</th>
+                                <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Total<br>Cost</th>
                                 <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Total<br>Closing<br>Balance</th>
                                 <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">AMC</th>
                                 <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">MOS<br>(Months<br>of Stock)</th>
                                 <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Stockout<br>Days</th>
-                                <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Unit<br>cost</th>
-                                <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Total<br>Cost</th>
                             </tr>
                             <tr class="bg-gray-50">
                                 <th class="px-3 py-1 text-left text-xs font-medium text-gray-600 border border-gray-300">Batch No.:</th>
                                 <th class="px-3 py-1 text-left text-xs font-medium text-gray-600 border border-gray-300">Expiry Date</th>
+                                <th class="px-3 py-1 text-right text-xs font-medium text-gray-600 border border-gray-300">Unit cost</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">(-)</th>
+                                <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">(+)</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white">
@@ -933,24 +1008,35 @@
                                 <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-600 border border-gray-300 align-top">{{ row.uom }}</td>
                                 <td class="px-3 py-2 text-sm text-gray-600 border border-gray-300 whitespace-nowrap">{{ row.batch_no || '–' }}</td>
                                 <td class="px-3 py-2 text-sm text-gray-600 border border-gray-300 whitespace-nowrap">{{ formatExpiry(row.expiry_date) }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatCost(row.unit_cost) }}</td>
                                 <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.beginning_balance) }}</td>
                                 <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.qty_received) }}</td>
                                 <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.qty_issued) }}</td>
-                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.adjustment_neg) }}</td>
-                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.adjustment_pos) }}</td>
+                                <td class="px-3 py-2 text-sm text-right border border-gray-300">
+                                    <input v-if="warehouseReportMeta && row.report_item_id" type="number" min="0" class="w-16 px-1 py-0.5 text-right text-sm border border-gray-400 rounded" v-model.number="row.adjustment_neg" @blur="saveReportItemAdjustment(row)" />
+                                    <span v-else>{{ formatNum(row.adjustment_neg) }}</span>
+                                </td>
+                                <td class="px-3 py-2 text-sm text-right border border-gray-300">
+                                    <input v-if="warehouseReportMeta && row.report_item_id" type="number" min="0" class="w-16 px-1 py-0.5 text-right text-sm border border-gray-400 rounded" v-model.number="row.adjustment_pos" @blur="saveReportItemAdjustment(row)" />
+                                    <span v-else>{{ formatNum(row.adjustment_pos) }}</span>
+                                </td>
                                 <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.closing_balance) }}</td>
+                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top font-medium">{{ formatCost(row.total_cost) }}</td>
                                 <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top font-medium">{{ formatNum(row.total_closing_balance) }}</td>
                                 <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top font-medium">{{ formatNum(row.amc) }}</td>
-                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top font-medium">{{ row.mos ?? '–' }}</td>
-                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top">{{ formatNum(row.stockout_days) }}</td>
-                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top">{{ formatCost(row.unit_cost) }}</td>
-                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top font-medium">{{ formatCost(row.total_cost) }}</td>
+                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-right border border-gray-300 align-top font-medium">{{ row.mos ?? '–' }}</td>
+                                <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-right border border-gray-300 align-top">{{ formatNum(row.stockout_days) }}</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
                 <div v-else class="p-8 text-center text-gray-500">
-                    Select at least one location filter (Region, District, or Warehouse/Facility), then click Generate Report.
+                    <template v-if="filters.report_type === 'warehouse_inventory'">
+                        Select Warehouse Inventory Report, choose Report Period (e.g. 2026-02), then click Generate Report. Optionally filter by Region, District, or Warehouse.
+                    </template>
+                    <template v-else>
+                        Select report type, report period, and at least one location (Region, District, or Warehouse/Facility), then click Generate Report.
+                    </template>
                 </div>
             </div>
         </div>
@@ -967,6 +1053,31 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
 
 const chartPlugins = [ChartDataLabels];
 const chartSize = { width: 300, height: 220 };
+
+const WAREHOUSE_INVENTORY_EMPTY_ROW = {
+    product_id: null,
+    item: '–',
+    category: '–',
+    uom: '–',
+    batch_no: null,
+    expiry_date: null,
+    beginning_balance: 0,
+    qty_received: 0,
+    qty_issued: 0,
+    adjustment_neg: 0,
+    adjustment_pos: 0,
+    closing_balance: 0,
+    total_closing_balance: 0,
+    amc: 0,
+    mos: '–',
+    stockout_days: 0,
+    unit_cost: 0,
+    total_cost: 0,
+    warehouse_name: '–',
+    facility_name: null,
+    rowspan: 1,
+    is_first_batch: true,
+};
 
 const props = defineProps({
     regions: { type: Array, default: () => [] },
@@ -1009,6 +1120,10 @@ const procurementReportSummary = ref({ total_pos: 0, completed: 0, rejected: 0, 
 const assetReportTab = ref('table');
 const assetReportCategoryColumns = ref([]);
 const assetReportSummary = ref({ total_assets: 0, by_category: {} });
+const warehouseReportMeta = ref(null);
+const workflowActionLoading = ref(false);
+const showRejectModal = ref(false);
+const rejectReason = ref('');
 
 const filteredDistricts = computed(() => {
     const list = props.districts || [];
@@ -2090,6 +2205,114 @@ function formatExpiry(d) {
     return d;
 }
 
+function workflowStatusLabel(status) {
+    const labels = { pending: 'Pending', submitted: 'Submitted', under_review: 'Under Review', approved: 'Approved', rejected: 'Rejected' };
+    return labels[status] || status;
+}
+async function workflowAction(action) {
+    const meta = warehouseReportMeta.value;
+    const monthYear = filters.value.monthYear;
+    if (!meta?.report_id || !monthYear) return;
+    const routes = {
+        submit: { name: 'reports.warehouseMonthly.submit', method: 'put' },
+        review: { name: 'reports.warehouseMonthly.review', method: 'put' },
+        approve: { name: 'reports.warehouseMonthly.approve', method: 'put' },
+        reject: { name: 'reports.warehouseMonthly.reject', method: 'put' },
+    };
+    const r = routes[action];
+    if (!r) return;
+    if (action === 'reject') showRejectModal.value = false;
+    workflowActionLoading.value = true;
+    try {
+        const payload = { month_year: monthYear };
+        if (action === 'reject') payload.reason = rejectReason.value || null;
+        const { data } = await axios.put(route(r.name), payload);
+        if (data.message) reportMessage.value = data.message;
+        if (data.status) {
+            const s = data.status;
+            warehouseReportMeta.value = {
+                ...meta,
+                report_status: s,
+                report_can_submit: s === 'pending' || s === 'rejected',
+                report_can_review: s === 'submitted',
+                report_can_approve_reject: s === 'under_review',
+                rejection_reason: action === 'reject' ? (payload.reason || '') : meta.rejection_reason,
+            };
+            if (action === 'reject') rejectReason.value = '';
+        }
+        await generateReport();
+    } catch (e) {
+        reportMessage.value = e.response?.data?.message || 'Action failed.';
+        console.error(e);
+    } finally {
+        workflowActionLoading.value = false;
+    }
+}
+
+const reportFieldSaving = ref(false);
+async function saveReportField(field) {
+    const meta = warehouseReportMeta.value;
+    if (!meta?.report_id || reportFieldSaving.value) return;
+    const payload = {};
+    if (field === 'adjustment_neg') payload.adjustment_neg = Number(meta.adjustment_neg) || 0;
+    else if (field === 'adjustment_pos') payload.adjustment_pos = Number(meta.adjustment_pos) || 0;
+    else if (field === 'months_of_stock') payload.months_of_stock = meta.months_of_stock ?? '';
+    else if (field === 'stockout_days') payload.stockout_days = Number(meta.stockout_days) || 0;
+    if (Object.keys(payload).length === 0) return;
+    reportFieldSaving.value = true;
+    try {
+        const { data } = await axios.patch(route('reports.inventoryReport.update', meta.report_id), payload);
+        if (data.success && data.report) {
+            warehouseReportMeta.value = { ...meta, ...payload, adjustment_neg: data.report.negative_adjustment ?? meta.adjustment_neg, adjustment_pos: data.report.positive_adjustment ?? meta.adjustment_pos, months_of_stock: data.report.months_of_stock ?? meta.months_of_stock, stockout_days: data.report.stockout_days ?? meta.stockout_days };
+        }
+    } catch (e) {
+        console.error(e);
+    } finally {
+        reportFieldSaving.value = false;
+    }
+}
+
+const reportItemSaving = ref(false);
+async function saveReportItemAdjustment(row) {
+    if (!row?.report_item_id || reportItemSaving.value) return;
+    reportItemSaving.value = true;
+    try {
+        const { data } = await axios.patch(route('reports.inventoryReportItem.update', row.report_item_id), {
+            adjustment_neg: Number(row.adjustment_neg) || 0,
+            adjustment_pos: Number(row.adjustment_pos) || 0,
+        });
+        if (data.success && data.item) {
+            const id = row.report_item_id;
+            const productId = row.product_id;
+            const neg = Number(data.item.negative_adjustment) || 0;
+            const pos = Number(data.item.positive_adjustment) || 0;
+            const closing = data.item.closing_balance != null ? Number(data.item.closing_balance) : null;
+            const totalCost = data.item.total_cost != null ? Number(data.item.total_cost) : null;
+            reportData.value = reportData.value.map(r => {
+                if (r.report_item_id !== id) return r;
+                const next = { ...r, adjustment_neg: neg, adjustment_pos: pos };
+                if (closing != null) next.closing_balance = closing;
+                if (totalCost != null) next.total_cost = totalCost;
+                return next;
+            });
+            // Recalc product-level total_closing_balance and total_cost: total cost = unit cost × closing balance per row, then sum
+            if (productId != null) {
+                const productRows = reportData.value.filter(r => r.product_id === productId);
+                const sumClosing = productRows.reduce((s, r) => s + (Number(r.closing_balance) || 0), 0);
+                const sumCost = productRows.reduce((s, r) => s + ((Number(r.unit_cost) || 0) * (Number(r.closing_balance) || 0)), 0);
+                reportData.value = reportData.value.map(r => {
+                    if (r.product_id !== productId) return r;
+                    return { ...r, total_closing_balance: sumClosing, total_cost: Math.round(sumCost * 100) / 100 };
+                });
+            }
+        }
+    } catch (e) {
+        console.error(e);
+    } finally {
+        reportItemSaving.value = false;
+    }
+}
+
 async function generateReport() {
     generating.value = true;
     hasGenerated.value = true;
@@ -2196,7 +2419,12 @@ async function generateReport() {
                 transferReportSummary.value = {};
                 procurementReportSummary.value = {};
             } else {
-                reportData.value = data.data || [];
+                let rows = data.data || [];
+                if (filters.value.report_type === 'warehouse_inventory' && rows.length === 0) {
+                    rows = [WAREHOUSE_INVENTORY_EMPTY_ROW];
+                }
+                reportData.value = rows;
+                warehouseReportMeta.value = (filters.value.report_type === 'warehouse_inventory' && data.report_meta) ? data.report_meta : null;
                 productReportRows.value = [];
                 categoryColumns.value = [];
                 supplyClassColumns.value = [];
@@ -2209,6 +2437,7 @@ async function generateReport() {
             }
         } else {
             reportData.value = [];
+            warehouseReportMeta.value = null;
             productReportRows.value = [];
             categoryColumns.value = [];
             supplyClassColumns.value = [];
@@ -2221,6 +2450,7 @@ async function generateReport() {
         }
     } catch (e) {
         reportData.value = [];
+        warehouseReportMeta.value = null;
         productReportRows.value = [];
         categoryColumns.value = [];
         supplyClassColumns.value = [];

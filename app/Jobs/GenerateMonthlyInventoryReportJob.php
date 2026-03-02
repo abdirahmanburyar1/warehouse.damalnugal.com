@@ -7,6 +7,8 @@ use App\Models\InventoryReportItem;
 use App\Models\Product;
 use App\Models\MonthlyQuantityReceived;
 use App\Models\IssueQuantityReport;
+use App\Models\ReceivedQuantity;
+use App\Models\IssuedQuantity;
 use App\Mail\MonthlyInventoryReportGenerated;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
@@ -15,7 +17,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Mail;
 
 class GenerateMonthlyInventoryReportJob implements ShouldQueue
@@ -38,7 +40,6 @@ class GenerateMonthlyInventoryReportJob implements ShouldQueue
     public function handle()
     {
         try {
-            Log::info("Starting monthly inventory report generation for {$this->monthYear}");
             echo "Starting monthly inventory report generation for {$this->monthYear}\n";
             
             // Parse the month year
@@ -52,7 +53,6 @@ class GenerateMonthlyInventoryReportJob implements ShouldQueue
             $existingReport = InventoryReport::where('month_year', $this->monthYear)->first();
             
             if ($existingReport) {
-                Log::info("Report for {$this->monthYear} already exists. Updating...");
                 echo "Report already exists. Updating...\n";
                 // Delete existing items
                 $existingReport->items()->delete();
@@ -75,18 +75,14 @@ class GenerateMonthlyInventoryReportJob implements ShouldQueue
             $itemsGenerated = $this->generateReportItems($report, $date, $previousDate);
             
             echo "Generated {$itemsGenerated} items\n";
-            Log::info("Successfully generated {$itemsGenerated} items for inventory report {$this->monthYear}");
             
             // Send email notification with report details - Skip for now to test
             // Mail::to('buryar313@gmail.com')->send(new MonthlyInventoryReportGenerated($report, $itemsGenerated));
             
             echo "Email notification skipped for testing\n";
-            Log::info("Monthly inventory report generation completed for {$this->monthYear}");
             
         } catch (\Exception $e) {
             echo "Error: " . $e->getMessage() . "\n";
-            Log::error("Error generating monthly inventory report for {$this->monthYear}: " . $e->getMessage());
-            Log::error("Stack trace: " . $e->getTraceAsString());
             
             // Send error email notification - Skip for now
             // Mail::to('buryar313@gmail.com')->send(new MonthlyInventoryReportGenerated(null, 0, $e->getMessage()));
@@ -100,19 +96,26 @@ class GenerateMonthlyInventoryReportJob implements ShouldQueue
      */
     private function generateReportItems(InventoryReport $report, Carbon $date, Carbon $previousDate)
     {
-        // First check if required reports exist for this month
+        // This report depends on: (1) received quantity report, (2) issued quantity report, (3) warehouse AMC (for metrics).
+        // Generate those first via Settings > Report Schedules or: report:monthly-received-quantities, report:issue-quantities, warehouse:generate-amc
         echo "Checking for required reports for {$date->format('Y-m')}...\n";
         
-        // Check for received quantity report
-        $receivedReport = MonthlyQuantityReceived::where('month_year', $date->format('Y-m'))->first();
+        $monthStr = $date->format('Y-m');
+        $missing = [];
+
+        $receivedReport = MonthlyQuantityReceived::where('month_year', $monthStr)->first();
         if (!$receivedReport) {
-            throw new \Exception("Received quantity report for {$date->format('Y-m')} not found. Please generate it first.");
+            $missing[] = 'received quantity report';
         }
-        
-        // Check for issued quantity report  
-        $issuedReport = IssueQuantityReport::where('month_year', $date->format('Y-m'))->first();
+        $issuedReport = IssueQuantityReport::where('month_year', $monthStr)->first();
         if (!$issuedReport) {
-            throw new \Exception("Issued quantity report for {$date->format('Y-m')} not found. Please generate it first.");
+            $missing[] = 'issued quantity report';
+        }
+        if (!empty($missing)) {
+            throw new \Exception(
+                "Monthly inventory report for {$monthStr} requires the following to be generated first: " . implode(', ', $missing) . ". "
+                . "Generate them from Settings > Report Schedules (Monthly received quantities, Issue quantities) or run the corresponding artisan commands, then run this again."
+            );
         }
         
         echo "Found required reports. Proceeding with inventory report generation...\n";
@@ -125,240 +128,230 @@ class GenerateMonthlyInventoryReportJob implements ShouldQueue
         $issuedItems = $issuedReport->items()->with('product')->get();
         echo "Found {$issuedItems->count()} issued items\n";
         
-        // Get all unique product-warehouse combinations from both reports
-        $receivedProductWarehouses = $receivedItems->map(function($item) {
-            return ['product_id' => $item->product_id, 'warehouse_id' => $item->warehouse_id];
-        });
-        
-        $issuedProductWarehouses = $issuedItems->map(function($item) {
-            return ['product_id' => $item->product_id, 'warehouse_id' => $item->warehouse_id];
-        });
-        
-        $allProductWarehouses = $receivedProductWarehouses->merge($issuedProductWarehouses)->unique(function($item) {
-            return $item['product_id'] . '-' . $item['warehouse_id'];
-        });
-        
-        echo "Processing {$allProductWarehouses->count()} unique product-warehouse combinations\n";
-        
+        $startOfMonth = $date->copy()->startOfMonth()->startOfDay();
+        $endOfMonth = $date->copy()->endOfMonth()->endOfDay();
+
+        // One row per (product, warehouse, batch): same batch_no for received and issued on that row; different batches = different rows
+        $receivedBatches = ReceivedQuantity::whereBetween('received_at', [$startOfMonth, $endOfMonth])
+            ->selectRaw('product_id, warehouse_id, COALESCE(NULLIF(TRIM(batch_number), ""), "N/A") as batch_key')
+            ->groupBy('product_id', 'warehouse_id', 'batch_key')
+            ->get();
+        $issuedBatches = IssuedQuantity::whereBetween('issued_date', [$startOfMonth, $endOfMonth])
+            ->selectRaw('product_id, warehouse_id, COALESCE(NULLIF(TRIM(batch_number), ""), "N/A") as batch_key')
+            ->groupBy('product_id', 'warehouse_id', 'batch_key')
+            ->get();
+        $allBatchKeys = $receivedBatches->map(fn ($r) => ['product_id' => $r->product_id, 'warehouse_id' => $r->warehouse_id, 'batch_key' => $r->batch_key])
+            ->merge($issuedBatches->map(fn ($r) => ['product_id' => $r->product_id, 'warehouse_id' => $r->warehouse_id, 'batch_key' => $r->batch_key]))
+            ->unique(fn ($item) => $item['product_id'] . '-' . $item['warehouse_id'] . '-' . $item['batch_key']);
+
+        echo "Processing {$allBatchKeys->count()} unique product-warehouse-batch combinations\n";
+
         $itemsGenerated = 0;
         $processedCount = 0;
-        
-        foreach ($allProductWarehouses as $productWarehouse) {
+        foreach ($allBatchKeys as $row) {
             $processedCount++;
-            
-            // Show progress every 10 combinations
             if ($processedCount % 10 == 0) {
-                echo "Processed {$processedCount}/{$allProductWarehouses->count()} product-warehouse combinations\n";
+                echo "Processed {$processedCount}/{$allBatchKeys->count()} combinations\n";
             }
-            
-            // Get the product
-            $product = Product::find($productWarehouse['product_id']);
+            $product = Product::find($row['product_id']);
             if (!$product) {
                 continue;
             }
-            
-            $warehouseId = $productWarehouse['warehouse_id'];
-            
-            if ($this->generateProductReportItemFromReports($report, $product, $warehouseId, $receivedItems, $issuedItems, $previousDate)) {
+            $batchNumber = ($row['batch_key'] ?? '') === 'N/A' ? null : ($row['batch_key'] ?? null);
+            $batchForDb = $batchNumber ?? 'N/A';
+            if ($this->generateProductReportItemForBatch($report, $product, (int) $row['warehouse_id'], $batchNumber, $startOfMonth, $endOfMonth, $date, $previousDate)) {
                 $itemsGenerated++;
             }
         }
-        
-        echo "Completed processing all products. Items generated: {$itemsGenerated}\n";
-        
+
+        echo "Completed processing. Items generated: {$itemsGenerated}\n";
         return $itemsGenerated;
     }
     
     /**
-     * Generate report item for a specific product using data from generated reports
+     * Generate one report item for a specific product/warehouse/batch. Received and issued on this row
+     * are for the same batch_no; different batches get different rows.
      */
-    private function generateProductReportItemFromReports(InventoryReport $report, $product, $warehouseId, $receivedItems, $issuedItems, Carbon $previousDate)
+    private function generateProductReportItemForBatch(InventoryReport $report, $product, int $warehouseId, ?string $batchNumber, Carbon $startOfMonth, Carbon $endOfMonth, Carbon $reportDate, Carbon $previousDate): bool
     {
-        echo "Processing product: {$product->productID} - {$product->name}\n";
-        
-        // Get beginning balance from previous month's report for this warehouse
-        $beginningBalance = $this->getPreviousMonthClosingBalance($product->id, $warehouseId, $previousDate->format('Y-m'));
-        echo "  Beginning balance for warehouse {$warehouseId}: {$beginningBalance}\n";
-        
-        // Get received quantity from the received report items for this warehouse
-        $receivedQuantity = $receivedItems->where('product_id', $product->id)->where('warehouse_id', $warehouseId)->sum('quantity');
-        echo "  Received quantity for warehouse {$warehouseId}: {$receivedQuantity}\n";
-        
-        // Get issued quantity from the issued report items for this warehouse
-        $issuedQuantity = $issuedItems->where('product_id', $product->id)->where('warehouse_id', $warehouseId)->sum('quantity');
-        echo "  Issued quantity for warehouse {$warehouseId}: {$issuedQuantity}\n";
-        
-        // Set adjustments to 0 (will be entered manually)
+        $batchForDb = $batchNumber !== null && $batchNumber !== '' ? $batchNumber : 'N/A';
+
+        $receivedQtyQuery = ReceivedQuantity::whereBetween('received_at', [$startOfMonth, $endOfMonth])
+            ->where('product_id', $product->id)
+            ->where('warehouse_id', $warehouseId);
+        $issuedQtyQuery = IssuedQuantity::whereBetween('issued_date', [$startOfMonth, $endOfMonth])
+            ->where('product_id', $product->id)
+            ->where('warehouse_id', $warehouseId);
+        if ($batchNumber !== null && $batchNumber !== '') {
+            $receivedQtyQuery->where('batch_number', $batchNumber);
+            $issuedQtyQuery->where('batch_number', $batchNumber);
+        } else {
+            $receivedQtyQuery->where(function ($q) {
+                $q->whereNull('batch_number')->orWhere('batch_number', '')->orWhereRaw("TRIM(batch_number) = ''");
+            });
+            $issuedQtyQuery->where(function ($q) {
+                $q->whereNull('batch_number')->orWhere('batch_number', '')->orWhereRaw("TRIM(batch_number) = ''");
+            });
+        }
+        $receivedQuantity = (int) $receivedQtyQuery->sum('quantity');
+        $issuedQuantity = (int) $issuedQtyQuery->sum('quantity');
+        $beginningBalance = $this->getPreviousMonthClosingBalance($product->id, $warehouseId, $previousDate->format('Y-m'), $batchNumber);
         $positiveAdjustment = 0;
         $negativeAdjustment = 0;
-        
-        // Calculate closing balance
         $closingBalance = $beginningBalance + $receivedQuantity - $issuedQuantity - $negativeAdjustment + $positiveAdjustment;
-        echo "  Closing balance: {$closingBalance}\n";
-        
-        // Only create report item if there's any movement or balance
+
         if ($beginningBalance > 0 || $receivedQuantity > 0 || $issuedQuantity > 0 || $closingBalance > 0) {
-            
-            // Get all received and issued items for this product and warehouse
-            $productReceivedItems = $receivedItems->where('product_id', $product->id)->where('warehouse_id', $warehouseId);
-            $productIssuedItems = $issuedItems->where('product_id', $product->id)->where('warehouse_id', $warehouseId);
-            
-            echo "  Found " . $productReceivedItems->count() . " received items and " . $productIssuedItems->count() . " issued items for this product\n";
-            
-            // Determine batch number priority: received items first, then issued items, then fallback
-            $batchNumber = 'N/A';
             $unitCost = 0;
-            
-            // First, try to get batch number from received items (most reliable for cost)
-            if ($productReceivedItems->count() > 0) {
-                // Group received items by batch number
-                $receivedBatches = $productReceivedItems->groupBy('batch_number');
-                
-                echo "  Received batches: " . $receivedBatches->keys()->implode(', ') . "\n";
-                
-                // Calculate weighted average cost from all received items
-                $totalReceivedCost = $productReceivedItems->sum('total_cost');
-                $totalReceivedQuantity = $productReceivedItems->sum('quantity');
-                
-                if ($totalReceivedQuantity > 0 && $totalReceivedCost > 0) {
-                    $unitCost = $totalReceivedCost / $totalReceivedQuantity;
-                    echo "  Calculated weighted average unit cost from received items: {$unitCost}\n";
-                }
-                
-                // Use the first non-null batch number from received items
-                $firstReceivedBatch = $productReceivedItems->where('batch_number', '!=', null)->first();
-                if ($firstReceivedBatch && $firstReceivedBatch->batch_number) {
-                    $batchNumber = $firstReceivedBatch->batch_number;
-                    echo "  Using batch number from received items: {$batchNumber}\n";
-                }
-                
-            } else if ($productIssuedItems->count() > 0) {
-                // If no received items, try issued items for batch number
-                echo "  No received items, checking issued items for batch number...\n";
-                
-                // Group issued items by batch number
-                $issuedBatches = $productIssuedItems->groupBy('batch_number');
-                echo "  Issued batches: " . $issuedBatches->keys()->implode(', ') . "\n";
-                
-                // Use the first non-null batch number from issued items
-                $firstIssuedBatch = $productIssuedItems->where('batch_number', '!=', null)->first();
-                if ($firstIssuedBatch && $firstIssuedBatch->batch_number) {
-                    $batchNumber = $firstIssuedBatch->batch_number;
-                    echo "  Using batch number from issued items: {$batchNumber}\n";
-                    
-                    // If issued items have cost information and we don't have unit cost yet
-                    if ($unitCost == 0) {
-                        $totalIssuedCost = $productIssuedItems->sum('total_cost');
-                        $totalIssuedQuantity = $productIssuedItems->sum('quantity');
-                        
-                        if ($totalIssuedQuantity > 0 && $totalIssuedCost > 0) {
-                            $unitCost = $totalIssuedCost / $totalIssuedQuantity;
-                            echo "  Calculated unit cost from issued items: {$unitCost}\n";
-                        }
-                    }
-                }
+            $costQtyReceived = ReceivedQuantity::whereBetween('received_at', [$startOfMonth, $endOfMonth])
+                ->where('product_id', $product->id)
+                ->where('warehouse_id', $warehouseId);
+            if ($batchNumber !== null && $batchNumber !== '') {
+                $costQtyReceived->where('batch_number', $batchNumber);
+            } else {
+                $costQtyReceived->where(function ($q) {
+                    $q->whereNull('batch_number')->orWhere('batch_number', '')->orWhereRaw("TRIM(batch_number) = ''");
+                });
             }
-            
-            // If we still don't have a unit cost, try previous month's report
+            $receivedCostQty = $costQtyReceived->selectRaw('COALESCE(SUM(total_cost), 0) as total_cost, COALESCE(SUM(quantity), 0) as qty')->first();
+            if ($receivedCostQty && $receivedCostQty->qty > 0 && $receivedCostQty->total_cost > 0) {
+                $unitCost = (float) $receivedCostQty->total_cost / (float) $receivedCostQty->qty;
+            }
             if ($unitCost == 0) {
-                echo "  No cost data from current month items, checking previous month...\n";
-                $previousReportItem = InventoryReportItem::whereHas('report', function($q) use ($previousDate) {
-                    $q->where('month_year', $previousDate->format('Y-m'));
-                })->where('product_id', $product->id)->first();
-                
-                if ($previousReportItem && $previousReportItem->unit_cost > 0) {
-                    $unitCost = $previousReportItem->unit_cost;
-                    echo "  Using previous month's unit cost: {$unitCost}\n";
-                    
-                    // Also use previous month's batch number if we don't have one
-                    if ($batchNumber == 'N/A' && $previousReportItem->batch_number) {
-                        $batchNumber = $previousReportItem->batch_number;
-                        echo "  Using previous month's batch number: {$batchNumber}\n";
-                    }
+                $costQtyIssued = IssuedQuantity::whereBetween('issued_date', [$startOfMonth, $endOfMonth])
+                    ->where('product_id', $product->id)
+                    ->where('warehouse_id', $warehouseId);
+                if ($batchNumber !== null && $batchNumber !== '') {
+                    $costQtyIssued->where('batch_number', $batchNumber);
                 } else {
-                    echo "  No previous month's cost data found, using 0\n";
+                    $costQtyIssued->where(function ($q) {
+                        $q->whereNull('batch_number')->orWhere('batch_number', '')->orWhereRaw("TRIM(batch_number) = ''");
+                    });
+                }
+                $issuedCostQty = $costQtyIssued->selectRaw('COALESCE(SUM(total_cost), 0) as total_cost, COALESCE(SUM(quantity), 0) as qty')->first();
+                if ($issuedCostQty && $issuedCostQty->qty > 0 && $issuedCostQty->total_cost > 0) {
+                    $unitCost = (float) $issuedCostQty->total_cost / (float) $issuedCostQty->qty;
                 }
             }
-            
-            // Handle common batch numbers between received and issued items
-            if ($productReceivedItems->count() > 0 && $productIssuedItems->count() > 0) {
-                $receivedBatchNumbers = $productReceivedItems->pluck('batch_number')->filter()->unique();
-                $issuedBatchNumbers = $productIssuedItems->pluck('batch_number')->filter()->unique();
-                $commonBatches = $receivedBatchNumbers->intersect($issuedBatchNumbers);
-                
-                if ($commonBatches->count() > 0) {
-                    echo "  Found common batch numbers: " . $commonBatches->implode(', ') . "\n";
-                    echo "  Using cost from received items for matching batches\n";
-                    
-                    // Use the first common batch number
-                    $batchNumber = $commonBatches->first();
-                    echo "  Selected common batch number: {$batchNumber}\n";
+            if ($unitCost == 0) {
+                $prevItem = InventoryReportItem::whereHas('report', fn ($q) => $q->where('month_year', $previousDate->format('Y-m')))
+                    ->where('product_id', $product->id)
+                    // ->where('warehouse_id', $warehouseId)
+                    ->when($batchNumber !== null && $batchNumber !== '', fn ($q) => $q->where('batch_number', $batchNumber), fn ($q) => $q->where(function ($q2) {
+                        $q2->whereNull('batch_number')->orWhere('batch_number', '')->orWhere('batch_number', 'N/A');
+                    }))
+                    ->first();
+                if ($prevItem && (float) ($prevItem->unit_cost ?? 0) > 0) {
+                    $unitCost = (float) $prevItem->unit_cost;
                 }
             }
-            
-            // Calculate total cost based on closing balance and unit cost
-            $totalCost = abs($closingBalance) * $unitCost;
-            echo "  Calculated total cost: {$totalCost} (closing balance: {$closingBalance} × unit cost: {$unitCost})\n";
-            
-                        
-            // Determine expiry date priority: received items first, then issued items, then product, then default
-            $expiryDate = now()->addYears(5)->format('Y-m-d'); // Default fallback
-            
-            if ($productReceivedItems->count() > 0) {
-                $firstReceivedWithExpiry = $productReceivedItems->where('expiry_date', '!=', null)->first();
-                if ($firstReceivedWithExpiry && $firstReceivedWithExpiry->expiry_date) {
-                    $expiryDate = $firstReceivedWithExpiry->expiry_date;
+            $totalCost = round(abs($closingBalance) * $unitCost, 2);
+            // Item-level (product only, regardless of warehouse and batch): from IssuedQuantity/ReceivedQuantity dates
+            $stockoutDays = $this->calculateStockoutDays($product->id, $startOfMonth, $endOfMonth);
+            $expiryDate = now()->addYears(5)->format('Y-m-d');
+            $firstReceived = ReceivedQuantity::whereBetween('received_at', [$startOfMonth, $endOfMonth])
+                ->where('product_id', $product->id)
+                // ->where('warehouse_id', $warehouseId)
+                ->when($batchNumber !== null && $batchNumber !== '', fn ($q) => $q->where('batch_number', $batchNumber))
+                ->orderBy('received_at')
+                ->first();
+            if ($firstReceived && $firstReceived->expiry_date) {
+                $expiryDate = $firstReceived->expiry_date instanceof \DateTimeInterface ? $firstReceived->expiry_date->format('Y-m-d') : $firstReceived->expiry_date;
+            } else {
+                $firstIssued = IssuedQuantity::whereBetween('issued_date', [$startOfMonth, $endOfMonth])
+                    ->where('product_id', $product->id)
+                    // ->where('warehouse_id', $warehouseId)
+                    ->when($batchNumber !== null && $batchNumber !== '', fn ($q) => $q->where('batch_number', $batchNumber))
+                    ->orderBy('issued_date')
+                    ->first();
+                if ($firstIssued && $firstIssued->expiry_date) {
+                    $expiryDate = $firstIssued->expiry_date instanceof \DateTimeInterface ? $firstIssued->expiry_date->format('Y-m-d') : $firstIssued->expiry_date;
+                } elseif ($product->expiry_date) {
+                    $expiryDate = $product->expiry_date instanceof \DateTimeInterface ? $product->expiry_date->format('Y-m-d') : $product->expiry_date;
                 }
-            } elseif ($productIssuedItems->count() > 0) {
-                $firstIssuedWithExpiry = $productIssuedItems->where('expiry_date', '!=', null)->first();
-                if ($firstIssuedWithExpiry && $firstIssuedWithExpiry->expiry_date) {
-                    $expiryDate = $firstIssuedWithExpiry->expiry_date;
-                }
-            } elseif ($product->expiry_date) {
-                $expiryDate = $product->expiry_date;
             }
-            
-            echo "  Final values - Batch: {$batchNumber}, Unit Cost: " . round($unitCost, 2) . ", Total Cost: " . round($totalCost, 2) . ", Expiry: {$expiryDate}\n";
-            
-            InventoryReportItem::create([
+
+            $attrs = [
                 'inventory_report_id' => $report->id,
                 'product_id' => $product->id,
                 'warehouse_id' => $warehouseId,
-                'uom' => $product->uom ?? 'pcs',
-                'batch_number' => $batchNumber,
-                'expiry_date' => $expiryDate,
                 'beginning_balance' => $beginningBalance,
                 'received_quantity' => $receivedQuantity,
                 'issued_quantity' => $issuedQuantity,
                 'other_quantity_out' => 0,
-                'positive_adjustment' => $positiveAdjustment,
-                'negative_adjustment' => $negativeAdjustment,
                 'closing_balance' => $closingBalance,
                 'total_closing_balance' => $closingBalance,
                 'average_monthly_consumption' => $issuedQuantity > 0 ? $issuedQuantity : 1,
-                'months_of_stock' => 'N/A',
                 'quantity_in_pipeline' => 0,
-                'unit_cost' => round($unitCost, 2),
-                'total_cost' => round($totalCost, 2),
-            ]);
-            
-            echo "  ✓ Report item created successfully\n\n";
-            return true; // Item was created
+            ];
+            if (Schema::hasColumn('inventory_report_items', 'stockout_days')) {
+                $attrs['stockout_days'] = $stockoutDays;
+            }
+            if (Schema::hasColumn('inventory_report_items', 'unit_cost')) {
+                $attrs['unit_cost'] = round($unitCost, 2);
+                $attrs['total_cost'] = $totalCost;
+            }
+            if (Schema::hasColumn('inventory_report_items', 'uom')) {
+                $attrs['uom'] = $product->uom ?? 'pcs';
+            }
+            if (Schema::hasColumn('inventory_report_items', 'batch_number')) {
+                $attrs['batch_number'] = $batchForDb;
+            }
+            if (Schema::hasColumn('inventory_report_items', 'expiry_date')) {
+                $attrs['expiry_date'] = $expiryDate;
+            }
+            InventoryReportItem::create($attrs);
+            return true;
         }
-        
-        echo "  ✗ No report item created (no movement or balance)\n\n";
-        return false; // No item created
+        return false;
     }
     
     /**
+     * Calculate stockout days at item level (product only, regardless of warehouse and batch).
+     * Uses IssuedQuantity and ReceivedQuantity: days between the last issue date in the month
+     * and the next receive date. If no receive after last issue, counts days to end of month.
+     */
+    private function calculateStockoutDays(int $productId, Carbon $startOfMonth, Carbon $endOfMonth): int
+    {
+        $lastIssue = IssuedQuantity::where('product_id', $productId)
+            ->whereBetween('issued_date', [$startOfMonth, $endOfMonth])
+            ->orderByDesc('issued_date')
+            ->value('issued_date');
+        if (!$lastIssue) {
+            return 0;
+        }
+        $lastIssueDate = $lastIssue instanceof \DateTimeInterface
+            ? Carbon::parse($lastIssue)->startOfDay()
+            : Carbon::parse($lastIssue)->startOfDay();
+        $firstReceiveAfter = ReceivedQuantity::where('product_id', $productId)
+            ->where('received_at', '>', $lastIssueDate->endOfDay())
+            ->orderBy('received_at')
+            ->value('received_at');
+        if ($firstReceiveAfter) {
+            $firstReceiveDate = $firstReceiveAfter instanceof \DateTimeInterface
+                ? Carbon::parse($firstReceiveAfter)->startOfDay()
+                : Carbon::parse($firstReceiveAfter)->startOfDay();
+            return (int) $lastIssueDate->diffInDays($firstReceiveDate);
+        }
+        // No receive after last issue: count days from last issue to end of report month
+        return (int) $lastIssueDate->diffInDays($endOfMonth->copy()->startOfDay());
+    }
+
+    /**
      * Get closing balance from previous month's report
      */
-    private function getPreviousMonthClosingBalance($productId, $warehouseId, $monthYear)
+    private function getPreviousMonthClosingBalance($productId, $warehouseId, $monthYear, ?string $batchNumber = null)
     {
-        $previousReportItem = InventoryReportItem::whereHas('report', function($q) use ($monthYear) {
+        $query = InventoryReportItem::whereHas('report', function ($q) use ($monthYear) {
             $q->where('month_year', $monthYear);
-        })->where('product_id', $productId)->where('warehouse_id', $warehouseId)->first();
-        
-        return $previousReportItem ? $previousReportItem->closing_balance : 0;
+        })->where('product_id', $productId)->where('warehouse_id', $warehouseId);
+        if ($batchNumber !== null && $batchNumber !== '') {
+            $query->where('batch_number', $batchNumber);
+        } else {
+            $query->where(function ($q) {
+                $q->whereNull('batch_number')->orWhere('batch_number', '')->orWhere('batch_number', 'N/A');
+            });
+        }
+        $previousReportItem = $query->first();
+        return $previousReportItem ? (int) $previousReportItem->closing_balance : 0;
     }
 }

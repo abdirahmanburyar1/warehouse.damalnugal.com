@@ -14,8 +14,12 @@ class CheckLowStock extends Command
 
     public function handle()
     {
-        $lowStockItems = Inventory::where('quantity', '<=', 'reorder_level')
-            ->where('is_active', true)
+        // inventories has no reorder_level or is_active; reorder_level lives in reorder_levels (per product_id)
+        $lowStockItems = Inventory::query()
+            ->join('reorder_levels', 'reorder_levels.product_id', '=', 'inventories.product_id')
+            ->whereColumn('inventories.quantity', '<=', 'reorder_levels.reorder_level')
+            ->where('inventories.quantity', '>', 0)
+            ->select('inventories.*')
             ->get();
 
         foreach ($lowStockItems as $inventory) {

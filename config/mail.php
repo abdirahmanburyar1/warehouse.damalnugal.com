@@ -113,4 +113,14 @@ return [
         'name' => env('MAIL_FROM_NAME', 'Example'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Schedule failure notification
+    |--------------------------------------------------------------------------
+    |
+    | When a scheduled task fails, output is emailed to this address.
+    |
+    */
+    'admin_address' => env('MAIL_ADMIN_ADDRESS', 'abdirahman.buryar@gmail.com'),
+
 ];

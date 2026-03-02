@@ -234,8 +234,21 @@ class WarehouseAmcCalculationService
     }
 
     /**
+     * Calculate AMC from raw monthly data using 70% deviation screening.
+     * Use this when you have monthly consumption data (e.g. from issue quantities) and want the same screening formula.
+     * $monthsData must be ordered newest first: [['month' => 'Y-m', 'consumption' => float], ...]
+     *
+     * @param array $monthsData
+     * @return array ['amc' => float, 'selectedMonths' => [], 'totalMonths' => int, 'calculation' => string]
+     */
+    public function calculateAmcFromMonthlyData(array $monthsData): array
+    {
+        return $this->processAmcCalculation($monthsData, 0);
+    }
+
+    /**
      * Process AMC calculation for a single product's consumption data
-     * 
+     *
      * @param array $monthsData
      * @param int $productId
      * @return array

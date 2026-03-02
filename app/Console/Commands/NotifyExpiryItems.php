@@ -50,12 +50,6 @@ class NotifyExpiryItems extends Command
 
         if (!$this->option('force')) {
             if ($currentTime !== $sendTime) {
-                Log::channel('single')->info('Expiry notification skipped: not send time.', [
-                    'current_time' => $currentTime,
-                    'configured_send_time' => $sendTime,
-                    'configured_send_time_raw' => $sendTimeRaw,
-                    'app_timezone' => $appTz,
-                ]);
                 $this->info('Not the configured send time (' . $sendTime . '). Current app time: ' . $currentTime . ' (' . $appTz . '). Skipping. Use --force to send now.');
                 return self::SUCCESS;
             }
@@ -138,6 +132,10 @@ class NotifyExpiryItems extends Command
         }
 
         foreach ($users as $user) {
+            if (empty($user->email)) {
+                $this->warn("Skipping user ID {$user->id}: no email address.");
+                continue;
+            }
             try {
                 Mail::to($user->email)->send(new ExpiryItemsNotification(
                     $expiredItems,

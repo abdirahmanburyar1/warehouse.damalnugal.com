@@ -30,15 +30,14 @@ class SendLowStockNotification extends Command
      */
     public function handle()
     {
-        // Get all low stock items
-        $lowStockItems = Inventory::where('quantity', '<=', function ($query) {
-            $query->selectRaw('inventories.reorder_level')
-                ->from('inventories as i')
-                ->whereColumn('i.id', 'inventories.id');
-        })
-        ->where('quantity', '>', 0) // Only include items that are not completely out of stock
-        ->with(['product', 'warehouse'])
-        ->get();
+        // Get all low stock items (reorder_level is in reorder_levels table, not inventories)
+        $lowStockItems = Inventory::query()
+            ->join('reorder_levels', 'reorder_levels.product_id', '=', 'inventories.product_id')
+            ->whereColumn('inventories.quantity', '<=', 'reorder_levels.reorder_level')
+            ->where('inventories.quantity', '>', 0)
+            ->select('inventories.*')
+            ->with(['product'])
+            ->get();
 
         if ($lowStockItems->count() > 0) {
             // Send email notification

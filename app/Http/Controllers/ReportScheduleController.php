@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\EmailNotificationSetting;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 
@@ -79,5 +81,72 @@ class ReportScheduleController extends Controller
         }
 
         return back()->with('success', 'Report schedule settings saved. Ensure cron runs: * * * * * php artisan schedule:run');
+    }
+
+    /**
+     * Artisan command and default options for each runnable schedule (manual run).
+     */
+    private const RUN_COMMANDS = [
+        'monthly_received_report' => ['command' => 'report:monthly-received-quantities', 'options' => ['--month' => null]],
+        'issue_quantities' => ['command' => 'report:issue-quantities', 'options' => ['--month' => null]],
+        'monthly_consumption' => ['command' => 'consumption:generate', 'options' => []],
+        'inventory_monthly_report' => ['command' => 'inventory:generate-monthly-report', 'options' => ['--month' => null]],
+        'orders_quarterly' => ['command' => 'orders:generate-quarterly', 'options' => []],
+        'warehouse_amc' => ['command' => 'warehouse:generate-amc', 'options' => ['--month' => null]],
+    ];
+
+    /**
+     * Run a scheduled task manually by slug. Uses previous month for monthly reports if month not provided.
+     */
+    public function runScheduleNow(Request $request)
+    {
+        $request->validate([
+            'slug' => 'required|string|in:' . implode(',', array_keys(self::RUN_COMMANDS)),
+            'month' => 'nullable|string|regex:/^\d{4}-\d{2}$/',
+        ]);
+        $slug = $request->slug;
+        $def = self::RUN_COMMANDS[$slug];
+        $month = $request->filled('month') ? $request->month : Carbon::now()->subMonth()->format('Y-m');
+
+        $params = [];
+        foreach ($def['options'] as $key => $value) {
+            if ($value === null && $key === '--month') {
+                $params[$key] = $month;
+            } elseif ($value !== null) {
+                $params[$key] = $value;
+            }
+        }
+
+        if ($slug === 'orders_quarterly') {
+            $now = Carbon::now();
+            $m = (int) $now->month;
+            $quarter = $m >= 12 || $m <= 2 ? 1 : ($m <= 5 ? 2 : ($m <= 8 ? 3 : 4));
+            $year = (int) $now->year;
+            if ($quarter === 1 && $m === 12) {
+                $year++;
+            }
+            Artisan::call($def['command'], ['quarter' => $quarter, 'year' => $year]);
+        } else {
+            Artisan::call($def['command'], $params);
+        }
+
+        return back()->with('success', "Schedule \"{$slug}\" run completed. Check logs if no output.");
+    }
+
+    /**
+     * Run the inventory monthly report now for a given month (default: previous month).
+     */
+    public function runInventoryMonthlyReportNow(Request $request)
+    {
+        $request->validate([
+            'month' => 'nullable|string|regex:/^\d{4}-\d{2}$/',
+        ]);
+        $month = $request->filled('month')
+            ? $request->month
+            : Carbon::now()->subMonth()->format('Y-m');
+
+        Artisan::call('inventory:generate-monthly-report', ['--month' => $month]);
+
+        return back()->with('success', "Inventory monthly report run completed for {$month}. Check logs if no output.");
     }
 }

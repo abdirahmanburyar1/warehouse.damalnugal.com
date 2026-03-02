@@ -66,6 +66,22 @@
                                 <p v-if="scheduleDef.quarterly" class="mt-0.5 text-xs text-slate-500">Runs on quarter start dates only: Dec 1, Mar 1, Jun 1, Sep 1.</p>
                             </div>
                         </div>
+                        <!-- Run now: all schedules -->
+                        <div class="pt-2 border-t border-slate-100">
+                            <p class="text-xs text-slate-500 mb-2">Run this task now (uses previous month for monthly reports).</p>
+                            <button
+                                type="button"
+                                :disabled="runningSlug === slug"
+                                class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 focus:ring-2 focus:ring-slate-400/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                @click="runScheduleNow(slug)"
+                            >
+                                <svg v-if="runningSlug === slug" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 12 12 12s12-5.373 12-12h-4a8 8 0 01-8 8z" />
+                                </svg>
+                                {{ runningSlug === slug ? 'Running…' : 'Run now' }}
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -137,6 +153,7 @@ const props = defineProps({
 const saving = ref(false);
 const success = ref(false);
 const error = ref('');
+const runningSlug = ref(null);
 
 function normalizeTime(t) {
     if (!t || typeof t !== 'string') return '01:00';
@@ -196,6 +213,23 @@ function submit() {
         },
         onFinish: () => {
             saving.value = false;
+        },
+    });
+}
+
+function runScheduleNow(slug) {
+    runningSlug.value = slug;
+    error.value = '';
+    router.post(route('settings.report-schedules.run-schedule'), { slug }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            success.value = true;
+        },
+        onError: (errors) => {
+            error.value = Object.values(errors).flat().join(' ') || 'Run failed';
+        },
+        onFinish: () => {
+            runningSlug.value = null;
         },
     });
 }

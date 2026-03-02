@@ -26,7 +26,17 @@ class InventoryReport extends Model
         'rejected_by',
         'rejected_at',
         'rejection_reason',
-        'status'
+        'status',
+        'stockout_days',
+        'months_of_stock',
+        'positive_adjustment',
+        'negative_adjustment',
+    ];
+
+    protected $casts = [
+        'stockout_days' => 'integer',
+        'positive_adjustment' => 'integer',
+        'negative_adjustment' => 'integer',
     ];
 
     public function items(): HasMany

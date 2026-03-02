@@ -26,6 +26,7 @@ use App\Models\FacilityInventoryItem;
 use App\Models\Inventory;
 use App\Models\InventoryItem;
 use App\Models\InventoryReport;
+use App\Models\InventoryReportItem;
 use App\Models\WarehouseAmc;
 use App\Models\InventoryAdjustment;
 use App\Models\InventoryAdjustmentItem;
@@ -36,6 +37,7 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\PackingListItem;
 use App\Models\ReceivedQuantity;
+use App\Models\IssuedQuantity;
 use App\Jobs\ProcessPhysicalCountApprovalJob;
 use App\Models\IssueQuantityReport;
 use App\Http\Resources\PhysicalCountReportResource;
@@ -109,6 +111,9 @@ class ReportController extends Controller
                 $submittedBy = Auth::user();
 
                 foreach ($users as $user) {
+                    if (empty($user->email)) {
+                        continue;
+                    }
                     Mail::to($user->email)
                         ->queue(new PhysicalCountSubmitted($adjustment, $approvalLink, $submittedBy));
                 }
@@ -167,15 +172,22 @@ class ReportController extends Controller
             || $request->filled('district_id')
             || $request->filled('warehouse_id')
             || $request->filled('facility_id');
-        if (!$hasLocationFilter) {
+
+        $reportType = $request->report_type;
+
+        // Warehouse Inventory: allow with only year+month (no location required); show all warehouses
+        $warehouseInventoryNeedsOnlyPeriod = $reportType === 'warehouse_inventory'
+            && $request->filled('year')
+            && $request->filled('month');
+
+        if (!$hasLocationFilter && !$warehouseInventoryNeedsOnlyPeriod) {
+            $data = $reportType === 'warehouse_inventory' ? [$this->getWarehouseInventoryEmptyRow()] : [];
             return response()->json([
                 'success' => true,
-                'data' => [],
+                'data' => $data,
                 'message' => 'Please select at least one filter (Region, District, Warehouse or Facility).',
             ]);
         }
-
-        $reportType = $request->report_type;
 
         if ($reportType === 'product_report') {
             $result = $this->getProductReportData($request);
@@ -247,10 +259,170 @@ class ReportController extends Controller
         } elseif ($request->filled('year')) {
             $monthYear = (string) $request->year;
         }
+
+        // Warehouse Inventory Report: when validation fails still return one zero row so the table style shows
+        if ($reportType === 'warehouse_inventory') {
+            if ($request->filled('year') && !$request->filled('month')) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [$this->getWarehouseInventoryEmptyRow()],
+                    'message' => 'For Warehouse Inventory Report, please select both year and month (Report Period).',
+                ]);
+            }
+            if (!$monthYear || strlen($monthYear) < 7) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [$this->getWarehouseInventoryEmptyRow()],
+                    'message' => 'For Warehouse Inventory Report, please select Report Period (year and month).',
+                ]);
+            }
+        }
+
         $warehouseIds = $this->resolveWarehouseIdsFromFilters($request);
         $facilityIds = $this->resolveFacilityIdsFromFilters($request);
         $data = $this->getUnifiedInventoryReportRows($reportType, $monthYear, $request->warehouse_id, $request->facility_id, $warehouseIds, $facilityIds, $request);
-        return response()->json(['success' => true, 'data' => $data]);
+
+        // When warehouse inventory has no data, show the table with one zero row instead of empty
+        $message = null;
+        $reportMeta = null;
+        if ($reportType === 'warehouse_inventory' && is_array($data) && empty($data)) {
+            $data = [$this->getWarehouseInventoryEmptyRow()];
+            if ($monthYear) {
+                $report = InventoryReport::where('month_year', $monthYear)->first();
+                $message = !$report
+                    ? 'No inventory report for this month. Generate it from Settings → Report Schedules (Monthly received → Issue quantities → Inventory monthly report).'
+                    : 'No rows in report for this month/filters. Table shown with zeros.';
+            }
+        }
+        if ($reportType === 'warehouse_inventory' && $monthYear) {
+            $report = InventoryReport::where('month_year', $monthYear)->first();
+            if ($report) {
+                $reportMeta = [
+                    'report_id' => $report->id,
+                    'report_status' => $report->status,
+                    'report_can_edit' => $report->canBeEdited(),
+                    'report_can_submit' => $report->canBeSubmitted(),
+                    'report_can_review' => $report->status === 'submitted',
+                    'report_can_approve_reject' => $report->status === 'under_review',
+                    'rejection_reason' => $report->rejection_reason ?? null,
+                    'stockout_days' => (int) ($report->stockout_days ?? 0),
+                    'months_of_stock' => $report->months_of_stock ?? '',
+                    'adjustment_neg' => (int) ($report->negative_adjustment ?? 0),
+                    'adjustment_pos' => (int) ($report->positive_adjustment ?? 0),
+                ];
+            }
+        }
+
+        return response()->json(array_filter([
+            'success' => true,
+            'data' => $data,
+            'message' => $message,
+            'report_meta' => $reportMeta,
+        ]));
+    }
+
+    /**
+     * One placeholder row with zeros for warehouse inventory report when there is no data.
+     */
+    private function getWarehouseInventoryEmptyRow(): array
+    {
+        return [
+            'report_item_id' => null,
+            'item' => '–',
+            'category' => '–',
+            'uom' => '–',
+            'batch_no' => null,
+            'expiry_date' => null,
+            'beginning_balance' => 0,
+            'qty_received' => 0,
+            'qty_issued' => 0,
+            'adjustment_neg' => 0,
+            'adjustment_pos' => 0,
+            'closing_balance' => 0,
+            'total_closing_balance' => 0,
+            'amc' => 0,
+            'mos' => '–',
+            'stockout_days' => 0,
+            'unit_cost' => 0,
+            'total_cost' => 0,
+            'warehouse_name' => '–',
+            'facility_name' => null,
+            'rowspan' => 1,
+            'is_first_batch' => true,
+        ];
+    }
+
+    /**
+     * Update a single inventory report item (item-level fields: adjustments, stockout_days at product level).
+     */
+    public function updateInventoryReportItem(Request $request, int $id)
+    {
+        $item = InventoryReportItem::with('report')->findOrFail($id);
+        $validated = $request->validate([
+            'adjustment_neg' => 'nullable|integer|min:0',
+            'adjustment_pos' => 'nullable|integer|min:0',
+            'stockout_days' => 'nullable|integer|min:0|max:366',
+        ]);
+        if (Schema::hasColumn('inventory_report_items', 'negative_adjustment') && array_key_exists('adjustment_neg', $validated)) {
+            $item->negative_adjustment = (int) ($validated['adjustment_neg'] ?? 0);
+        }
+        if (Schema::hasColumn('inventory_report_items', 'positive_adjustment') && array_key_exists('adjustment_pos', $validated)) {
+            $item->positive_adjustment = (int) ($validated['adjustment_pos'] ?? 0);
+        }
+        // stockout_days is product-level: update this item and all other items for same product in this report
+        if (Schema::hasColumn('inventory_report_items', 'stockout_days') && array_key_exists('stockout_days', $validated)) {
+            $days = (int) ($validated['stockout_days'] ?? 0);
+            $item->stockout_days = $days;
+            InventoryReportItem::where('inventory_report_id', $item->inventory_report_id)
+                ->where('product_id', $item->product_id)
+                ->where('id', '!=', $item->id)
+                ->update(['stockout_days' => $days]);
+        }
+        // Closing balance = beginning + received - issued - negative_adjustment + positive_adjustment
+        $neg = (int) ($item->negative_adjustment ?? 0);
+        $pos = (int) ($item->positive_adjustment ?? 0);
+        $closingBalance = (int) $item->beginning_balance + (int) $item->received_quantity - (int) $item->issued_quantity - (int) ($item->other_quantity_out ?? 0) - $neg + $pos;
+        $item->closing_balance = $closingBalance;
+        $item->total_closing_balance = $closingBalance;
+        // Recalculate total cost = unit cost × closing balance
+        if (Schema::hasColumn('inventory_report_items', 'unit_cost') && Schema::hasColumn('inventory_report_items', 'total_cost')) {
+            $unitCost = (float) ($item->unit_cost ?? 0);
+            $item->total_cost = round($unitCost * abs($closingBalance), 2);
+        }
+        $item->save();
+        return response()->json(['success' => true, 'item' => $item->fresh(), 'product_id' => $item->product_id]);
+    }
+
+    /**
+     * Update inventory report (report-level fields: adjustments, stockout_days, months_of_stock).
+     * Editable without status restriction; permissions can be added later.
+     */
+    public function updateInventoryReport(Request $request, int $id)
+    {
+        $report = InventoryReport::findOrFail($id);
+        $validated = $request->validate([
+            'stockout_days' => 'nullable|integer|min:0|max:366',
+            'months_of_stock' => 'nullable|string|max:255',
+            'adjustment_neg' => 'nullable|integer|min:0',
+            'adjustment_pos' => 'nullable|integer|min:0',
+        ]);
+        $update = [];
+        if (array_key_exists('stockout_days', $validated) && Schema::hasColumn('inventory_reports', 'stockout_days')) {
+            $update['stockout_days'] = (int) $validated['stockout_days'];
+        }
+        if (array_key_exists('months_of_stock', $validated) && Schema::hasColumn('inventory_reports', 'months_of_stock')) {
+            $update['months_of_stock'] = $validated['months_of_stock'] === '' ? null : $validated['months_of_stock'];
+        }
+        if (array_key_exists('adjustment_neg', $validated) && Schema::hasColumn('inventory_reports', 'negative_adjustment')) {
+            $update['negative_adjustment'] = (int) $validated['adjustment_neg'];
+        }
+        if (array_key_exists('adjustment_pos', $validated) && Schema::hasColumn('inventory_reports', 'positive_adjustment')) {
+            $update['positive_adjustment'] = (int) $validated['adjustment_pos'];
+        }
+        if (!empty($update)) {
+            $report->update($update);
+        }
+        return response()->json(['success' => true, 'report' => $report->fresh()]);
     }
 
     /**
@@ -1441,6 +1613,11 @@ class ReportController extends Controller
         return $rows;
     }
 
+    /**
+     * Warehouse Inventory Report: one UI row per inventory_report_item (batch).
+     * Grouped by product: Item, Category, UoM and aggregated columns (Total Closing Balance, AMC, MOS,
+     * Unit cost, Total Cost, Stockout Days) use rowspan and are shown once per product.
+     */
     private function unifiedRowsFromWarehouseInventory(?string $monthYear, array $warehouseIds): array
     {
         if (!$monthYear) {
@@ -1459,89 +1636,120 @@ class ReportController extends Controller
         if (!empty($warehouseIds)) {
             $query->whereIn('warehouse_id', $warehouseIds);
         }
-        $reportItems = $query->get();
+        $reportItems = $query->orderBy('product_id')->orderBy('id')->get();
 
-        $batchQuery = InventoryItem::with(['product:id,name', 'warehouse:id,name']);
-        if (!empty($warehouseIds)) {
-            $batchQuery->whereIn('warehouse_id', $warehouseIds);
-        }
-        $allBatches = $batchQuery->get()->groupBy(fn ($b) => $b->product_id . '-' . $b->warehouse_id);
+        // Group by product_id for rowspan and aggregated values
+        $byProduct = $reportItems->groupBy('product_id');
+        $productAmcs = WarehouseAmc::where('month_year', $monthYear)
+            ->whereIn('product_id', $byProduct->keys()->toArray())
+            ->pluck('quantity', 'product_id')
+            ->toArray();
 
         $rows = [];
-        foreach ($reportItems as $item) {
-            $productName = $item->product->name ?? '';
-            $category = $item->product->category->name ?? '';
-            $uom = $item->product->dosage->name ?? '';
-            $warehouseName = $item->warehouse->name ?? '';
-            $key = $item->product_id . '-' . $item->warehouse_id;
-            $batches = $allBatches->get($key, collect());
+        foreach ($reportItems as $index => $item) {
+            $productId = $item->product_id;
+            $group = $byProduct->get($productId);
+            $rowspan = $group->count();
+            $isFirstBatch = $group->first()->id === $item->id;
 
-            $productAgg = [
-                'total_closing_balance' => (int) $item->total_closing_balance,
-                'amc' => (int) ($item->average_monthly_consumption ?? 0),
-                'mos' => $item->months_of_stock ?? '',
-                'stockout_days' => 0,
-                'unit_cost' => (float) ($item->unit_cost ?? 0),
-                'total_cost' => (float) ($item->total_cost ?? 0),
+            $productName = $item->product?->name ?? '';
+            $category = $item->product?->category?->name ?? '';
+            $uom = $item->product?->dosage?->name ?? $item->uom ?? '';
+            $warehouseName = $item->warehouse?->name ?? '';
+            // stockout_days is product-level: get from group by product (one value per product)
+            $stockoutDays = (int) ($group->max('stockout_days') ?? $report->stockout_days ?? 0);
+            $itemAdjNeg = Schema::hasColumn('inventory_report_items', 'negative_adjustment') ? (int) ($item->negative_adjustment ?? 0) : null;
+            $itemAdjPos = Schema::hasColumn('inventory_report_items', 'positive_adjustment') ? (int) ($item->positive_adjustment ?? 0) : null;
+            $adjNeg = $itemAdjNeg !== null ? $itemAdjNeg : (int) ($report->negative_adjustment ?? 0);
+            $adjPos = $itemAdjPos !== null ? $itemAdjPos : (int) ($report->positive_adjustment ?? 0);
+            $beginningBalance = (int) $item->beginning_balance;
+            $receivedQty = (int) $item->received_quantity;
+            $issuedQty = (int) $item->issued_quantity;
+            $closingBalance = (int) $item->closing_balance;
+            $expiryDate = $item->expiry_date ? ($item->expiry_date instanceof \DateTimeInterface ? $item->expiry_date->format('Y-m-d') : $item->expiry_date) : null;
+
+            // Product-level aggregates (only used when is_first_batch for rowspan cells)
+            $totalClosingBalance = $group->sum('closing_balance');
+            // Total cost = unit cost × closing balance per batch, then sum (recalculated, not from stored total_cost)
+            $groupTotalCost = $group->sum(fn ($i) => (float) ($i->unit_cost ?? 0) * abs((int) ($i->closing_balance ?? 0)));
+            $totalCost = round($groupTotalCost, 2);
+            $amc = (int) ($productAmcs[$productId] ?? $group->max('average_monthly_consumption') ?? 0);
+            $mos = $amc > 0 ? round($totalClosingBalance / $amc, 2) : null;
+            $mosDisplay = $mos !== null ? (string) $mos : '–';
+
+            $rows[] = [
+                'product_id' => $productId,
+                'item' => $productName,
+                'category' => $category,
+                'uom' => $uom,
+                'batch_no' => $item->batch_number ?? null,
+                'expiry_date' => $expiryDate,
+                'beginning_balance' => $beginningBalance,
+                'qty_received' => $receivedQty,
+                'qty_issued' => $issuedQty,
+                'adjustment_neg' => $adjNeg,
+                'adjustment_pos' => $adjPos,
+                'closing_balance' => $closingBalance,
+                'warehouse_name' => $warehouseName,
+                'facility_name' => null,
+                'rowspan' => $rowspan,
+                'is_first_batch' => $isFirstBatch,
+                'report_item_id' => $item->id,
+                'total_closing_balance' => $totalClosingBalance,
+                'amc' => $amc,
+                'mos' => $mosDisplay,
+                'stockout_days' => $stockoutDays,
+                'unit_cost' => (float) ($item->unit_cost ?? 0), // per batch (batches can differ)
+                'total_cost' => $totalCost, // product-level: sum of batch total costs
             ];
-
-            if ($batches->isEmpty()) {
-                $rows[] = array_merge([
-                    'item' => $productName,
-                    'category' => $category,
-                    'uom' => $uom,
-                    'batch_no' => null,
-                    'expiry_date' => null,
-                    'beginning_balance' => (int) $item->beginning_balance,
-                    'qty_received' => (int) $item->received_quantity,
-                    'qty_issued' => (int) $item->issued_quantity,
-                    'adjustment_neg' => (int) $item->negative_adjustment,
-                    'adjustment_pos' => (int) $item->positive_adjustment,
-                    'closing_balance' => (int) $item->closing_balance,
-                    'warehouse_name' => $warehouseName,
-                    'facility_name' => null,
-                    'rowspan' => 1,
-                    'is_first_batch' => true,
-                ], $productAgg);
-            } else {
-                $batchCount = $batches->count();
-                $first = true;
-                foreach ($batches as $batch) {
-                    $row = [
-                        'item' => $first ? $productName : null,
-                        'category' => $first ? $category : null,
-                        'uom' => $first ? $uom : null,
-                        'batch_no' => $batch->batch_number ?? null,
-                        'expiry_date' => $batch->expiry_date ?? null,
-                        'beginning_balance' => 0,
-                        'qty_received' => 0,
-                        'qty_issued' => 0,
-                        'adjustment_neg' => 0,
-                        'adjustment_pos' => 0,
-                        'closing_balance' => (int) ($batch->quantity ?? 0),
-                        'warehouse_name' => $warehouseName,
-                        'facility_name' => null,
-                        'rowspan' => $first ? $batchCount : 0,
-                        'is_first_batch' => $first,
-                    ];
-                    if ($first) {
-                        $row = array_merge($row, $productAgg);
-                    } else {
-                        $row = array_merge($row, [
-                            'total_closing_balance' => null,
-                            'amc' => null,
-                            'mos' => null,
-                            'stockout_days' => null,
-                            'unit_cost' => null,
-                            'total_cost' => null,
-                        ]);
-                    }
-                    $rows[] = $row;
-                    $first = false;
-                }
-            }
         }
         return $rows;
+    }
+
+    /**
+     * Sum of received_quantities.quantity per (product_id, warehouse_id, batch_number) for the given date range.
+     * Key: "product_id-warehouse_id-batch_number" (empty string for null batch_number).
+     *
+     * @return array<string, int>
+     */
+    private function getReceivedQuantitiesPerBatch(Carbon $start, Carbon $end, array $warehouseIds): array
+    {
+        $query = ReceivedQuantity::query()
+            ->whereBetween('received_at', [$start, $end])
+            ->selectRaw('product_id, warehouse_id, COALESCE(batch_number, "") as batch_number, SUM(quantity) as total')
+            ->groupBy('product_id', 'warehouse_id', 'batch_number');
+        if (!empty($warehouseIds)) {
+            $query->whereIn('warehouse_id', $warehouseIds);
+        }
+        $out = [];
+        foreach ($query->get() as $row) {
+            $key = $row->product_id . '-' . $row->warehouse_id . '-' . ($row->batch_number ?? '');
+            $out[$key] = (int) $row->total;
+        }
+        return $out;
+    }
+
+    /**
+     * Sum of issued_quantities.quantity per (product_id, warehouse_id, batch_number) for the given date range.
+     * Key: "product_id-warehouse_id-batch_number" (empty string for null batch_number).
+     *
+     * @return array<string, int>
+     */
+    private function getIssuedQuantitiesPerBatch(Carbon $start, Carbon $end, array $warehouseIds): array
+    {
+        $query = IssuedQuantity::query()
+            ->whereBetween('issued_date', [$start, $end])
+            ->selectRaw('product_id, warehouse_id, COALESCE(batch_number, "") as batch_number, SUM(quantity) as total')
+            ->groupBy('product_id', 'warehouse_id', 'batch_number');
+        if (!empty($warehouseIds)) {
+            $query->whereIn('warehouse_id', $warehouseIds);
+        }
+        $out = [];
+        foreach ($query->get() as $row) {
+            $key = $row->product_id . '-' . $row->warehouse_id . '-' . ($row->batch_number ?? '');
+            $out[$key] = (int) $row->total;
+        }
+        return $out;
     }
 
     private function unifiedRowsFromQtyReceived(?string $monthYear, array $warehouseIds): array

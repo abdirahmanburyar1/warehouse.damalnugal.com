@@ -15,58 +15,57 @@ Artisan::command('inspire', function () {
 | Task schedule (Laravel 11 reads from here; Kernel.php schedule is ignored)
 |--------------------------------------------------------------------------
 */
-Schedule::command('assets:notify-warranty-expiring')->daily();
-Schedule::command('assets:generate-maintenance-schedules')->dailyAt('01:10');
-Schedule::command('assets:notify-maintenance-due')->dailyAt('08:00');
-Schedule::command('inventory:generate-report')->monthlyOn(1, '00:01');
-Schedule::command('inventory:notify-low-stock')->twiceDaily(9, 15);
-Schedule::command('inventory:check-low-stock')->everyFiveMinutes();
+$scheduleFailureEmail = config('mail.admin_address');
+$emailOnFailure = function ($event) use ($scheduleFailureEmail) {
+    return !empty(trim((string) $scheduleFailureEmail))
+        ? $event->emailOutputOnFailure($scheduleFailureEmail)
+        : $event;
+};
+
+$emailOnFailure(Schedule::command('assets:notify-warranty-expiring')->daily());
+$emailOnFailure(Schedule::command('assets:generate-maintenance-schedules')->dailyAt('01:10'));
+$emailOnFailure(Schedule::command('assets:notify-maintenance-due')->dailyAt('08:00'));
+$emailOnFailure(Schedule::command('inventory:generate-report')->monthlyOn(1, '00:01'));
+$emailOnFailure(Schedule::command('inventory:notify-low-stock')->twiceDaily(9, 15));
+$emailOnFailure(Schedule::command('inventory:check-low-stock')->everyFiveMinutes());
 // Expiry items: run every minute; command exits early if not the configured send time
-Schedule::command('inventory:notify-expiry-items')->everyMinute();
+$emailOnFailure(Schedule::command('inventory:notify-expiry-items')->everyMinute());
 
 // Report/job schedules: run every minute; each command exits unless Settings > Report Schedules matches (day/time)
-Schedule::command('report:monthly-received-quantities')
+$emailOnFailure(Schedule::command('report:monthly-received-quantities')
     ->everyMinute()
-    ->appendOutputTo(storage_path('logs/monthly-reports.log'))
-    ->emailOutputOnFailure(config('mail.admin_address'));
+    ->appendOutputTo(storage_path('logs/monthly-reports.log')));
 
-Schedule::command('report:issue-quantities')
+$emailOnFailure(Schedule::command('report:issue-quantities')
     ->everyMinute()
-    ->appendOutputTo(storage_path('logs/monthly-reports.log'))
-    ->emailOutputOnFailure(config('mail.admin_address'));
+    ->appendOutputTo(storage_path('logs/monthly-reports.log')));
 
-Schedule::command('consumption:generate')
+$emailOnFailure(Schedule::command('consumption:generate')
     ->everyMinute()
-    ->appendOutputTo(storage_path('logs/monthly-consumption.log'))
-    ->emailOutputOnFailure(config('mail.admin_address'));
+    ->appendOutputTo(storage_path('logs/monthly-consumption.log')));
 
-Schedule::command('inventory:generate-monthly-report')
+$emailOnFailure(Schedule::command('inventory:generate-monthly-report')
     ->everyMinute()
-    ->appendOutputTo(storage_path('logs/monthly-inventory-report.log'))
-    ->emailOutputOnFailure(config('mail.admin_address'));
+    ->appendOutputTo(storage_path('logs/monthly-inventory-report.log')));
 
-Schedule::command('orders:generate-quarterly')
+$emailOnFailure(Schedule::command('orders:generate-quarterly')
     ->everyMinute()
-    ->appendOutputTo(storage_path('logs/quarterly-orders.log'))
-    ->emailOutputOnFailure(config('mail.admin_address'));
+    ->appendOutputTo(storage_path('logs/quarterly-orders.log')));
 
-Schedule::command('warehouse:generate-amc')
+$emailOnFailure(Schedule::command('warehouse:generate-amc')
     ->everyMinute()
-    ->appendOutputTo(storage_path('logs/warehouse-amc.log'))
-    ->emailOutputOnFailure(config('mail.admin_address'));
+    ->appendOutputTo(storage_path('logs/warehouse-amc.log')));
 
-Schedule::command('report:generate-inventory')
+$emailOnFailure(Schedule::command('report:generate-inventory')
     ->monthlyOn(28, '23:55')
-    ->appendOutputTo(storage_path('logs/monthly-inventory-report.log'));
+    ->appendOutputTo(storage_path('logs/monthly-inventory-report.log')));
 
-Schedule::command('inventory:cleanup-empty')
+$emailOnFailure(Schedule::command('inventory:cleanup-empty')
     ->weekly()
     ->sundays()
     ->at('02:00')
-    ->appendOutputTo(storage_path('logs/inventory-cleanup.log'))
-    ->emailOutputOnFailure(config('mail.admin_address'));
+    ->appendOutputTo(storage_path('logs/inventory-cleanup.log')));
 
-Schedule::command('assets:schedule-depreciation --frequency=monthly --queue')
+$emailOnFailure(Schedule::command('assets:schedule-depreciation --frequency=monthly --queue')
     ->monthlyOn(1, '02:00')
-    ->appendOutputTo(storage_path('logs/asset-depreciation.log'))
-    ->emailOutputOnFailure(config('mail.admin_address'));
+    ->appendOutputTo(storage_path('logs/asset-depreciation.log')));

@@ -43,7 +43,6 @@ use App\Http\Controllers\LogisticCompanyController;
 use App\Http\Controllers\DriverController;
 use App\Http\Controllers\ReasonController;
 use App\Http\Controllers\ReorderLevelController;
-use App\Http\Controllers\WarehouseAmcController;
 use App\Http\Controllers\AssetDepreciationSettingsController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\EmailNotificationSettingController;
@@ -686,6 +685,8 @@ Route::controller(LocationController::class)
         // Unified Reports page
         Route::get('/inventory-reports', [ReportController::class, 'inventoryReportsUnified'])->name('reports.inventoryReportsUnified');
         Route::get('/inventory-reports/data', [ReportController::class, 'inventoryReportsUnifiedData'])->name('reports.inventoryReportsUnified.data');
+        Route::patch('/inventory-reports/items/{id}', [ReportController::class, 'updateInventoryReportItem'])->name('reports.inventoryReportItem.update');
+        Route::patch('/inventory-reports/{id}', [ReportController::class, 'updateInventoryReport'])->name('reports.inventoryReport.update');
 
         // Physical Count
         Route::get('/facilities-list', [ReportController::class, 'facilitiesList'])->name('reports.facilities-list');
@@ -707,12 +708,7 @@ Route::controller(LocationController::class)
         Route::put('/warehouse-monthly/reject', [ReportController::class, 'rejectInventoryReport'])->name('reports.warehouseMonthly.reject');
         Route::post('/warehouse-monthly/export-to-excel', [ReportController::class, 'exportToExcel'])->name('reports.warehouseMonthly.exportToExcel');
 
-        // Warehouse AMC
-        Route::get('/warehouse-amc', [WarehouseAmcController::class, 'index'])->name('reports.warehouse-amc');
-        Route::get('/warehouse-amc/export', [WarehouseAmcController::class, 'export'])->name('reports.warehouse-amc.export');
-        Route::post('/warehouse-amc/import', [WarehouseAmcController::class, 'import'])->name('reports.warehouse-amc.import');
-        Route::get('/warehouse-amc/import/{importId}/status', [WarehouseAmcController::class, 'checkImportStatus'])->name('reports.warehouse-amc.import.status');
-        Route::get('/warehouse-amc/template', [WarehouseAmcController::class, 'downloadTemplate'])->name('reports.warehouse-amc.template');
+        // Warehouse AMC: no report page; data is fed by schedule (warehouse:generate-amc) into warehouse_amcs and reorder_levels
     });
 
     // MOH Inventory Routes (own permissions: view, create, review, approve, reject)
@@ -774,6 +770,8 @@ Route::controller(LocationController::class)
         // Report schedules (programmable; use Laravel schedule:run in cron)
         Route::get('/report-schedules', [ReportScheduleController::class, 'index'])->name('settings.report-schedules.index');
         Route::put('/report-schedules', [ReportScheduleController::class, 'update'])->name('settings.report-schedules.update');
+        Route::post('/report-schedules/run-inventory-monthly-report', [ReportScheduleController::class, 'runInventoryMonthlyReportNow'])->name('settings.report-schedules.run-inventory-monthly-report');
+        Route::post('/report-schedules/run-schedule', [ReportScheduleController::class, 'runScheduleNow'])->name('settings.report-schedules.run-schedule');
         
         // Logistic Companies
         Route::get('/logistics/companies', [LogisticCompanyController::class, 'index'])->name('settings.logistics.companies.index');

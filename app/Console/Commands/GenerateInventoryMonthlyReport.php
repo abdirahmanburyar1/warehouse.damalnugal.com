@@ -32,10 +32,10 @@ class GenerateInventoryMonthlyReport extends Command
         $monthArg = $this->option('month');
         $today = Carbon::now();
 
+        // When run from scheduler (no --month): only run if schedule is enabled AND today matches configured day + time
         if (!$monthArg) {
             $setting = EmailNotificationSetting::inventoryMonthlyReportSchedule();
             if (!$setting || !$setting->enabled) {
-                $this->info('Inventory monthly report schedule is disabled or not configured.');
                 return 0;
             }
             $config = $setting->config ?? [];
@@ -58,13 +58,10 @@ class GenerateInventoryMonthlyReport extends Command
             $job->handle();
             
             $this->info("Monthly inventory report generated successfully for {$monthYear}");
-            $this->info("An email notification has been sent to buryar313@gmail.com");
-            
-            Log::info("Monthly inventory report generated successfully for {$monthYear}");
+            $this->info("An email notification has been sent to abdirahman.buryar@gmail.com");
             
             return 0;
         } catch (\Exception $e) {
-            Log::error('Error generating inventory monthly report: ' . $e->getMessage());
             $this->error("Error generating report: {$e->getMessage()}");
             return 1;
         }

@@ -113,7 +113,6 @@ class WarehouseAmcController extends Controller
                 $row['months'][$monthYear] = $consumption;
             }
 
-            // Calculate AMC using Tukey's Rule
             $row['amc'] = $this->calculateAMC($product->id, $monthYears);
 
             $pivotData[] = $row;
@@ -247,7 +246,6 @@ class WarehouseAmcController extends Controller
                 $row[$monthYear] = $consumption;
             }
 
-            // Calculate AMC using Tukey's Rule
             $row['AMC'] = $this->calculateAMC($product->id, $monthYears);
 
             $pivotData[] = $row;

@@ -7,10 +7,11 @@ use App\Models\IssueQuantityReport;
 use App\Models\IssueQuantityItem;
 use App\Models\ReorderLevel;
 use App\Models\Product;
+use App\Models\WarehouseAmc;
+use App\Services\WarehouseAmcCalculationService;
 use Illuminate\Console\Command;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class GenerateWarehouseAMC extends Command
 {
@@ -26,7 +27,7 @@ class GenerateWarehouseAMC extends Command
      *
      * @var string
      */
-    protected $description = 'Generate AMC (Average Monthly Consumption) and Reorder Levels based on last 3 months of issue quantity data';
+    protected $description = 'Generate AMC (Average Monthly Consumption) with 70% deviation screening and Reorder Levels from issue quantity data';
 
     /**
      * Execute the console command.
@@ -56,22 +57,22 @@ class GenerateWarehouseAMC extends Command
         try {
             // Get the target month (default to last month)
             $targetMonth = $monthArg ?: Carbon::now()->subMonth()->format('Y-m');
-            
+
             $this->info("Processing AMC for month: {$targetMonth}");
 
-            // Get the last 3 months of data
-            $months = $this->getLastThreeMonths($targetMonth);
-            
+            // Get up to 12 months of data (needed for 70% deviation screening reselection)
+            $months = $this->getLastMonthsWithReports($targetMonth, 12);
+
             if (empty($months)) {
-                $this->error('No issue quantity reports found for the last 3 months.');
+                $this->error('No issue quantity reports found for the target period.');
                 return 1;
             }
 
             $this->info('Found months: ' . implode(', ', $months));
 
-            // Calculate AMC for each product
-            $amcData = $this->calculateAMC($months);
-            
+            // Calculate AMC for each product using 70% deviation screening
+            $amcData = $this->calculateAMCWithScreening($months);
+
             if (empty($amcData)) {
                 $this->error('No AMC data calculated. Check if there are issue quantity items.');
                 return 1;
@@ -80,38 +81,31 @@ class GenerateWarehouseAMC extends Command
             // Update or create reorder levels
             $this->updateReorderLevels($amcData);
 
+            // Sync monthly consumption to warehouse_amcs (for Warehouse AMC report / export)
+            $this->syncWarehouseAmcs($amcData, $months);
+
             $this->info('AMC and Reorder Level generation completed successfully!');
             return 0;
 
         } catch (\Exception $e) {
             $this->error('Error generating AMC: ' . $e->getMessage());
-            Log::error('AMC generation failed', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
             return 1;
         }
     }
 
     /**
-     * Get the last 3 months of available data
+     * Get the last N months that have issue quantity reports (newest first)
      */
-    private function getLastThreeMonths(string $targetMonth): array
+    private function getLastMonthsWithReports(string $targetMonth, int $limit = 12): array
     {
         $months = [];
         $currentMonth = Carbon::createFromFormat('Y-m', $targetMonth);
-        
-        // Start from the target month and go back 3 months
-        for ($i = 0; $i < 3; $i++) {
+
+        for ($i = 0; $i < $limit; $i++) {
             $monthToCheck = $currentMonth->copy()->subMonths($i)->format('Y-m');
-            
-            // Check if we have data for this month
             $report = IssueQuantityReport::where('month_year', $monthToCheck)->first();
-            
             if ($report) {
                 $months[] = $monthToCheck;
-            } else {
-                $this->warn("No report found for month: {$monthToCheck}");
             }
         }
 
@@ -119,51 +113,14 @@ class GenerateWarehouseAMC extends Command
     }
 
     /**
-     * Calculate AMC for each product based on the last 3 months using efficient queries
-     * Flow: Product -> IssueQuantityItem (after finding the month_year from its relationship with reports) -> ReorderLevel
+     * Calculate AMC for each product using 70% deviation screening (same formula as WarehouseAmcCalculationService).
+     * Data from issue quantity reports; months ordered newest first for screening.
      */
-    private function calculateAMC(array $months): array
+    private function calculateAMCWithScreening(array $months): array
     {
         $amcData = [];
-
-        // Debug: Check what months we're looking for
         $this->info("Looking for data in months: " . implode(', ', $months));
 
-        // Debug: Check if we have reports for these months
-        $reports = DB::table('issue_quantity_reports')
-            ->whereIn('month_year', $months)
-            ->select('id', 'month_year', 'total_quantity')
-            ->get();
-        
-        $this->info("Found " . $reports->count() . " reports for the specified months");
-        foreach ($reports as $report) {
-            $this->line("  Report ID: {$report->id}, Month: {$report->month_year}, Total: {$report->total_quantity}");
-        }
-
-        // Debug: Check for the specific product mentioned
-        $debugProduct = DB::table('products')
-            ->where('name', 'like', '%Ampicillin%')
-            ->first();
-        
-        if ($debugProduct) {
-            $this->info("Found product: {$debugProduct->name} (ID: {$debugProduct->id})");
-            
-            // Check if this product has any issue quantity items
-            $productItems = DB::table('issue_quantity_items as iqi')
-                ->join('issue_quantity_reports as iqr', 'iqi.parent_id', '=', 'iqr.id')
-                ->where('iqi.product_id', $debugProduct->id)
-                ->whereIn('iqr.month_year', $months)
-                ->select('iqi.id', 'iqi.quantity', 'iqr.month_year', 'iqr.id as report_id')
-                ->get();
-            
-            $this->info("Found " . $productItems->count() . " items for Ampicillin in the specified months");
-            foreach ($productItems as $item) {
-                $this->line("  Item ID: {$item->id}, Quantity: {$item->quantity}, Month: {$item->month_year}, Report ID: {$item->report_id}");
-            }
-        }
-
-        // Start from Product and traverse through IssueQuantityItem to get month_year from reports
-        // Use a single query to get aggregated data following the specified flow
         $results = DB::table('products as p')
             ->leftJoin('issue_quantity_items as iqi', 'p.id', '=', 'iqi.product_id')
             ->leftJoin('issue_quantity_reports as iqr', 'iqi.parent_id', '=', 'iqr.id')
@@ -174,16 +131,13 @@ class GenerateWarehouseAMC extends Command
                 DB::raw('COALESCE(SUM(iqi.quantity), 0) as monthly_quantity')
             ])
             ->where('p.is_active', true)
-            ->where(function($query) use ($months) {
+            ->where(function ($query) use ($months) {
                 $query->whereIn('iqr.month_year', $months)
-                      ->orWhereNull('iqr.month_year'); // Include products without any issue data
+                    ->orWhereNull('iqr.month_year');
             })
             ->groupBy('p.id', 'p.name', 'iqr.month_year')
             ->get();
 
-        $this->info("Main query returned " . $results->count() . " rows");
-
-        // Group by product_id and calculate AMC
         $productData = [];
         foreach ($results as $row) {
             if (!isset($productData[$row->product_id])) {
@@ -191,49 +145,64 @@ class GenerateWarehouseAMC extends Command
                     'product_id' => $row->product_id,
                     'product_name' => $row->product_name,
                     'monthly_quantities' => [],
-                    'total_quantity' => 0,
-                    'months_count' => 0
                 ];
             }
-            
-            // Only count months that have actual data (not null month_year)
-            if ($row->month_year) {
-                // Store the monthly quantity for this product and month
-                $productData[$row->product_id]['monthly_quantities'][$row->month_year] = (float)$row->monthly_quantity;
-                $productData[$row->product_id]['total_quantity'] += (float)$row->monthly_quantity;
-                $productData[$row->product_id]['months_count']++;
+            if ($row->month_year && (float) $row->monthly_quantity > 0) {
+                $productData[$row->product_id]['monthly_quantities'][$row->month_year] = (float) $row->monthly_quantity;
             }
         }
 
-        // Calculate AMC for each product
-        foreach ($productData as $productId => $data) {
-            if ($data['months_count'] > 0) {
-                // AMC = Total Quantity / Number of Months with Data
-                $amc = $data['total_quantity'] / $data['months_count'];
-                
-                $amcData[$productId] = [
-                    'product_id' => $productId,
-                    'product_name' => $data['product_name'],
-                    'amc' => round($amc, 2),
-                    'months_used' => $data['months_count'],
-                    'total_quantity' => $data['total_quantity'],
-                    'monthly_breakdown' => $data['monthly_quantities']
-                ];
+        $amcService = app(WarehouseAmcCalculationService::class);
 
-                $this->line("Product: {$data['product_name']} - AMC: {$amc} (Total: {$data['total_quantity']}, Months: {$data['months_count']})");
-                $this->line("  Monthly breakdown: " . json_encode($data['monthly_quantities']));
-            } else {
-                // Product has no issue data, but we still want to include it with AMC = 0
+        foreach ($productData as $productId => $data) {
+            $monthlyQuantities = $data['monthly_quantities'];
+            if (empty($monthlyQuantities)) {
                 $amcData[$productId] = [
                     'product_id' => $productId,
                     'product_name' => $data['product_name'],
                     'amc' => 0,
                     'months_used' => 0,
                     'total_quantity' => 0,
-                    'monthly_breakdown' => []
+                    'monthly_breakdown' => [],
                 ];
-
                 $this->line("Product: {$data['product_name']} - AMC: 0 (no issue data)");
+                continue;
+            }
+
+            // Build monthsData newest first (match order of $months)
+            $monthsData = [];
+            foreach ($months as $month) {
+                if (isset($monthlyQuantities[$month])) {
+                    $monthsData[] = ['month' => $month, 'consumption' => $monthlyQuantities[$month]];
+                }
+            }
+
+            $result = $amcService->calculateAmcFromMonthlyData($monthsData);
+            $amc = (float) $result['amc'];
+
+            $amcData[$productId] = [
+                'product_id' => $productId,
+                'product_name' => $data['product_name'],
+                'amc' => round($amc, 2),
+                'months_used' => $result['totalMonths'],
+                'total_quantity' => array_sum(array_column($monthsData, 'consumption')),
+                'monthly_breakdown' => $monthlyQuantities,
+            ];
+
+            $this->line("Product: {$data['product_name']} - AMC: {$amc} (screening) - {$result['calculation']}");
+        }
+
+        // Include active products that had no issue data (so reorder_levels gets AMC = 0)
+        foreach (Product::where('is_active', true)->get(['id', 'name']) as $product) {
+            if (!isset($amcData[$product->id])) {
+                $amcData[$product->id] = [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'amc' => 0,
+                    'months_used' => 0,
+                    'total_quantity' => 0,
+                    'monthly_breakdown' => [],
+                ];
             }
         }
 
@@ -337,6 +306,31 @@ class GenerateWarehouseAMC extends Command
         
         $this->info("Products with AMC data: {$productsWithAmc}");
         $this->info("Products without AMC data: " . ($allProducts->count() - $productsWithAmc));
+    }
+
+    /**
+     * Sync monthly consumption from issue quantity data into warehouse_amcs table
+     * so the Warehouse AMC report and exports have data when run from schedule or "Run now".
+     */
+    private function syncWarehouseAmcs(array $amcData, array $months): void
+    {
+        $synced = 0;
+        foreach ($amcData as $productId => $data) {
+            $breakdown = $data['monthly_breakdown'] ?? [];
+            foreach ($breakdown as $monthYear => $quantity) {
+                WarehouseAmc::updateOrCreate(
+                    [
+                        'product_id' => $productId,
+                        'month_year' => $monthYear,
+                    ],
+                    [
+                        'quantity' => (int) round($quantity),
+                    ]
+                );
+                $synced++;
+            }
+        }
+        $this->info("Synced {$synced} monthly consumption records to warehouse_amcs.");
     }
 
     private function normalizeTime(string $time): string
