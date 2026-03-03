@@ -125,4 +125,28 @@ class Liquidate extends Model
     {
         return $this->belongsTo(InventoryAdjustment::class);
     }
+
+    /**
+     * Get the packing list associated with this liquidation (when source is packing_list).
+     */
+    public function packingList(): BelongsTo
+    {
+        return $this->belongsTo(PackingList::class);
+    }
+
+    /**
+     * Get the transfer associated with this liquidation (when source is transfer).
+     */
+    public function transfer(): BelongsTo
+    {
+        return $this->belongsTo(Transfer::class);
+    }
+
+    /**
+     * Get the order associated with this liquidation (when source is order).
+     */
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
+    }
 }

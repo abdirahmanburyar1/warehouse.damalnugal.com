@@ -116,6 +116,9 @@ class SupplyController extends Controller
     }
 
     public function showPO(Request $request, $id){
+        if (!auth()->user()->hasPermission('purchase-order-view')) {
+            abort(403, 'Unauthorized: You do not have permission to view purchase orders.');
+        }
         $po = PurchaseOrder::with('items.product','supplier','documents.uploader','creator','approvedBy','rejectedBy','reviewedBy')->find($id);
         return inertia("Supplies/PurchaseO/Show", [
             'po' => $po
@@ -162,7 +165,7 @@ class SupplyController extends Controller
                 return response()->json(['error' => 'Packing list not found'], 404);
             }
 
-            // Get packing list differences with related data (including processed/finalized so packing list column is always available)
+            // Get packing list differences with related data (including liquidate/disposal for deep back order link)
             $results = PackingListDifference::whereHas('packingListItem', function($query) use ($id) {
                 $query->where('packing_list_id', $id);
             })
@@ -170,7 +173,9 @@ class SupplyController extends Controller
                 ->with([
                     'product:id,name,productID',
                     'packingListItem.packingList:id,packing_list_number',
-                    'backOrder:id,back_order_number,back_order_date,status'
+                    'backOrder:id,back_order_number,back_order_date,status',
+                    'backOrder.liquidate:id,liquidate_id,status,back_order_id',
+                    'backOrder.disposal:id,disposal_id,status,back_order_id'
                 ])
                 ->get();
 
@@ -214,29 +219,84 @@ class SupplyController extends Controller
         }
     }
 
+    /**
+     * Resolve the "source" value for liquidate/disposal from the back order.
+     * Source indicates where the back order (and thus the liquidation/disposal) originated.
+     *
+     * Possible values (from back_orders.source_type when the back order was created):
+     * - 'packing_list' : back order created from packing list differences (Supplies/Back Order page)
+     * - 'transfer'     : back order created from a transfer (e.g. transfer receive with differences)
+     * - 'order'        : back order created from an order (if used elsewhere)
+     * Fallback when source_type is null: infer from back order FKs or use 'back_order'.
+     */
+    private function resolveSourceFromBackOrder(BackOrder $backOrder): string
+    {
+        if ($backOrder->source_type && trim((string) $backOrder->source_type) !== '') {
+            return trim($backOrder->source_type);
+        }
+        if ($backOrder->transfer_id) {
+            return 'transfer';
+        }
+        if ($backOrder->order_id) {
+            return 'order';
+        }
+        if ($backOrder->packing_list_id) {
+            return 'packing_list';
+        }
+        return 'back_order';
+    }
+
+    /**
+     * Resolve facility and warehouse names from a back order (e.g. from linked transfer).
+     * Used to fulfill liquidates/disposals columns when creating from back order.
+     */
+    private function resolveFacilityWarehouseFromBackOrder(BackOrder $backOrder): array
+    {
+        $facility = null;
+        $warehouse = null;
+        $backOrder->loadMissing(['transfer.fromWarehouse', 'transfer.fromFacility']);
+        if ($backOrder->transfer) {
+            $warehouse = $backOrder->transfer->from_warehouse_id
+                ? ($backOrder->transfer->fromWarehouse->name ?? null)
+                : null;
+            $facility = $backOrder->transfer->from_facility_id
+                ? ($backOrder->transfer->fromFacility->name ?? null)
+                : null;
+        }
+        if ($warehouse === null && $facility === null) {
+            $user = auth()->user()->load('warehouse');
+            $warehouse = $user->warehouse ? $user->warehouse->name : null;
+        }
+        return ['facility' => $facility, 'warehouse' => $warehouse];
+    }
+
     public function liquidate(Request $request)
     {
         try {
             DB::beginTransaction();
             
-            // Get the back order to determine the source
-            $backOrder = BackOrder::findOrFail($request->back_order_id);
+            // Load back order with relations so we can fulfill liquidate columns from it
+            $backOrder = BackOrder::with(['transfer.fromWarehouse', 'transfer.fromFacility'])
+                ->findOrFail($request->back_order_id);
+            $sourceLocation = $this->resolveFacilityWarehouseFromBackOrder($backOrder);
             
             // Check if there is already a liquidation for this back order
             $liquidate = Liquidate::where('back_order_id', $request->back_order_id)->first();
             
             $liquidateIsNew = false;
             if (!$liquidate) {
-                // Create new liquidation record
+                // Create new liquidation record – all columns fulfilled from back order
                 $liquidate = Liquidate::create([
                     'liquidated_by' => auth()->id(),
                     'liquidated_at' => now(),
                     'status' => 'pending',
-                    'source' => $backOrder->source_type, // Get source from BackOrder
-                    'back_order_id' => $request->back_order_id,
-                    'packing_list_id' => $request->packing_list_id,
-                    'order_id' => $request->purchase_order_id, // or $request->order_id if that's the field
-                    'transfer_id' => $request->transfer_id,
+                    'source' => $this->resolveSourceFromBackOrder($backOrder),
+                    'facility' => $sourceLocation['facility'],
+                    'warehouse' => $sourceLocation['warehouse'],
+                    'back_order_id' => $backOrder->id,
+                    'packing_list_id' => $backOrder->packing_list_id,
+                    'order_id' => $backOrder->order_id,
+                    'transfer_id' => $backOrder->transfer_id,
                 ]);
                 $liquidateIsNew = true;
             }
@@ -352,21 +412,28 @@ class SupplyController extends Controller
         try {
             DB::beginTransaction();
             
-            // Get the back order to determine the source
-            $backOrder = BackOrder::findOrFail($request->back_order_id);
+            // Load back order with relations so we can fulfill disposal columns from it
+            $backOrder = BackOrder::with(['transfer.fromWarehouse', 'transfer.fromFacility'])
+                ->findOrFail($request->back_order_id);
+            $sourceLocation = $this->resolveFacilityWarehouseFromBackOrder($backOrder);
             
             // Check if there is already a disposal for this back order
             $disposal = Disposal::where('back_order_id', $request->back_order_id)->first();
             
             $disposalIsNew = false;
             if (!$disposal) {
-                // Create new disposal record
+                // Create new disposal record – all columns fulfilled from back order
                 $disposal = Disposal::create([
                     'disposed_by' => auth()->id(),
                     'disposed_at' => now(),
                     'status' => 'pending',
-                    'source' => $backOrder->source_type, // Get source from BackOrder
-                    'back_order_id' => $request->back_order_id,
+                    'source' => $this->resolveSourceFromBackOrder($backOrder),
+                    'facility' => $sourceLocation['facility'],
+                    'warehouse' => $sourceLocation['warehouse'],
+                    'transfer_id' => $backOrder->transfer_id,
+                    'order_id' => $backOrder->order_id,
+                    'packing_list_id' => $backOrder->packing_list_id,
+                    'back_order_id' => $backOrder->id,
                 ]);
                 $disposalIsNew = true;
             }
@@ -2290,22 +2357,7 @@ class SupplyController extends Controller
                 'approved_at'    => now(),
             ]);
 
-            // 6️⃣ Optionally close PO if fully received
-            $po = PurchaseOrder::with('items', 'packingLists')
-                ->find($packingList->purchase_order_id);
-
-            if ($po) {
-                $poQtys = $po->items->groupBy('product_id')
-                    ->map(fn($it) => $it->sum('quantity'));
-                $plQtys = $po->packingLists->where('status', 'approved')
-                    ->flatMap->items
-                    ->groupBy('product_id')
-                    ->map(fn($it) => $it->sum('quantity'));
-
-                if ($poQtys->every(fn($qty, $pid) => $plQtys->get($pid, 0) >= $qty)) {
-                    $po->update(['status' => 'completed']);
-                }
-            }
+            // Do not update purchase order status from packing list (PO status is managed separately)
 
             DB::commit();
 

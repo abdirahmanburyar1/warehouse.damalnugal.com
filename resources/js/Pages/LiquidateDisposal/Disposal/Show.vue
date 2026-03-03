@@ -43,7 +43,7 @@
                 </div>
                 <div>
                     <p class="text-sm font-medium text-gray-500">Source</p>
-                    <p class="text-lg font-semibold text-gray-900 capitalize">{{ disposal.source?.replace('_', ' ') || 'N/A' }}</p>
+                    <p class="text-lg font-semibold text-gray-900">{{ disposal.source_display || disposal.source?.replace('_', ' ') || 'N/A' }}</p>
                 </div>
                 <div>
                     <p class="text-sm font-medium text-gray-500">Status</p>
@@ -53,7 +53,7 @@
                 </div>
                 <div>
                     <p class="text-sm font-medium text-gray-500">Disposed By</p>
-                    <p class="text-lg font-semibold text-gray-900">{{ disposal.disposedBy?.name || 'N/A' }}</p>
+                    <p class="text-lg font-semibold text-gray-900">{{ disposedByName }}</p>
                 </div>
                 <div>
                     <p class="text-sm font-medium text-gray-500">Disposal Date</p>
@@ -211,6 +211,9 @@
                                 Product
                             </th>
                             <th class="text-left text-xs font-bold uppercase px-6 py-4" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">
+                                Product Category
+                            </th>
+                            <th class="text-left text-xs font-bold uppercase px-6 py-4" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">
                                 Quantity
                             </th>
                             <th class="text-left text-xs font-bold uppercase px-6 py-4" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">
@@ -232,7 +235,7 @@
                     </thead>
                     <tbody class="bg-white">
                         <tr v-if="disposal.items?.length === 0" class="align-middle">
-                            <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">
+                            <td colspan="8" class="px-6 py-4 text-center text-sm text-gray-500">
                                 No items found
                             </td>
                         </tr>
@@ -241,6 +244,9 @@
                                 <div>
                                     <div class="font-medium text-gray-900">{{ item.product?.name || 'N/A' }}</div>
                                 </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {{ item.product?.category?.name || 'N/A' }}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {{ item.quantity }} {{ item.uom }}
@@ -416,6 +422,11 @@ import axios from 'axios';
 
 const props = defineProps({
     disposal: Object,
+});
+
+const disposedByName = computed(() => {
+    const d = props.disposal;
+    return d?.disposed_by_name ?? d?.disposedBy?.name ?? d?.disposed_by?.name ?? '—';
 });
 
 // Status configuration

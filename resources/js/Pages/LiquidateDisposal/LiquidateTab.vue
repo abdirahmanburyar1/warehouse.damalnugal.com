@@ -14,7 +14,7 @@
                             class="px-2 py-2 text-left text-xs font-bold uppercase border-b"
                             style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;"
                         >
-                            Liquidate Date
+                            Date
                         </th>
                         <th
                             class="px-2 py-2 text-left text-xs font-bold uppercase border-b"
@@ -29,6 +29,24 @@
                             Source
                         </th>
                         <th
+                            class="px-2 py-2 text-left text-xs font-bold uppercase border-b"
+                            style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;"
+                        >
+                            Liquidated By
+                        </th>
+                        <th
+                            class="px-2 py-2 text-left text-xs font-bold uppercase border-b"
+                            style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;"
+                        >
+                            Items
+                        </th>
+                        <th
+                            class="px-2 py-2 text-left text-xs font-bold uppercase border-b"
+                            style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;"
+                        >
+                            Total Cost
+                        </th>
+                        <th
                             class="px-2 py-2 text-left text-xs font-bold uppercase border-b rounded-tr-lg"
                             style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;"
                         >
@@ -39,7 +57,7 @@
                 <tbody class="bg-white">
                     <tr v-if="liquidates.data?.length === 0">
                         <td
-                            colspan="7"
+                            colspan="8"
                             class="px-2 py-2 text-center text-sm text-gray-600 border-b"
                             style="border-bottom: 1px solid #B7C6E6;"
                         >
@@ -58,34 +76,34 @@
                     >
                         <td class="px-2 py-2 whitespace-nowrap text-xs text-gray-900 border-b" style="border-bottom: 1px solid #B7C6E6;">
                             <Link :href="route('liquidate-disposal.liquidates.show', liquidate.id)" class="text-blue-600 hover:text-blue-800">
-                                {{ liquidate.liquidate_id }}
+                                {{ liquidate.liquidate_id || '—' }}
                             </Link>
                         </td>
                         <td class="px-2 py-2 whitespace-nowrap text-xs text-gray-600 border-b" style="border-bottom: 1px solid #B7C6E6;">
                             {{ formatDate(liquidate.liquidated_at) }}
                         </td>
                         <td class="px-2 py-2 whitespace-nowrap text-xs text-gray-600 border-b" style="border-bottom: 1px solid #B7C6E6;">
-                            <span v-if="liquidate.facility">{{ liquidate.facility }}</span>
-                            <span v-if="liquidate.warehouse">{{ liquidate.warehouse }}</span>
+                            {{ formatWarehouseFacility(liquidate.facility, liquidate.warehouse) }}
                         </td>
-                        
                         <td class="px-2 py-2 whitespace-nowrap text-xs text-gray-900 border-b" style="border-bottom: 1px solid #B7C6E6;">
-                            <span class="capitalize">{{ liquidate.source?.replace('_', ' ') || 'N/A' }}</span>
+                            {{ liquidate.source_display || (liquidate.source ? String(liquidate.source).replace(/_/g, ' ') : null) || '—' }}
                         </td>
-                        
+                        <td class="px-2 py-2 whitespace-nowrap text-xs text-gray-600 border-b" style="border-bottom: 1px solid #B7C6E6;">
+                            {{ liquidate.liquidated_by_name ?? liquidate.liquidatedBy?.name ?? '—' }}
+                        </td>
+                        <td class="px-2 py-2 whitespace-nowrap text-xs text-gray-600 border-b" style="border-bottom: 1px solid #B7C6E6;">
+                            {{ itemsCount(liquidate) }} item{{ itemsCount(liquidate) === 1 ? '' : 's' }}
+                        </td>
+                        <td class="px-2 py-2 whitespace-nowrap text-xs text-gray-600 border-b" style="border-bottom: 1px solid #B7C6E6;">
+                            ${{ formatNumber(totalCost(liquidate)) }}
+                        </td>
                         <td class="px-2 py-2 whitespace-nowrap border-b" style="border-bottom: 1px solid #B7C6E6;">
-                            <div class="flex items-center gap-2">
-                                <!-- Status Progress Icons - Only show actions taken -->
-                                <div class="flex items-center gap-1">
-                                    <!-- Always show pending as it's the initial state -->
-                                    <img src="/assets/images/pending.png" class="w-6 h-6" alt="Pending" title="Pending" />
-                                    <!-- Only show reviewed if status is reviewed or further -->
-                                    <img v-if="['reviewed','approved'].includes(liquidate.status)" src="/assets/images/review.png" class="w-6 h-6" alt="Reviewed" title="Reviewed" />
-                                    <!-- Only show approved if status is approved -->
-                                    <img v-if="['approved'].includes(liquidate.status)" src="/assets/images/approved.png" class="w-6 h-6" alt="Approved" title="Approved" />
-                                    <!-- Only show rejected if status is rejected -->
-                                    <img v-if="liquidate.status === 'rejected'" src="/assets/images/rejected.png" class="w-6 h-6" alt="Rejected" title="Rejected" />
-                                </div>
+                            <div class="flex items-center gap-1.5">
+                                <img src="/assets/images/pending.png" class="w-6 h-6 shrink-0" alt="Pending" title="Pending" />
+                                <img v-if="['reviewed','approved'].includes(liquidate.status)" src="/assets/images/review.png" class="w-6 h-6 shrink-0" alt="Reviewed" title="Reviewed" />
+                                <img v-if="liquidate.status === 'approved'" src="/assets/images/approved.png" class="w-6 h-6 shrink-0" alt="Approved" title="Approved" />
+                                <img v-if="liquidate.status === 'rejected'" src="/assets/images/rejected.png" class="w-6 h-6 shrink-0" alt="Rejected" title="Rejected" />
+                                <span class="text-xs font-medium text-gray-700 capitalize">{{ liquidate.status || '—' }}</span>
                             </div>
                         </td>
                     </tr>
@@ -115,19 +133,31 @@ const props = defineProps({
 defineEmits(['pagination-change']);
 
 const formatDate = (date) => {
-    if (!date) return 'N/A';
+    if (!date) return '—';
     return moment(date).format('DD/MM/YYYY');
 };
 
 const formatNumber = (number) => {
-    return Number(number).toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
+    const n = Number(number);
+    if (Number.isNaN(n)) return '0.00';
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const calculateTotalCost = (liquidate) => {
-    if (!liquidate.items) return 0;
-    return liquidate.items.reduce((total, item) => total + Number(item.total_cost || 0), 0);
+const formatWarehouseFacility = (facility, warehouse) => {
+    const parts = [facility, warehouse].filter(Boolean);
+    return parts.length ? parts.join(' / ') : '—';
+};
+
+const itemsCount = (liquidate) => {
+    if (liquidate?.items_count != null) return Number(liquidate.items_count);
+    if (Array.isArray(liquidate?.items)) return liquidate.items.length;
+    return 0;
+};
+
+const totalCost = (liquidate) => {
+    if (liquidate?.items_sum_total_cost != null) return Number(liquidate.items_sum_total_cost);
+    if (Array.isArray(liquidate?.items) && liquidate.items.length)
+        return liquidate.items.reduce((total, item) => total + Number(item.total_cost || 0), 0);
+    return 0;
 };
 </script> 

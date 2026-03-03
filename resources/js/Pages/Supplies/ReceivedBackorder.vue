@@ -343,7 +343,10 @@ onUnmounted(() => {
                             <td class="px-4 py-3 border-r border-gray-300">
                                 <div class="space-y-1">
                                     <div class="text-sm font-semibold text-gray-900 leading-tight">
-                                        {{ receivedBackorder.back_order ? receivedBackorder.back_order.back_order_number : 'Direct Received' }}
+                                        {{ receivedBackorder.source_display || (receivedBackorder.back_order ? receivedBackorder.back_order.back_order_number : 'Direct Received') }}
+                                    </div>
+                                    <div v-if="receivedBackorder.source_display && receivedBackorder.back_order" class="text-xs text-gray-600">
+                                        {{ receivedBackorder.back_order.back_order_number }}
                                     </div>
                                     <div class="space-y-0.5 text-xs text-gray-600">
                                         <div v-if="receivedBackorder.warehouse"><span class="font-medium">Warehouse:</span> {{ receivedBackorder.warehouse.name || 'N/A' }}</div>

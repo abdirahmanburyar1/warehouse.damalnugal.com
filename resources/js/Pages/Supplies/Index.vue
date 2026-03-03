@@ -304,7 +304,7 @@
                                                 {{ i + 1 }}
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border-b border-gray-300">
-                                                <Link :href="route('supplies.editPO', po.id)"
+                                                <Link :href="route('supplies.po-show', po.id)"
                                                     class="text-blue-600 hover:text-blue-900 transition-colors duration-200">
                                                     {{ po.po_number }}
                                                 </Link>
@@ -341,11 +341,6 @@
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium border-b border-gray-300">
                                                 <div class="flex items-center space-x-3">
-                                                    <button @click="router.visit(route('supplies.po-show', po.id))"
-                                                        class="text-gray-600 hover:text-gray-900 transition-colors duration-200 p-1 rounded-md hover:bg-gray-100"
-                                                        title="View Purchase Order">
-                                                        <EyeIcon class="h-4 w-4" />
-                                                    </button>
                                                     <button v-if="(po.status || '').toLowerCase() !== 'approved' && (po.status || '').toLowerCase() !== 'completed'"
                                                         @click="router.visit(route('supplies.editPO', po.id))"
                                                         class="text-blue-600 hover:text-blue-900 transition-colors duration-200 p-1 rounded-md hover:bg-blue-50"

@@ -97,6 +97,14 @@ class ReceivedBackorder extends Model
     }
 
     /**
+     * Get the packing list associated with this received backorder (when from packing list).
+     */
+    public function packingList(): BelongsTo
+    {
+        return $this->belongsTo(PackingList::class);
+    }
+
+    /**
      * Get the warehouse for this received backorder
      */
     public function warehouse(): BelongsTo

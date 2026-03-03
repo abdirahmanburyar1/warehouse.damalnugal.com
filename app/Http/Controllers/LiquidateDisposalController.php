@@ -26,6 +26,11 @@ class LiquidateDisposalController extends Controller
             abort(403, 'You do not have permission to view wastages.');
         }
 
+        // Default date range to current month when not provided (keeps list fast as data grows)
+        $dateFrom = $request->filled('date_from') ? $request->date_from : now()->startOfMonth()->format('Y-m-d');
+        $dateTo = $request->filled('date_to') ? $request->date_to : now()->endOfMonth()->format('Y-m-d');
+        $request->merge(['date_from' => $dateFrom, 'date_to' => $dateTo]);
+
         // Get liquidations
         $liquidates = $this->getLiquidatesQuery($request);
         $liquidates = $liquidates->paginate($request->input('per_page', 25), ['*'], 'page', $request->input('page', 1))
@@ -65,8 +70,11 @@ class LiquidateDisposalController extends Controller
             'approvedBy:id,name',
             'reviewedBy:id,name',
             'rejectedBy:id,name',
-            'backOrder'
-        ])->latest('liquidate_id');
+            'backOrder',
+            'packingList:id,packing_list_number',
+            'transfer:id,transferID',
+            'order:id,order_number',
+        ])->withCount('items')->withSum('items', 'total_cost')->latest('liquidate_id');
 
         // Search filter
         if ($request->has('search') && $request->search) {
@@ -82,13 +90,9 @@ class LiquidateDisposalController extends Controller
             $liquidates->where('source', $request->source);
         }
 
-        // Date range filter
-        if ($request->has('date_from') && $request->date_from) {
-            $liquidates->whereDate('liquidated_at', '>=', $request->date_from);
-        }
-        if ($request->has('date_to') && $request->date_to) {
-            $liquidates->whereDate('liquidated_at', '<=', $request->date_to);
-        }
+        // Date range filter (always applied; defaults to current month in index())
+        $liquidates->whereDate('liquidated_at', '>=', $request->date_from);
+        $liquidates->whereDate('liquidated_at', '<=', $request->date_to);
 
         // Status filter
         if ($request->has('status') && $request->status && $request->status !== 'all') {
@@ -109,7 +113,10 @@ class LiquidateDisposalController extends Controller
             'approvedBy',
             'reviewedBy',
             'rejectedBy',
-            'backOrder'
+            'backOrder',
+            'packingList:id,packing_list_number',
+            'transfer:id,transferID',
+            'order:id,order_number',
         ])->latest('disposal_id');
 
         // Search filter
@@ -126,13 +133,9 @@ class LiquidateDisposalController extends Controller
             $disposals->where('source', $request->source);
         }
 
-        // Date range filter
-        if ($request->has('date_from') && $request->date_from) {
-            $disposals->whereDate('disposed_at', '>=', $request->date_from);
-        }
-        if ($request->has('date_to') && $request->date_to) {
-            $disposals->whereDate('disposed_at', '<=', $request->date_to);
-        }
+        // Date range filter (always applied; defaults to current month in index())
+        $disposals->whereDate('disposed_at', '>=', $request->date_from);
+        $disposals->whereDate('disposed_at', '<=', $request->date_to);
 
         // Status filter
         if ($request->has('status') && $request->status && $request->status !== 'all') {
@@ -152,13 +155,19 @@ class LiquidateDisposalController extends Controller
         }
 
         $liquidate = Liquidate::with([
-            'items.product',
+            'items.product.category',
             'liquidatedBy',
             'approvedBy',
             'reviewedBy',
             'rejectedBy',
-            'backOrder'
+            'backOrder',
+            'packingList:id,packing_list_number',
+            'transfer:id,transferID',
+            'order:id,order_number',
         ])->findOrFail($id);
+
+        $liquidate->setAttribute('source_display', $this->resolveSourceDisplayForLiquidate($liquidate));
+        $liquidate->setAttribute('liquidated_by_name', $liquidate->liquidatedBy?->name);
 
         return inertia('LiquidateDisposal/Liquidate/Show', [
             'liquidate' => $liquidate,
@@ -175,13 +184,19 @@ class LiquidateDisposalController extends Controller
         }
 
         $disposal = Disposal::with([
-            'items.product',
+            'items.product.category',
             'disposedBy',
             'approvedBy',
             'reviewedBy',
             'rejectedBy',
-            'backOrder'
+            'backOrder',
+            'packingList:id,packing_list_number',
+            'transfer:id,transferID',
+            'order:id,order_number',
         ])->findOrFail($id);
+
+        $disposal->setAttribute('source_display', $this->resolveSourceDisplayForDisposal($disposal));
+        $disposal->setAttribute('disposed_by_name', $disposal->disposedBy?->name);
 
         return inertia('LiquidateDisposal/Disposal/Show', [
             'disposal' => $disposal,
@@ -474,5 +489,41 @@ class LiquidateDisposalController extends Controller
                 'message' => 'Error rolling back disposal: ' . $th->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Resolve source display label for a liquidation (e.g. "Packing list: PKL-000001-001").
+     */
+    private function resolveSourceDisplayForLiquidate(Liquidate $liquidate): string
+    {
+        $source = $liquidate->source ?? '';
+        if ($liquidate->relationLoaded('packingList') && $liquidate->packingList) {
+            return 'Packing list: ' . ($liquidate->packingList->packing_list_number ?? $source);
+        }
+        if ($liquidate->relationLoaded('transfer') && $liquidate->transfer) {
+            return 'Transfer: ' . ($liquidate->transfer->transferID ?? $source);
+        }
+        if ($liquidate->relationLoaded('order') && $liquidate->order) {
+            return 'Order: ' . ($liquidate->order->order_number ?? $source);
+        }
+        return ucfirst(str_replace('_', ' ', $source ?: 'N/A'));
+    }
+
+    /**
+     * Resolve source display label for a disposal (e.g. "Packing list: PKL-000001-001").
+     */
+    private function resolveSourceDisplayForDisposal(Disposal $disposal): string
+    {
+        $source = $disposal->source ?? '';
+        if ($disposal->relationLoaded('packingList') && $disposal->packingList) {
+            return 'Packing list: ' . ($disposal->packingList->packing_list_number ?? $source);
+        }
+        if ($disposal->relationLoaded('transfer') && $disposal->transfer) {
+            return 'Transfer: ' . ($disposal->transfer->transferID ?? $source);
+        }
+        if ($disposal->relationLoaded('order') && $disposal->order) {
+            return 'Order: ' . ($disposal->order->order_number ?? $source);
+        }
+        return ucfirst(str_replace('_', ' ', $source ?: 'N/A'));
     }
 }

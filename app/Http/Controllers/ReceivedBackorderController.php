@@ -38,7 +38,12 @@ class ReceivedBackorderController extends Controller
             abort(403, 'You do not have permission to view received backorders.');
         }
 
-        $query = ReceivedBackorder::with(['receivedBy', 'reviewedBy', 'approvedBy', 'rejectedBy', 'backOrder', 'warehouse', 'facility'])
+        $query = ReceivedBackorder::with([
+            'receivedBy', 'reviewedBy', 'approvedBy', 'rejectedBy', 'backOrder', 'warehouse', 'facility',
+            'packingList:id,packing_list_number',
+            'transfer:id,transferID',
+            'order:id,order_number',
+        ])
             ->withCount('items');
 
         // Apply filters

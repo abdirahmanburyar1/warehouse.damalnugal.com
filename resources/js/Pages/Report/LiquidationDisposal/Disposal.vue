@@ -217,7 +217,7 @@
                                 <span class="bg-gray-100 px-2 py-1 rounded-md text-xs">{{ disposal.disposal_id }}</span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                <span class="bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs">{{ disposal.source || 'N/A' }}</span>
+                                <span class="bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs">{{ disposal.source_display || disposal.source || 'N/A' }}</span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span :class="getStatusClass(disposal.status)">

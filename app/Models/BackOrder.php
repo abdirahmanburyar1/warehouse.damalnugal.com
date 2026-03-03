@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class BackOrder extends Model
 {
@@ -65,6 +66,22 @@ class BackOrder extends Model
     public function histories(): HasMany
     {
         return $this->hasMany(BackOrderHistory::class);
+    }
+
+    /**
+     * Get the liquidation linked to this back order (one-to-one).
+     */
+    public function liquidate(): HasOne
+    {
+        return $this->hasOne(Liquidate::class);
+    }
+
+    /**
+     * Get the disposal linked to this back order (one-to-one).
+     */
+    public function disposal(): HasOne
+    {
+        return $this->hasOne(Disposal::class);
     }
 
     /**

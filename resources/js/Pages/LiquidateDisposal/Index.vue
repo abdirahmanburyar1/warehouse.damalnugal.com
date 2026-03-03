@@ -370,6 +370,7 @@ function getResult(page = 1) {
     if (source) query.source = typeof source === 'object' && source !== null && 'value' in source ? source.value : source;
     if (dateFrom.value) query.date_from = dateFrom.value;
     if (dateTo.value) query.date_to = dateTo.value;
+    // Always send date range when we have it (from backend defaults or user) so filters persist
     if (currentStatus.value !== 'all') query.status = currentStatus.value;
     if (page > 1) query.page = page;
     

@@ -25,6 +25,11 @@ class Disposal extends Model
         'disposed_at',
         'status',
         'source',
+        'facility',
+        'warehouse',
+        'transfer_id',
+        'order_id',
+        'packing_list_id',
         'reviewed_by',
         'reviewed_at',
         'approved_by',
@@ -91,5 +96,29 @@ class Disposal extends Model
     public function backOrder(): BelongsTo
     {
         return $this->belongsTo(BackOrder::class);
+    }
+
+    /**
+     * Get the packing list associated with this disposal (when source is packing_list).
+     */
+    public function packingList(): BelongsTo
+    {
+        return $this->belongsTo(PackingList::class);
+    }
+
+    /**
+     * Get the transfer associated with this disposal (when source is transfer).
+     */
+    public function transfer(): BelongsTo
+    {
+        return $this->belongsTo(Transfer::class);
+    }
+
+    /**
+     * Get the order associated with this disposal (when source is order).
+     */
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
     }
 }
