@@ -1,6 +1,6 @@
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted, nextTick } from "vue";
 import { router, usePage } from "@inertiajs/vue3";
 import InputError from "@/Components/InputError.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
@@ -46,6 +46,8 @@ const availableInventories = ref([]);
 const searchQuery = ref("");
 const loadingInventories = ref(false);
 const currentDetailForReason = ref(null);
+const transferFormRef = ref(null);
+const transferDateInputRef = ref(null);
 
 const form = ref({
     source_type: sourceType.value,
@@ -89,17 +91,26 @@ const filteredDestinationOptions = computed(() => {
     return destinationOptions.value;
 });
 
-const handleSourceSelect = async (selected) => {
+const handleSourceSelect = (selected) => {
     selectedSource.value = selected;
     form.value.source_id = selected ? selected.id : null;
     form.value.source_type = sourceType.value;
     selectedInventory.value = null;
-    if (selected) {
-        await fetchInventories();
-    } else {
+    if (!selected) {
         availableInventories.value = [];
         filteredInventories.value = [];
     }
+    // Reset items table so selected products always match current source's inventory options
+    form.value.items = [
+        {
+            id: null,
+            product_id: null,
+            product: null,
+            quantity: 0,
+            available_quantity: 0,
+            details: [],
+        },
+    ];
 };
 
 const handleDestinationSelect = (selected) => {
@@ -144,8 +155,10 @@ const fetchInventories = async () => {
             },
         });
         swalLoading.close();
-        availableInventories.value = response.data;
-        filteredInventories.value = availableInventories.value;
+        const data = response.data;
+        const list = Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
+        availableInventories.value = [...list];
+        filteredInventories.value = [...list];
         loadingInventories.value = false;
     } catch (error) {
         swalLoading.close();
@@ -243,6 +256,18 @@ watch(sourceType, (newValue) => {
     filteredInventories.value = [];
 });
 
+// When source is selected, fetch available items (ensures items propagate even if @select does not fire)
+watch(selectedSource, async (newVal) => {
+    if (newVal?.id) {
+        form.value.source_id = newVal.id;
+        form.value.source_type = sourceType.value;
+        await fetchInventories();
+    } else {
+        availableInventories.value = [];
+        filteredInventories.value = [];
+    }
+});
+
 watch(destinationType, (newValue) => {
     form.value.destination_type = newValue;
     form.value.destination_id = null;
@@ -251,29 +276,27 @@ watch(destinationType, (newValue) => {
 
 const submit = async () => {
     loading.value = true;
-    const hasItemsToTransfer = form.value.items.some(item =>
-        item.details.some(detail =>
-            parseFloat(detail.quantity_to_transfer) > 0
-        )
-    );
-    if (!hasItemsToTransfer) {
+    // Only consider fulfilled rows: item selected and at least one quantity to transfer
+    const fulfilledItems = form.value.items.filter(item => {
+        const hasProduct = item.product_id != null && item.product_id !== '';
+        const details = Array.isArray(item.details) ? item.details : [];
+        const hasQuantity = details.some(d => parseFloat(d.quantity_to_transfer) > 0);
+        return hasProduct && hasQuantity;
+    });
+    if (fulfilledItems.length === 0) {
         loading.value = false;
         Swal.fire({
             title: "No Items to Transfer",
-            text: "Please specify quantities to transfer for at least one item.",
+            text: "Please select at least one item and specify quantities to transfer.",
             icon: "warning",
             confirmButtonColor: "#4F46E5",
         });
         return;
     }
-    const filteredItems = form.value.items.filter(item =>
-        item.product_id && item.details.some(detail =>
-            parseFloat(detail.quantity_to_transfer) > 0
-        )
-    );
+    // Ignore unused/empty rows – save only fulfilled rows
     const submitData = {
         ...form.value,
-        items: filteredItems
+        items: fulfilledItems
     };
     await axios
         .post(route("transfers.store"), submitData)
@@ -345,6 +368,18 @@ async function handleProductSelect(index, selected) {
     }
 }
 
+function handleProductClear(index) {
+    const item = form.value.items[index];
+    item.product = null;
+    item.product_id = null;
+    item.details = [];
+    item.quantity = 0;
+    item.available_quantity = 0;
+    if (isLoading.value[index] !== undefined) {
+        isLoading.value[index] = false;
+    }
+}
+
 function updateItemQuantity(index) {
     const item = form.value.items[index];
     const totalQuantity = item.details.reduce((sum, detail) => {
@@ -401,6 +436,30 @@ function getSafeAvailableQuantity(item) {
     
     return isNaN(total) ? 0 : total;
 }
+
+// Keep item multiselect dropdown closed on initial load (never open by default)
+function closeItemDropdownIfOpen() {
+    const el = document.activeElement;
+    if (el && el.closest && el.closest(".transfer-items-table .item-name-cell .multiselect")) {
+        el.blur();
+    }
+    // Also close any item-name multiselect that is open (e.g. isOpen state true without focus)
+    const openWrapper = document.querySelector(".transfer-items-table .item-name-cell .multiselect--active");
+    if (openWrapper) {
+        const input = openWrapper.querySelector("input");
+        if (input) input.blur();
+    }
+}
+onMounted(() => {
+    // Focus transfer date so the item multiselect is never focused by default (dropdown stays closed)
+    nextTick(() => {
+        transferDateInputRef.value?.focus?.();
+    });
+    [0, 100, 250, 500, 800, 1200].forEach((ms) => {
+        if (ms === 0) nextTick(closeItemDropdownIfOpen);
+        else setTimeout(closeItemDropdownIfOpen, ms);
+    });
+});
 
 // Transfer create permission: used for action buttons and "Add New Reason" in reason dropdown
 const page = usePage();
@@ -504,14 +563,14 @@ async function handleAddReason() {
             </div>
             <!-- Form Section -->
             <div class="bg-white rounded-2xl shadow-xl border border-slate-200 p-8">
-                <form @submit.prevent="submit" class="space-y-8">
+                <form ref="transferFormRef" @submit.prevent="submit" class="space-y-8">
                     <!-- Transfer Date -->
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="md:col-span-1">
                             <label for="transfer_date" class="block text-sm font-semibold text-gray-700 mb-2">
                                 Transfer Date
                             </label>
-                            <input type="date" v-model="form.transfer_date"
+                            <input ref="transferDateInputRef" type="date" v-model="form.transfer_date"
                                 class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200" />
                         </div>
                     </div>
@@ -644,10 +703,10 @@ async function handleAddReason() {
                         </div>
                     </div>
                     <!-- Items Table Section -->
-                    <table class="w-full text-sm text-left table-sm rounded-t-lg">
+                    <table class="transfer-items-table w-full text-sm text-left table-sm rounded-t-lg table-fixed">
                         <thead>
                             <tr style="background-color: #F4F7FB;">
-                                <th class="min-w-[120px] px-3 py-2 text-xs font-bold rounded-tl-lg"
+                                <th class="w-[280px] min-w-[280px] max-w-[400px] px-3 py-2 text-xs font-bold rounded-tl-lg"
                                     style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;" rowspan="2">
                                     Item Name
                                 </th>
@@ -668,11 +727,11 @@ async function handleAddReason() {
                                     Item details
                                 </th>
 
-                                <th class="min-w-[150px] px-3 py-2 text-xs font-bold"
+                                <th class="w-[220px] min-w-[220px] max-w-[320px] px-3 py-2 text-xs font-bold"
                                     style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;" rowspan="2">
                                     Reasons for Transfers
                                 </th>
-                                <th class="min-w-[110px] px-3 py-2 text-xs font-bold"
+                                <th class="w-[130px] max-w-[130px] px-3 py-2 text-xs font-bold"
                                     style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;" rowspan="2">
                                     Quantity to be transferred
                                 </th>
@@ -713,15 +772,26 @@ async function handleAddReason() {
                                     class="hover:bg-gray-50 transition-colors duration-150 border-b"
                                     style="border-bottom: 1px solid #B7C6E6;">
 
-                                    <!-- Item Name - only on first row for this item -->
+                                    <!-- Item Name - only on first row for this item (overflow-visible so dropdown can show) -->
                                     <td v-if="detailIndex === 0" :rowspan="Math.max(item.details?.length || 1, 1)"
-                                        class="min-w-[200px] px-3 py-2 text-xs font-medium text-gray-800 align-top">
-                                        <div class="w-full">
-                                            <Multiselect v-model="item.product" :value="item.product_id"
-                                                :options="availableInventories" placeholder="Search for an item..."
-                                                required track-by="id" label="name" :searchable="true"
-                                                :allow-empty="true" :loading="isLoading[index]"
-                                                @select="handleProductSelect(index, $event)" />
+                                        class="item-name-cell w-[280px] min-w-[280px] max-w-[400px] px-3 py-2 text-xs font-medium text-gray-800 align-top overflow-visible">
+                                        <div class="w-full min-w-0 max-w-full">
+                                            <Multiselect v-model="item.product"
+                                                :key="`item-select-${index}-${availableInventories.length}`"
+                                                :options="availableInventories"
+                                                :searchable="true" :close-on-select="true" :show-labels="false"
+                                                :allow-empty="true"
+                                                :prevent-autofocus="true"
+                                                placeholder="Search for an item..."
+                                                track-by="id" label="name"
+                                                :multiple="false"
+                                                :loading="isLoading[index]"
+                                                @select="handleProductSelect(index, $event)"
+                                                @remove="handleProductClear(index)">
+                                                <template v-slot:option="{ option }">
+                                                    <span>{{ option.name }}</span>
+                                                </template>
+                                            </Multiselect>
                                         </div>
                                     </td>
 
@@ -767,26 +837,29 @@ async function handleAddReason() {
                                         {{ detail.location || '' }}
                                     </td>
 
-                                    <!-- Reasons for Transfers - per detail -->
-                                    <td class="px-2 py-1 text-xs text-center">
-                                        <Multiselect v-if="item.product && detail.quantity"
-                                            v-model="detail.transfer_reason"
-                                            :options="reasonOptions" :searchable="true"
-                                            :close-on-select="true" :show-labels="false" :placeholder="'Select reason'"
-                                            @select="handleReasonSelect(detail, $event)">
-                                            <template v-slot:option="{ option }">
-                                                <span :class="{ 'text-blue-600 font-semibold': option === 'Add New Reason' }">
-                                                    {{ option }}
-                                                </span>
-                                            </template>
-                                        </Multiselect>
+                                    <!-- Reasons for Transfers - per detail (full text, dropdown closes on select, Add New Reason option) -->
+                                    <td class="reason-cell w-[220px] min-w-[220px] max-w-[320px] px-2 py-1 text-xs text-center">
+                                        <div class="w-full min-w-0 max-w-full">
+                                            <Multiselect v-if="item.product && detail.quantity"
+                                                v-model="detail.transfer_reason"
+                                                :options="reasonOptions" :searchable="true"
+                                                :multiple="false"
+                                                :close-on-select="true" :show-labels="false" :placeholder="'Select reason'"
+                                                @select="handleReasonSelect(detail, $event)">
+                                                <template v-slot:option="{ option }">
+                                                    <span :class="{ 'text-blue-600 font-semibold': option === 'Add New Reason' }">
+                                                        {{ option }}
+                                                    </span>
+                                                </template>
+                                            </Multiselect>
+                                        </div>
                                     </td>
 
                                     <!-- Quantity to be transferred - per detail -->
-                                    <td class="px-2 py-1 text-xs text-center">
+                                    <td class="w-[130px] max-w-[130px] px-2 py-1 text-xs text-center overflow-hidden">
                                         <input v-if="item.product && detail.quantity" type="number"
                                             v-model.number="detail.quantity_to_transfer" :max="detail.quantity" min="0"
-                                            class="w-full text-xs border rounded px-2 py-1 text-center" placeholder="0"
+                                            class="w-full max-w-full text-xs border rounded px-2 py-1 text-center box-border" placeholder="0"
                                             @input="updateItemQuantity(index)" />
                                     </td>
 
@@ -917,3 +990,81 @@ async function handleAddReason() {
         </div>
     </div>
 </template>
+
+<style scoped>
+/* Fixed widths so Item Name, Reasons for Transfers, and Quantity to be transferred don't spread when active/focused */
+.transfer-items-table th:nth-child(1),
+.transfer-items-table td:nth-child(1) {
+    width: 280px;
+    min-width: 280px;
+    max-width: 400px;
+    box-sizing: border-box;
+}
+.transfer-items-table th:nth-child(9),
+.transfer-items-table td:nth-child(9) {
+    width: 220px;
+    min-width: 220px;
+    max-width: 320px;
+    box-sizing: border-box;
+}
+.transfer-items-table th:nth-child(10),
+.transfer-items-table td:nth-child(10) {
+    width: 130px;
+    min-width: 130px;
+    max-width: 130px;
+    box-sizing: border-box;
+}
+/* Reasons for Transfers (col 9): show full reason text, no truncation; dropdown closes on select; "Add New Reason" option */
+.transfer-items-table td:nth-child(9) .multiselect {
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+}
+.transfer-items-table td:nth-child(9) :deep(.multiselect__tags),
+.transfer-items-table td:nth-child(9) :deep(.multiselect__tags-wrap) {
+    min-width: 0 !important;
+    overflow: visible !important;
+}
+.transfer-items-table td:nth-child(9) :deep(.multiselect__single),
+.transfer-items-table td:nth-child(9) :deep(.multiselect__tag),
+.transfer-items-table td:nth-child(9) :deep(.multiselect__tag span) {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    max-width: none !important;
+}
+/* Item Name (col 1): show full name, allow wrap – no truncation */
+.transfer-items-table td:nth-child(1) .multiselect {
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+}
+.transfer-items-table td:nth-child(1) :deep(.multiselect__tags) {
+    min-width: 0 !important;
+    overflow: visible !important;
+}
+.transfer-items-table td:nth-child(1) :deep(.multiselect__tags-wrap) {
+    min-width: 0 !important;
+    overflow: visible !important;
+}
+.transfer-items-table td:nth-child(1) :deep(.multiselect__single),
+.transfer-items-table td:nth-child(1) :deep(.multiselect__tag),
+.transfer-items-table td:nth-child(1) :deep(.multiselect__tag span) {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    max-width: none !important;
+}
+.transfer-items-table td:nth-child(10) input {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+/* Item and Reason dropdowns: only on top when open – do not force visibility so they close when not active */
+.transfer-items-table .item-name-cell :deep(.multiselect--active .multiselect__content-wrapper),
+.transfer-items-table .reason-cell :deep(.multiselect--active .multiselect__content-wrapper) {
+    z-index: 99999 !important;
+    position: absolute !important;
+}
+</style>

@@ -546,13 +546,14 @@
                                             <label
                                                 for="expected_date"
                                                 class="block text-sm font-medium text-gray-700"
-                                                >Expected Date</label
+                                                >Expected Date <span class="text-red-500">*</span></label
                                             >
                                             <input
                                                 type="date"
                                                 id="expected_date"
                                                 v-model="form.expected_date"
                                                 :min="form.po_date || undefined"
+                                                required
                                                 class="block w-full mt-1 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                                             />
                                             <p class="mt-0.5 text-xs text-gray-500">Used for Procurement Report delivery status (on-time / late)</p>

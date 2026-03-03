@@ -1243,23 +1243,25 @@ class TransferController extends Controller
         
         try {
             if ($request->source_type === 'warehouse') {
-                // Get warehouse inventories directly with DB query
-                $products = Product::whereHas('inventories.items', function($query) use ($request) {
-                    $query->where('warehouse_id', $request->source_id);
-                })             
+                // Get warehouse inventories directly with DB query (include category for display)
+                $products = Product::with('category')
+                    ->whereHas('inventories.items', function($query) use ($request) {
+                        $query->where('warehouse_id', $request->source_id);
+                    })
                     ->get();
-                
+
                 return response()->json($products, 200);
             } else {
-                // Get facility inventories directly with DB query
-                $products = Product::whereHas('facilityInventories', function($query) use ($request) {
-                    $query->where('facility_id', $request->source_id)
-                          ->whereHas('items', function($subQuery) {
-                              $subQuery->where('quantity', '>', 0);
-                          });
-                })
+                // Get facility inventories directly with DB query (include category for display)
+                $products = Product::with('category')
+                    ->whereHas('facilityInventories', function($query) use ($request) {
+                        $query->where('facility_id', $request->source_id)
+                              ->whereHas('items', function($subQuery) {
+                                  $subQuery->where('quantity', '>', 0);
+                              });
+                    })
                     ->get();
-                
+
                 return response()->json($products, 200);
             }
         } catch (\Throwable $th) {

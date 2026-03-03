@@ -162,7 +162,7 @@ class SupplyController extends Controller
                 return response()->json(['error' => 'Packing list not found'], 404);
             }
 
-            // Get packing list differences with related data
+            // Get packing list differences with related data (including processed/finalized so packing list column is always available)
             $results = PackingListDifference::whereHas('packingListItem', function($query) use ($id) {
                 $query->where('packing_list_id', $id);
             })
@@ -174,13 +174,14 @@ class SupplyController extends Controller
                 ])
                 ->get();
 
-            // Debug: Log the results to see what's being returned
-            logger()->info('BackOrder query results:', [
-                'count' => $results->count(),
-                'first_item_backOrder' => $results->first()?->backOrder,
-                'first_item_back_order_id' => $results->first()?->back_order_id,
-                'all_back_order_ids' => $results->pluck('back_order_id')->unique()->values()
-            ]);
+            // Ensure each item has packing_list_number at top level so the Back Order table column is never empty (handles any serialization shape)
+            $results = $results->map(function ($row) {
+                $arr = $row->toArray();
+                $pl = $row->packingListItem?->packingList;
+                $arr['packing_list_number'] = $pl?->packing_list_number;
+                $arr['packing_list'] = $pl ? ['id' => $pl->id, 'packing_list_number' => $pl->packing_list_number] : null;
+                return $arr;
+            });
 
             return response()->json($results, 200);
 
@@ -1067,7 +1068,7 @@ class SupplyController extends Controller
                     'supplier_id' => 'required|exists:suppliers,id',
                     'po_number' => 'required|unique:purchase_orders,po_number,' . $request->id,
                     'po_date' => 'required|date',
-                    'expected_date' => 'nullable|date',
+                    'expected_date' => 'required|date',
                     'original_po_no' => 'nullable',
                     'notes' => 'nullable',
                     'items' => 'required|array|min:1',
@@ -1593,7 +1594,7 @@ class SupplyController extends Controller
                 'po_number' => 'required|string',
                 'original_po_no' => 'nullable|string',
                 'po_date' => 'required|date',
-                'expected_date' => 'nullable|date',
+                'expected_date' => 'required|date',
                 'items' => 'required|array|min:1',                
                 'items.*.product_id' => 'required|exists:products,id',
                 'items.*.id' => 'nullable|exists:purchase_order_items,id',

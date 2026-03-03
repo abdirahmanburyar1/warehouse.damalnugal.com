@@ -118,9 +118,10 @@
                                     class="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400" />
                             </div>
                             <div class="flex items-center gap-2">
-                                <label class="text-sm text-slate-500 min-w-[90px]">Expected Date</label>
+                                <label class="text-sm text-slate-500 min-w-[90px]">Expected Date <span class="text-red-500">*</span></label>
                                 <input type="date" v-model="form.expected_date" :disabled="form.approved_at"
                                     :min="form.po_date"
+                                    required
                                     class="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400" />
                             </div>
                         </div>
@@ -313,7 +314,7 @@
                     class="inline-flex items-center px-4 py-2.5 text-sm font-medium rounded-lg text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400/50 transition-colors disabled:opacity-50">
                     Exit
                 </button>
-                <button type="submit" :disabled="isSubmitting || !$page.props.auth.can.purchase_order_create || !form.supplier_id"
+                <button type="submit" :disabled="isSubmitting || !$page.props.auth.can.purchase_order_create || !form.supplier_id || !form.expected_date"
                     class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg text-white bg-slate-800 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                     <svg v-if="isSubmitting" class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

@@ -84,7 +84,7 @@ class PurchaseOrderController extends Controller
                 'po_number' => 'nullable|string|unique:purchase_orders,po_number,' . $request->input('id'),
                 'supplier_id' => 'required|exists:suppliers,id',
                 'po_date' => 'required|date',
-                'expected_date' => 'nullable|date',
+                'expected_date' => 'required|date',
                 'notes' => 'nullable|string',
             ]);
 

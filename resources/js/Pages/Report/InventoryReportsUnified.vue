@@ -12,10 +12,9 @@
         </template>
 
         <div class="py-5">
-            <!-- Filters: five in one row, then Generate Report button with period input to its right -->
+            <!-- Filters: one column layout; Report Period section has Report Period (top), then Year and Period (bottom) -->
             <div class="bg-emerald-50/90 border border-emerald-200 rounded-lg shadow-sm p-6 mb-6">
-                <!-- Row 1: six filters – Region, District, Warehouse/Facility, Report Type, Report Period, Period date -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 lg:gap-5">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-5">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Select Region</label>
                         <select
@@ -76,43 +75,60 @@
                             <option v-for="rt in reportTypes" :key="rt.value" :value="rt.value">{{ rt.label }}</option>
                         </select>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Select Report Period</label>
-                        <select
-                            v-model="filters.report_period"
-                            class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2"
-                        >
-                            <option
-                                v-for="opt in reportPeriodOptionsList"
-                                :key="opt.value"
-                                :value="opt.value"
+                    <!-- Report Period column: Report Period (top), Year + Period (bottom) -->
+                    <div class="flex flex-col gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Report Period</label>
+                            <select
+                                v-model="filters.report_period"
+                                class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2"
                             >
-                                {{ opt.label }}
-                            </option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Period date</label>
-                        <input
-                            v-model="filters.monthYear"
-                            type="month"
-                            class="mt-1 block w-full rounded-md border border-gray-300 bg-white py-2 px-3 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm"
-                        />
+                                <option
+                                    v-for="opt in reportPeriodOptionsList"
+                                    :key="opt.value"
+                                    :value="opt.value"
+                                >
+                                    {{ opt.label }}
+                                </option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Year</label>
+                            <select
+                                v-model="filters.year"
+                                class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2"
+                            >
+                                <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
+                            </select>
+                        </div>
+                        <div v-if="periodOptions.length > 1">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Period</label>
+                            <select
+                                v-model="filters.periodValue"
+                                class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2"
+                            >
+                                <option
+                                    v-for="opt in periodOptions"
+                                    :key="opt.value"
+                                    :value="opt.value"
+                                >
+                                    {{ opt.label }}
+                                </option>
+                            </select>
+                        </div>
                     </div>
                 </div>
-                <!-- Row 2: Generate Report button -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 lg:gap-5 mt-4 items-end">
-                    <div class="lg:col-span-3 flex items-end">
-                        <button
-                            type="button"
-                            @click="generateReport"
-                            :disabled="generating"
-                            class="w-full sm:w-auto inline-flex justify-center items-center px-6 py-2.5 bg-emerald-600 border border-transparent rounded-md font-semibold text-sm text-white uppercase tracking-widest hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 transition ease-in-out duration-150"
-                        >
-                            <span v-if="generating">Generating...</span>
-                            <span v-else>Generate Report</span>
-                        </button>
-                    </div>
+                <!-- Generate Report button -->
+                <div class="mt-4">
+                    <button
+                        type="button"
+                        @click="generateReport"
+                        :disabled="generating"
+                        class="inline-flex justify-center items-center px-6 py-2.5 bg-emerald-600 border border-transparent rounded-md font-semibold text-sm text-white uppercase tracking-widest hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 transition ease-in-out duration-150"
+                    >
+                        <span v-if="generating">Generating...</span>
+                        <span v-else>Generate Report</span>
+                    </button>
                 </div>
             </div>
 
@@ -1142,7 +1158,11 @@ const props = defineProps({
 });
 
 const now = new Date();
-const defaultMonthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+const currentYear = now.getFullYear();
+const currentMonth = now.getMonth() + 1;
+const defaultMonthYear = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const DEFAULT_REPORT_PERIOD_OPTIONS = [
     { value: 'monthly', label: 'Monthly' },
@@ -1152,18 +1172,89 @@ const DEFAULT_REPORT_PERIOD_OPTIONS = [
     { value: 'yearly', label: 'Yearly' },
 ];
 
+// Initialize year and periodValue from props (year, month) or from monthYear
+function parseInitialYearMonth() {
+    const y = props.filters?.year;
+    const m = props.filters?.month;
+    if (y != null && m != null) return { year: Number(y), periodValue: Number(m) };
+    const my = props.filters?.monthYear ?? defaultMonthYear;
+    const [yr, mo] = my.split('-').map(Number);
+    return { year: yr || currentYear, periodValue: mo || currentMonth };
+}
+const initial = parseInitialYearMonth();
+
 const filters = ref({
     region_id: props.filters?.region_id ?? null,
     district_id: props.filters?.district_id ?? null,
     warehouse_or_facility: props.filters?.warehouse_or_facility ?? '',
     report_type: props.filters?.report_type ?? 'warehouse_inventory',
     report_period: props.filters?.report_period ?? 'monthly',
-    monthYear: props.filters?.monthYear ?? defaultMonthYear,
+    year: initial.year,
+    periodValue: initial.periodValue,
 });
 
 const reportPeriodOptionsList = computed(() =>
     (props.reportPeriodOptions?.length ? props.reportPeriodOptions : DEFAULT_REPORT_PERIOD_OPTIONS)
 );
+
+// Year dropdown: e.g. current year ± 10
+const yearOptions = computed(() => {
+    const start = currentYear - 10;
+    const end = currentYear + 1;
+    const list = [];
+    for (let y = end; y >= start; y--) list.push(y);
+    return list;
+});
+
+// Period options driven by report_period. value = month number to send to API (first month of period for non-monthly).
+const periodOptions = computed(() => {
+    const period = filters.value.report_period || 'monthly';
+    switch (period) {
+        case 'monthly':
+            return MONTH_NAMES.map((name, i) => ({ value: i + 1, label: name }));
+        case 'bi-monthly':
+            return [
+                { value: 1, label: 'Jan-Feb' },
+                { value: 3, label: 'Mar-Apr' },
+                { value: 5, label: 'May-Jun' },
+                { value: 7, label: 'Jul-Aug' },
+                { value: 9, label: 'Sep-Oct' },
+                { value: 11, label: 'Nov-Dec' },
+            ];
+        case 'quarterly':
+            return [
+                { value: 1, label: 'Jan-Mar' },
+                { value: 4, label: 'Apr-Jun' },
+                { value: 7, label: 'Jul-Sep' },
+                { value: 10, label: 'Oct-Dec' },
+            ];
+        case 'six_months':
+            return [
+                { value: 1, label: 'Jan-Jun' },
+                { value: 7, label: 'Jul-Dec' },
+            ];
+        case 'yearly':
+            return [{ value: 1, label: 'Full year' }];
+        default:
+            return MONTH_NAMES.map((name, i) => ({ value: i + 1, label: name }));
+    }
+});
+
+// When report_period changes, ensure periodValue is valid for the new options
+watch(() => filters.value.report_period, () => {
+    const opts = periodOptions.value;
+    if (!opts.length) return;
+    const valid = opts.some(o => o.value === filters.value.periodValue);
+    if (!valid) filters.value.periodValue = opts[0].value;
+}, { immediate: false });
+
+// Derived monthYear for API (e.g. warehouse workflow) when both year and month are needed
+const filtersMonthYear = computed(() => {
+    const y = filters.value.year;
+    const m = filters.value.periodValue;
+    if (!y || !m) return defaultMonthYear;
+    return `${y}-${String(m).padStart(2, '0')}`;
+});
 
 const reportData = ref([]);
 const productReportRows = ref([]);
@@ -2287,7 +2378,7 @@ function workflowStatusLabel(status) {
 }
 async function workflowAction(action) {
     const meta = warehouseReportMeta.value;
-    const monthYear = filters.value.monthYear;
+    const monthYear = filtersMonthYear.value;
     if (!meta?.report_id || !monthYear) return;
     const routes = {
         submit: { name: 'reports.warehouseMonthly.submit', method: 'put' },
@@ -2393,8 +2484,8 @@ async function generateReport() {
     generating.value = true;
     hasGenerated.value = true;
     try {
-        const monthYear = filters.value.monthYear || defaultMonthYear;
-        const [year, month] = monthYear.split('-').map(Number);
+        const year = filters.value.year || currentYear;
+        const month = filters.value.periodValue ?? currentMonth;
         const params = {
             report_type: filters.value.report_type || 'warehouse_inventory',
             region_id: filters.value.region_id || undefined,

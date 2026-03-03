@@ -167,12 +167,13 @@
                                     />
                                 </div>
                                 <div class="flex items-center">
-                                    <span class="text-sm text-gray-600 mr-2">Expected Date:</span>
+                                    <span class="text-sm text-gray-600 mr-2">Expected Date <span class="text-red-500">*</span>:</span>
                                     <input
                                         type="date"
                                         v-model="form.expected_date"
                                         :disabled="form.approved_at"
                                         :min="form.po_date"
+                                        required
                                         class="text-sm border-0 bg-transparent focus:ring-0 focus:border-b-2 focus:border-indigo-500"
                                     />
                                 </div>

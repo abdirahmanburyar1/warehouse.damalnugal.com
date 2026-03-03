@@ -88,7 +88,7 @@
                                                     </td>
                                                     <td class="px-3 py-2 text-xs text-gray-700 align-middle"
                                                         v-if="index === 0" :rowspan="item.rows.length">
-                                                        {{ item.packingList?.packing_list_number }}
+                                                        {{ (item.packing_list ?? item.packingList)?.packing_list_number ?? item.packing_list_number }}
                                                     </td>
                                                     <td class="px-3 py-2 text-xs text-gray-700 align-middle"
                                                         v-if="index === 0" :rowspan="item.rows.length">
@@ -379,11 +379,16 @@ const groupedItems = computed(() => {
         );
 
         if (!existingGroup) {
+            // Prefer top-level packing_list from API; else support snake_case/camelCase relation (packing_list_item.packing_list vs packingListItem.packingList)
+            const plRelation = item.packing_list_item ?? item.packingListItem;
+            const nestedPl = plRelation?.packing_list ?? plRelation?.packingList ?? null;
+            const packingList = item.packing_list ?? item.packingList ?? nestedPl ?? (item.packing_list_number ? { packing_list_number: item.packing_list_number } : null);
             result.push({
                 id: item.id,
                 product: item.product,
                 packing_list_item_id: item.packing_list_item_id,
-                packing_list: item.packingListItem?.packingList || null,
+                packing_list: packingList,
+                packingList: packingList,
                 created_at: item.created_at,
                 back_order_id: item.back_order_id,
                 rows: [{
