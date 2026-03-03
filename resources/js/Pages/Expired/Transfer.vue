@@ -479,8 +479,8 @@ const openAddReasonModal = () => {
                                         {{ props.inventory.expiry_date ? formatDate(props.inventory.expiry_date) : '' }}
                                     </td>
 
-                                    <!-- Reasons for Transfers -->
-                                    <td class="px-3 py-3 max-w-[150px] text-sm border-b text-center" style="border-bottom: 1px solid #B7C6E6;">
+                                    <!-- Reasons for Transfers – full text, dropdown closes on select, Add New Reason option -->
+                                    <td class="reason-cell px-3 py-3 w-[220px] min-w-[220px] max-w-[320px] text-sm border-b text-center" style="border-bottom: 1px solid #B7C6E6;">
                                         <Multiselect
                                             v-model="transfer_reason"
                                             :options="reasonsWithAddOption"
@@ -640,3 +640,31 @@ const openAddReasonModal = () => {
         </div>
     </div>
 </template>
+
+<style scoped>
+/* Reasons for Transfers: show full reason text, no truncation; dropdown closes on select; "+ Add New Reason" option */
+.reason-cell .multiselect {
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+}
+.reason-cell :deep(.multiselect__tags),
+.reason-cell :deep(.multiselect__tags-wrap) {
+    min-width: 0 !important;
+    overflow: visible !important;
+}
+.reason-cell :deep(.multiselect__single),
+.reason-cell :deep(.multiselect__tag),
+.reason-cell :deep(.multiselect__tag span) {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    max-width: none !important;
+}
+/* Dropdown only on top when open – do not force visibility so it closes when not active */
+.reason-cell :deep(.multiselect--active .multiselect__content-wrapper) {
+    z-index: 99999 !important;
+    position: absolute !important;
+}
+</style>
