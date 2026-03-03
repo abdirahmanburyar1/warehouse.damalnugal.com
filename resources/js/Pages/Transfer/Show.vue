@@ -1168,11 +1168,9 @@
                                                         ? "Received"
                                                         : isType["is_receive"]
                                                             ? "Please Wait..."
-                                                            : props.transfer.status === "delivered" && !isTransferReceiver
-                                                                ? "Not your warehouse/facility"
-                                                                : props.transfer.status === "delivered" && !hasReceivedQuantitySet
-                                                                ? "Enter received quantity first"
-                                                                : props.transfer.status === "delivered" &&
+                                                            : props.transfer
+                                                                .status ===
+                                                                "delivered" &&
                                                                 (!$page.props.auth.can.transfer_receive && !$page.props.auth.can.transfer_manage)
                                                                 ? "Waiting to be received"
                                                                 : "Receive"
