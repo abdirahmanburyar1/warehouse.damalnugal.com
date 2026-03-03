@@ -159,16 +159,28 @@ class TransferController extends Controller
                 //// event(new TransferStatusChanged($transfer, $oldStatus, $newStatus, auth()->id()));
             }
             
-            // delivered -> received (RECEIVER ACTION)
-            if($oldStatus == 'delivered' && $newStatus == 'received' && $isReceiver && auth()->user()->can('transfer.receive')){
+            // delivered -> received (RECEIVER ACTION): only the "to" warehouse/facility can receive; at least one allocation must have received_quantity > 0
+            if($oldStatus == 'delivered' && $newStatus == 'received'){
+                if (!$isReceiver) {
+                    DB::rollBack();
+                    return response()->json('You are not authorized to receive this transfer. Only the destination warehouse or facility can receive.', 403);
+                }
+                if (!auth()->user()->can('transfer.receive') && !auth()->user()->can('transfer.manage')) {
+                    DB::rollBack();
+                    return response()->json('You do not have permission to receive transfers.', 403);
+                }
+                $hasReceivedQty = $transfer->items()
+                    ->whereHas('inventory_allocations', fn ($q) => $q->where('received_quantity', '>', 0))
+                    ->exists();
+                if (!$hasReceivedQty) {
+                    DB::rollBack();
+                    return response()->json('Enter received quantity for at least one item before marking the transfer as received.', 422);
+                }
                 $transfer->update([
                     'status' => 'received',
-                    'received_by' => auth()->id(),    
+                    'received_by' => auth()->id(),
                     'received_at' => now()
                 ]);
-                
-                // Dispatch event for status change
-                //// event(new TransferStatusChanged($transfer, $oldStatus, $newStatus, auth()->id()));
             }
             
             DB::commit();

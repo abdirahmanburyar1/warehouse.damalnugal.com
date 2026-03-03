@@ -570,10 +570,10 @@
                                                 min="0"
                                                 :placeholder="allocation.updated_quantity > 0 ? allocation.updated_quantity : allocation.allocated_quantity"
                                                 @input="validateReceivedQuantity(allocation, allocIndex)"
-                                                :readonly="props.transfer.to_warehouse_id !== $page.props.auth.user?.warehouse_id || props.transfer.status !== 'delivered'"
+                                                :readonly="!isTransferReceiver || props.transfer.status !== 'delivered'"
                                                 :class="[
                                                     'w-full text-center border border-gray-300 rounded px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500',
-                                                    (props.transfer.to_warehouse_id !== $page.props.auth.user?.warehouse_id || props.transfer.status !== 'delivered') ? 'bg-gray-100 cursor-not-allowed' : ''
+                                                    (!isTransferReceiver || props.transfer.status !== 'delivered') ? 'bg-gray-100 cursor-not-allowed' : ''
                                                 ]"
                                             />
                                             <span v-if="isReceived[allocIndex]" class="text-xs text-gray-500">Updating...</span>
@@ -1121,10 +1121,14 @@
                                         " :disabled="isType['is_receive'] ||
                                         props.transfer.status !==
                                         'delivered' ||
-                                        (!$page.props.auth.can.transfer_receive && !$page.props.auth.can.transfer_manage)
+                                        (!$page.props.auth.can.transfer_receive && !$page.props.auth.can.transfer_manage) ||
+                                        !isTransferReceiver ||
+                                        !hasReceivedQuantitySet
                                         " :class="[
                                             (!$page.props.auth.can.transfer_receive && !$page.props.auth.can.transfer_manage)
                                                 ? 'bg-red-200 text-red-800 cursor-not-allowed opacity-75'
+                                                : !isTransferReceiver || !hasReceivedQuantitySet
+                                                ? 'bg-gray-300 cursor-not-allowed opacity-75'
                                                 : props.transfer.status ===
                                                 'delivered'
                                                 ? 'bg-yellow-500 hover:bg-yellow-600'
@@ -1164,9 +1168,11 @@
                                                         ? "Received"
                                                         : isType["is_receive"]
                                                             ? "Please Wait..."
-                                                            : props.transfer
-                                                                .status ===
-                                                                "delivered" &&
+                                                            : props.transfer.status === "delivered" && !isTransferReceiver
+                                                                ? "Not your warehouse/facility"
+                                                                : props.transfer.status === "delivered" && !hasReceivedQuantitySet
+                                                                ? "Enter received quantity first"
+                                                                : props.transfer.status === "delivered" &&
                                                                 (!$page.props.auth.can.transfer_receive && !$page.props.auth.can.transfer_manage)
                                                                 ? "Waiting to be received"
                                                                 : "Receive"
@@ -2078,6 +2084,23 @@ const canDeliver = computed(() => {
     return Boolean(
         page.props.auth?.can?.transfer_delivery || page.props.auth?.can?.transfer_manage
     );
+});
+
+// Receive button is only clickable if at least one allocation has received_quantity > 0
+const hasReceivedQuantitySet = computed(() => {
+    const items = props.transfer?.items || [];
+    for (const item of items) {
+        const allocations = item.inventory_allocations || [];
+        for (const alloc of allocations) {
+            const qty = Number(alloc.received_quantity);
+            if (qty > 0) return true;
+        }
+    }
+    return false;
+});
+
+const canClickReceive = computed(() => {
+    return isTransferReceiver.value && hasReceivedQuantitySet.value;
 });
 
 const form = ref([]);

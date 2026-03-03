@@ -14,8 +14,8 @@
         <div class="py-5">
             <!-- Filters: five in one row, then Generate Report button with period input to its right -->
             <div class="bg-emerald-50/90 border border-emerald-200 rounded-lg shadow-sm p-6 mb-6">
-                <!-- Row 1: five filters with labels above -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-5">
+                <!-- Row 1: six filters – Region, District, Warehouse/Facility, Report Type, Report Period, Period date -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 lg:gap-5">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Select Region</label>
                         <select
@@ -78,26 +78,30 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Select Report Period</label>
-                        <div class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm overflow-hidden">
-                            <input
-                                v-model="filters.monthYear"
-                                type="month"
-                                class="block w-full min-h-[38px] py-2 px-3 focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm border-0 focus:outline-none"
-                            />
-                        </div>
-                    </div>
-                    <div v-if="filters.report_type === 'report_submission_rate'" class="lg:col-span-1">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Report Period (expected)</label>
                         <select
                             v-model="filters.report_period"
                             class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2"
                         >
-                            <option v-for="opt in (reportPeriodOptions.length ? reportPeriodOptions : [{ value: 'monthly', label: 'Monthly' }, { value: 'bi-monthly', label: 'Bi-monthly' }, { value: 'quarterly', label: 'Quarterly' }, { value: 'six_months', label: 'Six months' }, { value: 'yearly', label: 'Yearly' }])" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                            <option
+                                v-for="opt in reportPeriodOptionsList"
+                                :key="opt.value"
+                                :value="opt.value"
+                            >
+                                {{ opt.label }}
+                            </option>
                         </select>
                     </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Period date</label>
+                        <input
+                            v-model="filters.monthYear"
+                            type="month"
+                            class="mt-1 block w-full rounded-md border border-gray-300 bg-white py-2 px-3 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm"
+                        />
+                    </div>
                 </div>
-                <!-- Row 2: Generate Report button below first three filters (aligned with Report Period to its right in row 1) -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-5 mt-4 items-end">
+                <!-- Row 2: Generate Report button -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 lg:gap-5 mt-4 items-end">
                     <div class="lg:col-span-3 flex items-end">
                         <button
                             type="button"
@@ -145,7 +149,7 @@
                         For Facility LMIS report: select Report Period (year and month) and at least one Facility (or Region/District), then Generate Report. Data comes from facility monthly reports for the selected period.
                     </p>
                     <p v-else-if="filters.report_type === 'report_submission_rate'" class="mt-3 text-sm text-gray-500">
-                        Select Year, Report Period (expected frequency), and at least one Region, District or Facility. Data is based on facility monthly report submission dates.
+                        Select Report Period (monthly, bi-monthly, quarterly, six months, or yearly), Year and Month, and at least one Region, District or Facility. Data is based on facility monthly report submission dates.
                     </p>
                 </div>
 
@@ -1140,6 +1144,14 @@ const props = defineProps({
 const now = new Date();
 const defaultMonthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
+const DEFAULT_REPORT_PERIOD_OPTIONS = [
+    { value: 'monthly', label: 'Monthly' },
+    { value: 'bi-monthly', label: 'Bi-monthly' },
+    { value: 'quarterly', label: 'Quarterly' },
+    { value: 'six_months', label: 'Six months' },
+    { value: 'yearly', label: 'Yearly' },
+];
+
 const filters = ref({
     region_id: props.filters?.region_id ?? null,
     district_id: props.filters?.district_id ?? null,
@@ -1148,6 +1160,11 @@ const filters = ref({
     report_period: props.filters?.report_period ?? 'monthly',
     monthYear: props.filters?.monthYear ?? defaultMonthYear,
 });
+
+const reportPeriodOptionsList = computed(() =>
+    (props.reportPeriodOptions?.length ? props.reportPeriodOptions : DEFAULT_REPORT_PERIOD_OPTIONS)
+);
+
 const reportData = ref([]);
 const productReportRows = ref([]);
 const categoryColumns = ref([]);
@@ -2390,9 +2407,7 @@ async function generateReport() {
             if (type === 'warehouse') params.warehouse_id = id;
             if (type === 'facility') params.facility_id = id;
         }
-        if (filters.value.report_type === 'report_submission_rate') {
-            params.report_period = filters.value.report_period || 'monthly';
-        }
+        params.report_period = filters.value.report_period || 'monthly';
         const { data } = await axios.get(route('reports.inventoryReportsUnified.data'), { params });
         reportMessage.value = data.message || '';
         if (data.success) {
