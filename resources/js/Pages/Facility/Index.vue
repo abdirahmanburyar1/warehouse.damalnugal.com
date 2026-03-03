@@ -58,7 +58,7 @@
 
             <!-- Enhanced Filters Section -->
             <div class="bg-gray-50 px-8 py-6 border-b border-gray-200">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
                     <!-- Search Bar -->
                     <div class="lg:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-3">Search Facilities</label>
@@ -77,13 +77,27 @@
                         </div>
                     </div>
                     
-                    <!-- District Filter -->
+                    <!-- Region Filter (first: district depends on region) -->
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-3">Filter by Region</label>
+                        <Multiselect
+                            v-model="region"
+                            :options="props.regions || []"
+                            placeholder="All Regions"
+                            :searchable="true"
+                            :allow-empty="true"
+                            :show-labels="false"
+                            class="multiselect-professional"
+                        />
+                    </div>
+                    
+                    <!-- District Filter (dependent on region) -->
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-3">Filter by District</label>
                         <Multiselect
                             v-model="district"
-                            :options="props.districts"
-                            placeholder="All Districts"
+                            :options="districtOptions"
+                            placeholder="Select region first"
                             :searchable="true"
                             :allow-empty="true"
                             :show-labels="false"
@@ -623,6 +637,10 @@ const props = defineProps({
         type: Array,
         required: true
     },
+    regions: {
+        type: Array,
+        default: () => []
+    },
     facilityTypes: {
         type: Array,
         required: true
@@ -648,9 +666,32 @@ const totalCount = computed(() => {
 
 const per_page = ref(props.filters.per_page || 25)
 const search = ref(props.filters.search)
+const region = ref(props.filters.region)
 const district = ref(props.filters.district)
 const facilityType = ref(props.filters.facility_type)
 const loadingProducts = ref(new Set());
+
+// District options: dependent on region (load from API when region is set)
+const districtOptions = ref([]);
+async function loadDistrictsForRegion() {
+    if (!region.value) {
+        districtOptions.value = [];
+        return;
+    }
+    try {
+        const { data } = await axios.post(route('districts.get-districts'), { region: region.value });
+        districtOptions.value = Array.isArray(data) ? data : [];
+    } catch (_) {
+        districtOptions.value = [];
+    }
+}
+watch(region, (newVal) => {
+    district.value = null;
+    loadDistrictsForRegion();
+}, { immediate: false });
+onMounted(() => {
+    if (region.value) loadDistrictsForRegion();
+});
 
 const openFacilityTypeModal = () => {
     showFacilityTypeModal.value = true
@@ -918,6 +959,7 @@ watch([
     () => props.filters.page,
     () => search.value,
     () => district.value,
+    () => region.value,
     () => facilityType.value
 ], () => {
     reloadFacility();
@@ -929,12 +971,13 @@ const reloadFacility = () => {
     if (props.filters.page) query.page = props.filters.page
     if (search.value) query.search = search.value
     if (district.value) query.district = district.value
+    if (region.value) query.region = region.value
     if (facilityType.value) query.facility_type = facilityType.value
     
     router.get(route('facilities.index'), query, {
         preserveScroll: true,
         preserveState: true,
-        only: ['facilities', 'facilityCounts', 'users', 'districts', 'facilityTypes']
+        only: ['facilities', 'facilityCounts', 'users', 'districts', 'regions', 'facilityTypes']
     })
 }
 

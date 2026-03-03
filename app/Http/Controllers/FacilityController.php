@@ -117,6 +117,9 @@ class FacilityController extends Controller
             ->when($request->filled('district'), function ($query) use ($request) {
                 $query->where('district', 'like', "%{$request->district}%");
             })
+            ->when($request->filled('region'), function ($query) use ($request) {
+                $query->where('region', $request->region);
+            })
             ->when($request->filled('facility_type'), function ($query) use ($request) {
                 $query->where('facility_type', $request->facility_type);
             })
@@ -133,7 +136,7 @@ class FacilityController extends Controller
                 'inactive' => $inactiveFacilities,
             ],
             'users' => User::get(),
-            'filters' => $request->only('page', 'per_page', 'search', 'district', 'facility_type'),
+            'filters' => $request->only('page', 'per_page', 'search', 'district', 'region', 'facility_type'),
             'districts' => District::pluck('name')->toArray(),
             'regions' => Region::pluck('name')->toArray(),
             'facilityTypes' => FacilityType::where('is_active', true)->pluck('name')->toArray(),

@@ -26,6 +26,7 @@ use App\Models\FacilityInventoryItem;
 use App\Models\FacilityMonthlyReport;
 use App\Models\FacilityMonthlyReportItem;
 use App\Models\FacilityInventoryMovement;
+use App\Models\FacilityType;
 use App\Models\Inventory;
 use App\Models\InventoryItem;
 use App\Models\InventoryReport;
@@ -64,7 +65,75 @@ class ReportController extends Controller
 
     public function index(Request $request){
         return redirect()->route('reports.inventoryReportsUnified');
-    } 
+    }
+
+    /**
+     * Facilities list report: paginated facilities with filters (region, district, type, status).
+     * Region and district come from the facilities table; district filter is dependent on region.
+     */
+    public function facilitiesList(Request $request)
+    {
+        $perPage = (int) ($request->per_page ?? 25);
+        $query = Facility::query()
+            ->when($request->filled('search'), function ($q) use ($request) {
+                $q->where(function ($q2) use ($request) {
+                    $q2->where('name', 'like', '%'.$request->search.'%')
+                        ->orWhere('facility_type', 'like', '%'.$request->search.'%')
+                        ->orWhere('district', 'like', '%'.$request->search.'%')
+                        ->orWhere('region', 'like', '%'.$request->search.'%');
+                });
+            })
+            ->when($request->filled('region'), function ($q) use ($request) {
+                $regions = is_array($request->region) ? $request->region : [$request->region];
+                $q->whereIn('region', $regions);
+            })
+            ->when($request->filled('district'), function ($q) use ($request) {
+                $districts = is_array($request->district) ? $request->district : [$request->district];
+                $q->whereIn('district', $districts);
+            })
+            ->when($request->filled('facility_type'), function ($q) use ($request) {
+                $types = is_array($request->facility_type) ? $request->facility_type : [$request->facility_type];
+                $q->whereIn('facility_type', $types);
+            })
+            ->when($request->filled('status'), function ($q) use ($request) {
+                $q->where('is_active', $request->status === 'Active');
+            })
+            ->when($request->filled('date_from'), function ($q) use ($request) {
+                $q->whereDate('created_at', '>=', $request->date_from);
+            })
+            ->when($request->filled('date_to'), function ($q) use ($request) {
+                $q->whereDate('created_at', '<=', $request->date_to);
+            });
+
+        $facilities = $query->orderBy('name')->paginate($perPage, ['*'], 'page', $request->page ?? 1);
+        $facilities->setPath(url()->current());
+
+        $summary = [
+            'total_facilities' => Facility::count(),
+            'by_status' => [
+                'Active' => Facility::where('is_active', true)->count(),
+                'Inactive' => Facility::where('is_active', false)->count(),
+            ],
+            'by_district' => Facility::select('district')->distinct()->pluck('district')->filter()->keyBy(fn ($d) => $d)->map(fn () => 1)->toArray(),
+            'by_type' => Facility::select('facility_type')->distinct()->pluck('facility_type')->filter()->keyBy(fn ($t) => $t)->map(fn () => 1)->toArray(),
+        ];
+
+        $regions = Facility::whereNotNull('region')->where('region', '!=', '')->distinct()->orderBy('region')->pluck('region')->toArray();
+        $districts = District::orderBy('name')->pluck('name')->toArray();
+        $facilityTypes = FacilityType::where('is_active', true)->pluck('name')->toArray();
+
+        return Inertia::render('Report/Facilities/FacilitiesList', [
+            'facilities' => $facilities,
+            'filters' => $request->only(['search', 'region', 'district', 'facility_type', 'status', 'date_from', 'date_to', 'per_page', 'page']),
+            'filterOptions' => [
+                'regions' => $regions,
+                'districts' => $districts,
+                'facility_types' => $facilityTypes,
+                'statuses' => ['Active', 'Inactive'],
+            ],
+            'summary' => $summary,
+        ]);
+    }
 
     public function updatePhysicalCountReport(Request $request){
         try {
@@ -192,7 +261,11 @@ class ReportController extends Controller
             && $request->filled('year')
             && $request->filled('month');
 
-        if (!$hasLocationFilter && !$warehouseInventoryNeedsOnlyPeriod) {
+        // Liquidation & Disposal: allow with only year+month (no location required); show all warehouses for that period
+        $liquidationDisposalNeedsOnlyPeriod = $reportType === 'liquidation_disposal'
+            && ($request->filled('year') || $request->filled('month'));
+
+        if (!$hasLocationFilter && !$warehouseInventoryNeedsOnlyPeriod && !$liquidationDisposalNeedsOnlyPeriod) {
             $data = $reportType === 'warehouse_inventory' ? [$this->getWarehouseInventoryEmptyRow()] : [];
             return response()->json([
                 'success' => true,
@@ -741,32 +814,24 @@ class ReportController extends Controller
     {
         $warehouseIds = $this->resolveWarehouseIdsFromFilters($request);
         if (empty($warehouseIds)) {
-            return ['rows' => []];
+            $warehouseIds = Warehouse::orderBy('name')->pluck('id')->toArray();
         }
 
         $warehouses = Warehouse::whereIn('id', $warehouseIds)->orderBy('name')->get(['id', 'name']);
         $warehouseNames = $warehouses->pluck('name')->toArray();
 
-        $monthYear = null;
-        if ($request->filled('year') && $request->filled('month')) {
-            $monthYear = sprintf('%04d-%02d', (int) $request->year, (int) $request->month);
-        } elseif ($request->filled('year')) {
-            $monthYear = (string) $request->year;
-        }
+        // Smart default: use current year and current month when not provided
+        $year = $request->filled('year') ? (int) $request->year : (int) date('Y');
+        $month = $request->filled('month') ? (int) $request->month : (int) date('n');
+        $monthYear = sprintf('%04d-%02d', $year, $month);
 
         $rows = [];
         foreach ($warehouses as $warehouse) {
             $name = $warehouse->name;
 
             // Liquidation: parent has warehouse (set e.g. from physical count); some flows only set it on items (liquidate_items has no warehouse column)
-            $liquidateQuery = Liquidate::where('warehouse', $name)->where('status', 'approved');
-            if ($monthYear !== null) {
-                if (strlen($monthYear) === 7) {
-                    $liquidateQuery->whereRaw('DATE_FORMAT(liquidated_at, "%Y-%m") = ?', [$monthYear]);
-                } else {
-                    $liquidateQuery->whereYear('liquidated_at', $monthYear);
-                }
-            }
+            $liquidateQuery = Liquidate::where('warehouse', $name)->where('status', 'approved')
+                ->whereRaw('DATE_FORMAT(liquidated_at, "%Y-%m") = ?', [$monthYear]);
             $liquidateIds = $liquidateQuery->pluck('id');
 
             $liqItemNo = 0;
@@ -797,14 +862,8 @@ class ReportController extends Controller
             // Disposal: warehouse is stored on disposal_items, not on disposals (parent never set in SupplyController/ExpiredController)
             $disposalItemQuery = \App\Models\DisposalItem::where('warehouse', $name)
                 ->whereHas('disposal', function ($q) use ($monthYear) {
-                    $q->where('status', 'approved');
-                    if ($monthYear !== null) {
-                        if (strlen($monthYear) === 7) {
-                            $q->whereRaw('DATE_FORMAT(disposed_at, "%Y-%m") = ?', [$monthYear]);
-                        } else {
-                            $q->whereYear('disposed_at', $monthYear);
-                        }
-                    }
+                    $q->where('status', 'approved')
+                        ->whereRaw('DATE_FORMAT(disposed_at, "%Y-%m") = ?', [$monthYear]);
                 });
 
             $dispItemNo = 0;
@@ -1609,8 +1668,9 @@ class ReportController extends Controller
     }
 
     /**
-     * Asset Report: one row per facility with Total Assets and counts by asset category.
-     * Optionally includes functioning/not functioning per category.
+     * Asset Report: one row per facility with Total Assets and per-category Total / Functioning / Not Functioning.
+     * Filtered by facility (region -> district -> facilities). Uses assets.facility_id and asset_items.status.
+     * Functioning: Good, in_use, pending_approval. Not functioning: Non-functional, maintenance, retired, disposed.
      */
     private function getAssetReportData(Request $request, array $facilityIds): array
     {
@@ -1620,22 +1680,26 @@ class ReportController extends Controller
         $summaryTotal = 0;
         $summaryByCategory = [];
 
-        foreach ($facilities as $facility) {
-            $itemCounts = AssetItem::query()
-                ->whereHas('asset', function ($q) use ($facility) {
-                    $q->where('facility_id', $facility->id);
-                })
-                ->join('asset_categories', 'asset_items.asset_category_id', '=', 'asset_categories.id')
-                ->selectRaw('asset_categories.name as category_name, count(asset_items.id) as cnt')
-                ->groupBy('asset_categories.name')
-                ->pluck('cnt', 'category_name')
-                ->toArray();
+        $functioningStatuses = ['Good', 'in_use', 'pending_approval'];
+        $notFunctioningStatuses = ['Non-functional', 'maintenance', 'retired', 'disposed'];
 
-            $totalAssets = (int) AssetItem::query()
+        foreach ($facilities as $facility) {
+            $baseQuery = AssetItem::query()
                 ->whereHas('asset', function ($q) use ($facility) {
                     $q->where('facility_id', $facility->id);
                 })
-                ->count();
+                ->join('asset_categories', 'asset_items.asset_category_id', '=', 'asset_categories.id');
+
+            $totalAssets = (int) (clone $baseQuery)->count();
+
+            $byCategory = (clone $baseQuery)
+                ->selectRaw("asset_categories.name as category_name,
+                    count(asset_items.id) as total,
+                    sum(case when asset_items.status in ('" . implode("','", array_map('addslashes', $functioningStatuses)) . "') then 1 else 0 end) as functioning,
+                    sum(case when asset_items.status in ('" . implode("','", array_map('addslashes', $notFunctioningStatuses)) . "') then 1 else 0 end) as not_functioning")
+                ->groupBy('asset_categories.name')
+                ->get()
+                ->keyBy('category_name');
 
             $row = [
                 'facility_id' => $facility->id,
@@ -1643,8 +1707,17 @@ class ReportController extends Controller
                 'total_assets' => $totalAssets,
             ];
             foreach ($categoryNames as $catName) {
-                $row['category_' . preg_replace('/\s+/', '_', strtolower($catName))] = $itemCounts[$catName] ?? 0;
-                $summaryByCategory[$catName] = ($summaryByCategory[$catName] ?? 0) + ($itemCounts[$catName] ?? 0);
+                $key = 'category_' . preg_replace('/\s+/', '_', strtolower($catName));
+                $data = $byCategory->get($catName);
+                $row[$key . '_total'] = $data ? (int) $data->total : 0;
+                $row[$key . '_functioning'] = $data ? (int) $data->functioning : 0;
+                $row[$key . '_not_functioning'] = $data ? (int) $data->not_functioning : 0;
+                if (! isset($summaryByCategory[$catName])) {
+                    $summaryByCategory[$catName] = ['total' => 0, 'functioning' => 0, 'not_functioning' => 0];
+                }
+                $summaryByCategory[$catName]['total'] += $row[$key . '_total'];
+                $summaryByCategory[$catName]['functioning'] += $row[$key . '_functioning'];
+                $summaryByCategory[$catName]['not_functioning'] += $row[$key . '_not_functioning'];
             }
             $rows[] = $row;
             $summaryTotal += $totalAssets;

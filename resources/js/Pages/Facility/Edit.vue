@@ -362,7 +362,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, watch } from "vue";
 import { router, Link } from "@inertiajs/vue3";
 import axios from "axios";
 import Swal from "sweetalert2";
@@ -438,6 +438,9 @@ onMounted(() => {
     // Ensure boolean values are properly converted
     form.value.is_active = Boolean(props.facility.is_active);
     form.value.has_cold_storage = Boolean(props.facility.has_cold_storage);
+
+    // Load districts for the facility's region so the district dropdown shows the current value
+    if (form.value.region) loadDistrict();
 })
 
 async function handleRegionSelect(option) {
@@ -560,6 +563,10 @@ const createDistrict = async () => {
 };
 
 async function loadDistrict() {
+    if (!form.value.region) {
+        districts.value = [];
+        return;
+    }
     await axios
         .post(route("districts.get-districts"), { region: form.value.region })
         .then((response) => {
@@ -569,6 +576,17 @@ async function loadDistrict() {
             console.log(error);
         });
 }
+
+// When region is cleared, clear district and district options (district depends on region)
+watch(
+    () => form.value.region,
+    (region) => {
+        if (!region) {
+            form.value.district = "";
+            districts.value = [];
+        }
+    }
+);
 
 const submitForm = async () => {
     console.log(form.value);

@@ -12,7 +12,7 @@
         </template>
 
         <div class="py-5">
-            <!-- Filters: one column layout; Report Period section has Report Period (top), then Year and Period (bottom) -->
+            <!-- Filters: one column layout; Report Period section has Report Period (top), then Year and Month on one row -->
             <div class="bg-emerald-50/90 border border-emerald-200 rounded-lg shadow-sm p-6 mb-6">
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-5">
                     <div>
@@ -43,9 +43,9 @@
                         <select
                             v-model="filters.warehouse_or_facility"
                             class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                            :disabled="isProductReport && !filters.district_id"
+                            :disabled="!filters.region_id || !filters.district_id"
                         >
-                            <option :value="''">{{ isProductReport && !filters.district_id ? 'Select District first' : (isProductReport ? 'Facility' : 'Warehouse/Facility') }}</option>
+                            <option :value="''">{{ !filters.region_id ? 'Select Region first' : !filters.district_id ? 'Select District first' : (isProductReport ? 'Facility' : 'Warehouse/Facility') }}</option>
                             <template v-if="isProductReport">
                                 <option v-for="f in filteredFacilities" :key="'f-' + f.id" :value="'facility:' + f.id">
                                     {{ f.name }}
@@ -75,7 +75,7 @@
                             <option v-for="rt in reportTypes" :key="rt.value" :value="rt.value">{{ rt.label }}</option>
                         </select>
                     </div>
-                    <!-- Report Period column: Report Period (top), Year + Period (bottom) -->
+                    <!-- Report Period column: Report Period (top), Year + Month (one row) -->
                     <div class="flex flex-col gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Report Period</label>
@@ -92,29 +92,31 @@
                                 </option>
                             </select>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                            <select
-                                v-model="filters.year"
-                                class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2"
-                            >
-                                <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
-                            </select>
-                        </div>
-                        <div v-if="periodOptions.length > 1">
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Period</label>
-                            <select
-                                v-model="filters.periodValue"
-                                class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2"
-                            >
-                                <option
-                                    v-for="opt in periodOptions"
-                                    :key="opt.value"
-                                    :value="opt.value"
+                        <div class="flex flex-row gap-3 items-end flex-wrap">
+                            <div class="flex-1 min-w-[100px]">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Year</label>
+                                <select
+                                    v-model="filters.year"
+                                    class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2"
                                 >
-                                    {{ opt.label }}
-                                </option>
-                            </select>
+                                    <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
+                                </select>
+                            </div>
+                            <div v-if="periodOptions.length > 1" class="flex-1 min-w-[100px]">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Month</label>
+                                <select
+                                    v-model="filters.periodValue"
+                                    class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2"
+                                >
+                                    <option
+                                        v-for="opt in periodOptions"
+                                        :key="opt.value"
+                                        :value="opt.value"
+                                    >
+                                        {{ opt.label }}
+                                    </option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -868,16 +870,27 @@
                         <table class="min-w-full border-collapse border border-gray-300">
                             <thead class="bg-gray-100">
                                 <tr>
-                                    <th class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">Facility Name</th>
-                                    <th class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Total Assets</th>
-                                    <th v-for="cat in assetReportCategoryColumns" :key="cat" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">{{ cat }}</th>
+                                    <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300 align-middle">Facility Name</th>
+                                    <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Total Assets</th>
+                                    <th v-for="cat in assetReportCategoryColumns" :key="cat" colspan="3" class="px-2 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">{{ cat }}</th>
+                                </tr>
+                                <tr class="bg-gray-50">
+                                    <template v-for="cat in assetReportCategoryColumns" :key="'sub-' + cat">
+                                        <th class="px-2 py-1 text-center text-xs font-medium text-gray-500 border border-gray-300 w-20">Total</th>
+                                        <th class="px-2 py-1 text-center text-xs font-medium text-gray-500 border border-gray-300 w-20">Functioning</th>
+                                        <th class="px-2 py-1 text-center text-xs font-medium text-gray-500 border border-gray-300 w-20">Not Functioning</th>
+                                    </template>
                                 </tr>
                             </thead>
                             <tbody class="bg-white">
                                 <tr v-for="(row, index) in filteredRows" :key="index" class="hover:bg-gray-50">
                                     <td class="px-3 py-2 text-sm text-gray-900 border border-gray-300">{{ row.facility_name }}</td>
                                     <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.total_assets) }}</td>
-                                    <td v-for="cat in assetReportCategoryColumns" :key="cat" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row[assetReportCategoryKey(cat)]) }}</td>
+                                    <template v-for="cat in assetReportCategoryColumns" :key="cat">
+                                        <td class="px-2 py-1 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row[assetReportCategoryKey(cat) + '_total']) }}</td>
+                                        <td class="px-2 py-1 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row[assetReportCategoryKey(cat) + '_functioning']) }}</td>
+                                        <td class="px-2 py-1 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row[assetReportCategoryKey(cat) + '_not_functioning']) }}</td>
+                                    </template>
                                 </tr>
                             </tbody>
                         </table>
@@ -2270,7 +2283,10 @@ const assetReportChartData = computed(() => {
     const byCat = assetReportSummary.value.by_category || {};
     const cats = assetReportCategoryColumns.value.length ? assetReportCategoryColumns.value : Object.keys(byCat);
     if (!cats.length) return { labels: [], datasets: [] };
-    const data = cats.map(cat => Number(byCat[cat]) || 0);
+    const data = cats.map(cat => {
+        const v = byCat[cat];
+        return typeof v === 'object' && v && 'total' in v ? Number(v.total) || 0 : Number(v) || 0;
+    });
     const colors = cats.map((_, i) => ASSET_REPORT_CHART_COLORS[i % ASSET_REPORT_CHART_COLORS.length]);
     return {
         labels: cats,
@@ -2325,15 +2341,14 @@ const assetReportChartOptions = computed(() => {
     };
 });
 
+// Region → District → Warehouse/Facility: clear dependents when parent changes
 watch(() => filters.value.region_id, () => {
     filters.value.district_id = null;
-    if (filters.value.warehouse_or_facility?.startsWith('facility:')) {
-        filters.value.warehouse_or_facility = '';
-    }
+    filters.value.warehouse_or_facility = '';
 });
 
 watch(() => filters.value.district_id, () => {
-    if (!filters.value.district_id && filters.value.warehouse_or_facility?.startsWith('facility:')) {
+    if (!filters.value.district_id) {
         filters.value.warehouse_or_facility = '';
     }
 });
