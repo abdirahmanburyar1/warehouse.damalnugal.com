@@ -33,22 +33,19 @@ class GenerateQuarterlyOrders extends Command
     public function handle()
     {
         $today = now();
-        $targetQuarter = $this->argument('quarter') ?? $this->getCurrentQuarter();
+        $setting = (!$this->argument('quarter') || !$this->argument('year')) ? EmailNotificationSetting::ordersQuarterlySchedule() : null;
+        $config = $setting ? ($setting->config ?? []) : [];
+        $startMonth = (int) ($config['quarter_start_month'] ?? 12);
+        $targetQuarter = $this->argument('quarter') ?? $this->getCurrentQuarter($startMonth);
         $year = $this->argument('year') ?? $today->year;
 
         // When run from scheduler (no args, not --test): only run if schedule enabled and today is quarter start at configured time
         if (!$this->argument('quarter') && !$this->argument('year') && !$this->option('test')) {
-            $setting = EmailNotificationSetting::ordersQuarterlySchedule();
             if (!$setting || !$setting->enabled) {
                 $this->info('Quarterly orders schedule is disabled or not configured.');
                 return 0;
             }
-            $quarterStartDates = [
-                1 => ['month' => 12, 'day' => 1],
-                2 => ['month' => 3, 'day' => 1],
-                3 => ['month' => 6, 'day' => 1],
-                4 => ['month' => 9, 'day' => 1],
-            ];
+            $quarterStartDates = $this->buildQuarterStartDates($startMonth);
             $isQuarterStartDate = false;
             foreach ($quarterStartDates as $quarter => $dates) {
                 if ($today->month == $dates['month'] && $today->day == $dates['day']) {
@@ -60,7 +57,6 @@ class GenerateQuarterlyOrders extends Command
             if (!$isQuarterStartDate) {
                 return 0;
             }
-            $config = $setting->config ?? [];
             $time = $this->normalizeTime($config['time'] ?? '01:00');
             if ($today->format('H:i') !== $time) {
                 return 0;
@@ -70,8 +66,8 @@ class GenerateQuarterlyOrders extends Command
         $this->info('Starting quarterly order generation with advanced AMC screening logic...');
 
         try {
-            // Handle year rollover for Q1 (Dec-Feb) when we're in Dec
-            if ($targetQuarter == 1 && $today->month == 12 && !$this->argument('quarter')) {
+            // Handle year rollover for fiscal years starting Oct–Dec (e.g. Dec-start: when in Dec we start next year's Q1)
+            if ($targetQuarter == 1 && $today->month == $startMonth && $startMonth >= 10 && !$this->argument('quarter')) {
                 $year = $today->year + 1;
             }
 
@@ -696,34 +692,32 @@ class GenerateQuarterlyOrders extends Command
     }
 
     /**
-     * Determine the current quarter based on the current date
-     * 
+     * Build quarter start dates from start month. E.g. startMonth=1 → Jan,Apr,Jul,Oct; startMonth=12 → Dec,Mar,Jun,Sep.
+     *
+     * @return array<int, array{month: int, day: int}>
+     */
+    private function buildQuarterStartDates(int $startMonth): array
+    {
+        $result = [];
+        foreach ([1, 2, 3, 4] as $q) {
+            $m = $startMonth + ($q - 1) * 3;
+            $result[$q] = ['month' => $m > 12 ? $m - 12 : $m, 'day' => 1];
+        }
+        return $result;
+    }
+
+    /**
+     * Get current quarter (1-4) based on start month.
+     *
+     * @param int|null $startMonth 1-12, e.g. 1=Jan or 12=Dec; null falls back to Dec for backward compat
      * @return int
      */
-    private function getCurrentQuarter()
+    private function getCurrentQuarter(?int $startMonth = null)
     {
+        $startMonth = $startMonth ?? 12;
         $now = Carbon::now();
-        $month = $now->month;
-        
-        // Q1: Dec (12) - Feb (2)
-        if ($month == 12 || $month <= 2) {
-            return 1;
-        }
-        // Q2: Mar (3) - May (5)
-        elseif ($month >= 3 && $month <= 5) {
-            return 2;
-        }
-        // Q3: Jun (6) - Aug (8)
-        elseif ($month >= 6 && $month <= 8) {
-            return 3;
-        }
-        // Q4: Sep (9) - Nov (11)
-        elseif ($month >= 9 && $month <= 11) {
-            return 4;
-        }
-        
-        // Fallback (should not reach here)
-        return 1;
+        $offset = ($now->month - $startMonth + 12) % 12;
+        return (int) floor($offset / 3) + 1;
     }
 
     /**

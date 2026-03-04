@@ -22,6 +22,14 @@ return new class extends Migration
             'functioning',
             'not_functioning'
         ) DEFAULT 'pending_approval'");
+
+        // Migrate existing active/inactive to functioning/not_functioning
+        try {
+            DB::table('asset_items')->where('status', 'active')->update(['status' => 'functioning']);
+            DB::table('asset_items')->where('status', 'inactive')->update(['status' => 'not_functioning']);
+        } catch (\Throwable $e) {
+            // Ignore if active/inactive not in enum
+        }
     }
 
     /**

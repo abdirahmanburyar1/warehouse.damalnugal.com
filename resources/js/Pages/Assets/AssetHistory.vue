@@ -285,6 +285,8 @@ const props = defineProps({
 const formatStatus = (status) => {
     if (!status) return '-';
     const statusMap = {
+        'functioning': 'Functioning',
+        'not_functioning': 'Not functioning',
         'active': 'Active',
         'in_use': 'In Use',
         'maintenance': 'Maintenance',
@@ -302,6 +304,8 @@ const formatDate = (date) => {
 
 const getStatusClass = (status) => {
     const statusClasses = {
+        'functioning': 'bg-green-100 text-green-800',
+        'not_functioning': 'bg-orange-100 text-orange-800',
         'active': 'bg-green-100 text-green-800',
         'in_use': 'bg-blue-100 text-blue-800',
         'maintenance': 'bg-yellow-100 text-yellow-800',

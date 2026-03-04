@@ -197,7 +197,6 @@ class DashboardController extends Controller
         // Format status data with all possible statuses
         $formattedStatusData = [
             'In Use' => $assetStatusData['in_use'] ?? 0,
-            'Active' => $assetStatusData['active'] ?? 0,
             'Functioning' => $assetStatusData['functioning'] ?? 0,
             'Not functioning' => $assetStatusData['not_functioning'] ?? 0,
             'Needs Maintenance' => $assetStatusData['maintenance'] ?? 0,
@@ -206,10 +205,14 @@ class DashboardController extends Controller
             'Disposed' => $assetStatusData['disposed'] ?? 0,
         ];
 
+        $functioningCount = ($assetStatusData['functioning'] ?? 0) + ($assetStatusData['in_use'] ?? 0);
+        $notFunctioningCount = $assetStatusData['not_functioning'] ?? 0;
+
         $assetStats = [
             'total_assets' => $totalAssets,
-            'active_assets' => $inUse,
-            'inactive_assets' => $assetItemsQuery->where('status', 'inactive')->count(),
+            'functioning_assets' => $functioningCount,
+            'not_functioning_assets' => $notFunctioningCount,
+            'inactive_assets' => $notFunctioningCount, // backward compat
             'pending_approval' => $pendingApproval,
             'disposed_assets' => $assetItemsQuery->where('status', 'disposed')->count(),
             'asset_categories' => $assetCategories,

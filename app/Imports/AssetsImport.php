@@ -183,15 +183,17 @@ class AssetsImport implements ToCollection, WithHeadingRow, WithChunkReading, Sk
         }
 
         $statusMap = [
-            'active' => 'in_use',
+            'active' => 'functioning',
+            'functioning' => 'functioning',
             'in use' => 'in_use',
-            'inactive' => 'pending_approval',
+            'in_use' => 'in_use',
+            'inactive' => 'not_functioning',
+            'not functioning' => 'not_functioning',
+            'not_functioning' => 'not_functioning',
             'maintenance' => 'maintenance',
             'retired' => 'retired',
             'disposed' => 'disposed',
-            'functioning' => 'functioning',
-            'not functioning' => 'not_functioning',
-            'not_functioning' => 'not_functioning',
+            'pending_approval' => 'pending_approval',
         ];
 
         return $statusMap[strtolower(trim($status))] ?? 'in_use';

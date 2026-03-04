@@ -66,13 +66,13 @@
                         </div>
                     </div>
 
-                    <!-- Active Assets Card -->
+                    <!-- Functioning Assets Card -->
                     <div class="bg-white rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 border-l-4 border-green-500">
                         <div class="p-6">
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <p class="text-sm font-medium text-gray-600 uppercase tracking-wide">Active Assets</p>
-                                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ assetStatsData.active_assets || 0 }}</p>
+                                    <p class="text-sm font-medium text-gray-600 uppercase tracking-wide">Functioning Assets</p>
+                                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ (assetStatsData.functioning_assets ?? assetStatsData.active_assets) || 0 }}</p>
                                 </div>
                                 <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                                     <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -160,7 +160,7 @@
                                     <div class="text-right">
                                         <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium" :class="getStatusClass(asset.status)">
                                             <div class="w-2 h-2 rounded-full mr-2" :class="getStatusDotClass(asset.status)"></div>
-                                            {{ asset.status }}
+                                            {{ formatStatus(asset.status) }}
                                         </span>
                                     </div>
                                 </div>
@@ -305,7 +305,6 @@ const assetCategories = computed(() => {
 const assetStatusData = computed(() => {
     return props.assetStats?.asset_status_data || {
         'In Use': 0,
-        'Active': 0,
         'Functioning': 0,
         'Not functioning': 0,
         'Needs Maintenance': 0,
@@ -318,13 +317,36 @@ const assetStatusData = computed(() => {
 
 
 
+// Format status for display
+function formatStatus(status) {
+    if (!status) return '-';
+    const statusMap = {
+        'functioning': 'Functioning',
+        'not_functioning': 'Not functioning',
+        'in_use': 'In Use',
+        'maintenance': 'Maintenance',
+        'retired': 'Retired',
+        'disposed': 'Disposed',
+        'pending_approval': 'Pending Approval',
+        'active': 'Active',
+        'inactive': 'Inactive'
+    };
+    return statusMap[status] || (status && status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())) || '-';
+}
+
 // Get status class for styling
 function getStatusClass(status) {
     const statusClasses = {
+        'functioning': 'bg-green-100 text-green-800',
+        'not_functioning': 'bg-orange-100 text-orange-800',
+        'in_use': 'bg-blue-100 text-blue-800',
+        'maintenance': 'bg-yellow-100 text-yellow-800',
+        'retired': 'bg-gray-100 text-gray-800',
+        'disposed': 'bg-red-100 text-red-800',
+        'pending_approval': 'bg-orange-100 text-orange-800',
         'active': 'bg-green-100 text-green-800',
         'inactive': 'bg-gray-100 text-gray-800',
-        'pending': 'bg-yellow-100 text-yellow-800',
-        'disposed': 'bg-red-100 text-red-800'
+        'pending': 'bg-yellow-100 text-yellow-800'
     };
     return statusClasses[status?.toLowerCase()] || 'bg-gray-100 text-gray-800';
 }
@@ -332,10 +354,16 @@ function getStatusClass(status) {
 // Get status dot class for styling
 function getStatusDotClass(status) {
     const statusDotClasses = {
+        'functioning': 'bg-green-500',
+        'not_functioning': 'bg-orange-500',
+        'in_use': 'bg-blue-500',
+        'maintenance': 'bg-yellow-500',
+        'retired': 'bg-gray-500',
+        'disposed': 'bg-red-500',
+        'pending_approval': 'bg-orange-500',
         'active': 'bg-green-500',
         'inactive': 'bg-gray-500',
-        'pending': 'bg-yellow-500',
-        'disposed': 'bg-red-500'
+        'pending': 'bg-yellow-500'
     };
     return statusDotClasses[status?.toLowerCase()] || 'bg-gray-500';
 }

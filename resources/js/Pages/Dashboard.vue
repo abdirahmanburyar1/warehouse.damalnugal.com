@@ -118,7 +118,6 @@ const props = defineProps({
         required: false,
         default: () => ({
             'In Use': 0,
-            'Active': 0,
             'Functioning': 0,
             'Not functioning': 0,
             'Needs Maintenance': 0,
@@ -1942,7 +1941,6 @@ const expiredChartData = computed(() => {
 const assetStatusChartData = computed(() => {
     const statusData = [
         { key: 'In Use', color: 'rgba(68, 114, 196, 1)' },      // Excel Blue
-        { key: 'Active', color: 'rgba(112, 173, 71, 1)' },      // Excel Green
         { key: 'Functioning', color: 'rgba(34, 197, 94, 1)' },  // Green
         { key: 'Not functioning', color: 'rgba(249, 115, 22, 1)' }, // Orange
         { key: 'Needs Maintenance', color: 'rgba(237, 125, 49, 1)' }, // Excel Orange

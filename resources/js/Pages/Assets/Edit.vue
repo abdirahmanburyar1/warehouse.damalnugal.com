@@ -188,14 +188,13 @@ const loadSubLocations = async (locationId) => {
 
 // Status options (match Create.vue)
 const statuses = ref([
-    { value: 'active', label: 'Active' },
+    { value: 'functioning', label: 'Functioning' },
+    { value: 'not_functioning', label: 'Not functioning' },
     { value: 'in_use', label: 'In Use' },
     { value: 'maintenance', label: 'Maintenance' },
     { value: 'pending_approval', label: 'Pending Approval' },
     { value: 'retired', label: 'Retired' },
     { value: 'disposed', label: 'Disposed' },
-    { value: 'functioning', label: 'Functioning' },
-    { value: 'not_functioning', label: 'Not functioning' },
 ]);
 
 // Normalize status in case asset has a value not allowed for editing
@@ -204,7 +203,7 @@ const allowedStatusValues = computed(() => statuses.value.map(s => s.value));
 // Watch for form initialization to normalize status
 watch(() => form.value.status, (newStatus) => {
     if (newStatus && !allowedStatusValues.value.includes(newStatus)) {
-        form.value.status = 'active';
+        form.value.status = 'functioning';
     }
 });
 

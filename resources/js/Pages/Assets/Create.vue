@@ -326,13 +326,13 @@ watch(
 );
 
 const statuses = ref([
+    { value: "functioning", label: "Functioning" },
+    { value: "not_functioning", label: "Not functioning" },
     { value: "pending_approval", label: "Pending Approval" },
     { value: "in_use", label: "In Use" },
     { value: "maintenance", label: "Maintenance" },
     { value: "retired", label: "Retired" },
     { value: "disposed", label: "Disposed" },
-    { value: "functioning", label: "Functioning" },
-    { value: "not_functioning", label: "Not functioning" },
 ]);
 
 const showLocationModal = ref(false);

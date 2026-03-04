@@ -257,9 +257,15 @@ class Asset extends Model
         return $query->whereNotNull('rejected_at');
     }
 
+    public function getFunctioningItemCount(): int
+    {
+        return $this->assetItems()->where('status', 'functioning')->count();
+    }
+
+    /** @deprecated Use getFunctioningItemCount() */
     public function getActiveItemCount(): int
     {
-        return $this->assetItems()->where('status', 'active')->count();
+        return $this->getFunctioningItemCount();
     }
 
     public function getTotalValue(): float
@@ -273,9 +279,15 @@ class Asset extends Model
         return $itemCount > 0 ? $this->getTotalValue() / $itemCount : 0;
     }
 
+    public function hasFunctioningItems(): bool
+    {
+        return $this->assetItems()->where('status', 'functioning')->exists();
+    }
+
+    /** @deprecated Use hasFunctioningItems() */
     public function hasActiveItems(): bool
     {
-        return $this->assetItems()->where('status', 'active')->exists();
+        return $this->hasFunctioningItems();
     }
 
     public function hasItemsNeedingMaintenance(): bool

@@ -414,7 +414,7 @@ class AssetController extends Controller
                     'asset_item_data.asset_name' => 'required|string|max:255',
                     'asset_item_data.serial_number' => 'required|string|max:255',
                     'asset_item_data.original_value' => 'required|numeric|min:0',
-                    'asset_item_data.status' => 'required|string|in:pending_approval,in_use,maintenance,retired,disposed,functioning,not_functioning',
+                    'asset_item_data.status' => 'required|string|in:functioning,not_functioning,pending_approval,in_use,maintenance,retired,disposed',
                     'asset_item_data.assignee_id' => 'nullable|exists:assignees,id',
                 ]);
 
@@ -1182,7 +1182,7 @@ class AssetController extends Controller
                     'Main Office',
                     'IT Department',
                     'John Doe',
-                    'active',
+                    'functioning',
                     '1200.00',
                     '2024-01-15'
                 ],
@@ -1197,7 +1197,7 @@ class AssetController extends Controller
                     'Branch Office',
                     'Reception',
                     'Jane Smith',
-                    'active',
+                    'functioning',
                     '250.00',
                     '2024-01-20'
                 ]

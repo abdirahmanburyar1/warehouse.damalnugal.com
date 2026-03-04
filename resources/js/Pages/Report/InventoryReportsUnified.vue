@@ -38,7 +38,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">
-                            {{ isWarehouseInventoryReport ? 'Warehouse' : (isProductReport || isFacilityLmisReport ? 'Select Facility' : 'Select Warehouse/Facility Name') }}
+                            {{ isWarehouseInventoryReport ? 'Warehouse' : (isProductReport || isFacilityLmisReport || isSubmissionRateReport ? 'Select Facility' : 'Select Warehouse/Facility Name') }}
                             <span v-if="isFacilityLmisReport" class="text-red-500">*</span>
                         </label>
                         <select
@@ -46,13 +46,13 @@
                             class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
                             :disabled="!isWarehouseInventoryReport && (!filters.region_id || !filters.district_id)"
                         >
-                            <option :value="''">{{ isWarehouseInventoryReport ? 'All Warehouses' : (!filters.region_id ? 'Select Region first' : !filters.district_id ? 'Select District first' : (isProductReport || isFacilityLmisReport ? 'Select facility' : 'Warehouse/Facility')) }}</option>
+                            <option :value="''">{{ isWarehouseInventoryReport ? 'All Warehouses' : (!filters.region_id ? 'Select Region first' : !filters.district_id ? 'Select District first' : (isProductReport || isFacilityLmisReport || isSubmissionRateReport ? 'Select facility' : 'Warehouse/Facility')) }}</option>
                             <template v-if="isWarehouseInventoryReport">
                                 <option v-for="w in warehousesForInventory" :key="'w-' + w.id" :value="'warehouse:' + w.id">
                                     {{ w.name }}
                                 </option>
                             </template>
-                            <template v-else-if="isProductReport || isFacilityLmisReport">
+                            <template v-else-if="isProductReport || isFacilityLmisReport || isSubmissionRateReport">
                                 <option v-for="f in filteredFacilities" :key="'f-' + f.id" :value="'facility:' + f.id">
                                     {{ f.name }}
                                 </option>
@@ -131,14 +131,20 @@
                     <button
                         type="button"
                         @click="generateReport"
-                        :disabled="generating || (isFacilityLmisReport && !hasFacilityLmisRequiredFilters)"
+                        :disabled="generating || (isFacilityLmisReport && !hasFacilityLmisRequiredFilters) || (isWarehouseInventoryReport && !hasWarehouseInventoryRequiredFilters) || (isSubmissionRateReport && !hasSubmissionRateRequiredFilters)"
                         class="inline-flex justify-center items-center px-6 py-2.5 bg-emerald-600 border border-transparent rounded-md font-semibold text-sm text-white uppercase tracking-widest hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 transition ease-in-out duration-150"
                     >
                         <span v-if="generating">Generating...</span>
                         <span v-else>Generate Report</span>
                     </button>
-                    <p v-if="isFacilityLmisReport && !hasFacilityLmisRequiredFilters" class="mt-2 text-xs text-amber-600">
+                    <p v-if="isWarehouseInventoryReport && !hasWarehouseInventoryRequiredFilters" class="mt-2 text-xs text-amber-600">
+                        Select Report Period, Year, and Month/Period. Month must be a valid period start (e.g. 1, 4, 7, 10 for Quarterly).
+                    </p>
+                    <p v-else-if="isFacilityLmisReport && !hasFacilityLmisRequiredFilters" class="mt-2 text-xs text-amber-600">
                         Select Region, District, Facility, and Report Period (Year + Month) to generate the Facility LMIS report.
+                    </p>
+                    <p v-else-if="isSubmissionRateReport && !hasSubmissionRateRequiredFilters" class="mt-2 text-xs text-amber-600">
+                        Select at least one of Region, District or Facility, plus Report Period (Year and Month/Period). Use valid period starts (e.g. 1, 4, 7, 10 for Quarterly).
                     </p>
                 </div>
             </div>
@@ -170,13 +176,13 @@
                 <div v-else-if="!hasAnyData && hasGenerated" class="p-8 text-center text-gray-600 max-w-xl mx-auto">
                     <p>{{ reportMessage || 'No data found for the selected filters. Try a different report type or period.' }}</p>
                     <p v-if="filters.report_type === 'warehouse_inventory'" class="mt-3 text-sm text-gray-500">
-                        For Warehouse Inventory Report: select Report Period (year and month), then Generate Report. Filtered by report period only. If you see no data, generate the monthly reports first in Settings → Report Schedules (Monthly received quantities → Issue quantities → Inventory monthly report).
+                        For Warehouse Inventory Report: select Report Period (Monthly, Quarterly, etc.), Year, and Month/Period. Use valid period starts (e.g. 1, 4, 7, 10 for Quarterly). Filtered by report period only. If you see no data, generate the monthly reports first in Settings → Report Schedules.
                     </p>
                     <p v-else-if="filters.report_type === 'facility_monthly_consumption'" class="mt-3 text-sm text-gray-500">
                         For Facility LMIS report: select Region, District, then Facility (required), and Report Period (Year + Month). Only submitted, reviewed, approved, or rejected reports are shown (drafts excluded).
                     </p>
                     <p v-else-if="filters.report_type === 'report_submission_rate'" class="mt-3 text-sm text-gray-500">
-                        Select Report Period, Year, and at least one Region, District or Facility. Data is based on <code class="bg-slate-100 px-1 rounded text-xs">facility_monthly_reports.submitted_at</code>. Configure expected reports and ontime/late rules in <Link :href="route('settings.report-submission.index')" class="font-medium text-indigo-600 hover:text-indigo-800">Settings → Report Submission Rate</Link>.
+                        For facilities only: filter by Region, District and/or Facility, then select Report Period, Year, and Month/Period. Use valid period starts (e.g. 1, 4, 7, 10 for Quarterly). Configure expected reports and ontime/late rules in <Link :href="route('settings.report-submission.index')" class="font-medium text-indigo-600 hover:text-indigo-800">Settings → Report Submission Rate</Link>.
                     </p>
                 </div>
 
@@ -988,25 +994,69 @@
                     </div>
                 </div>
 
-                <!-- Warehouse Inventory: view-only status bar -->
-                <div v-if="filters.report_type === 'warehouse_inventory' && warehouseReportMeta" class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
-                    <span class="text-sm font-medium text-gray-700">Report status:</span>
-                    <span
-                        :class="{
-                            'bg-amber-100 text-amber-800': warehouseReportMeta.report_status === 'pending',
-                            'bg-blue-100 text-blue-800': warehouseReportMeta.report_status === 'submitted',
-                            'bg-indigo-100 text-indigo-800': warehouseReportMeta.report_status === 'under_review',
-                            'bg-green-100 text-green-800': warehouseReportMeta.report_status === 'approved',
-                            'bg-red-100 text-red-800': warehouseReportMeta.report_status === 'rejected',
-                        }"
-                        class="rounded-full px-3 py-1 text-xs font-semibold"
-                    >
-                        {{ workflowStatusLabel(warehouseReportMeta.report_status) }}
-                    </span>
-                    <span v-if="warehouseReportMeta.rejection_reason" class="ml-2 flex items-center gap-2">
-                        <span class="text-sm text-gray-500">Rejection reason:</span>
-                        <span class="text-sm text-gray-700">{{ warehouseReportMeta.rejection_reason }}</span>
-                    </span>
+                <!-- Warehouse Inventory: table only (no status bar) -->
+                <div v-else-if="isWarehouseInventoryReport && reportData.length > 0">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full border-collapse border border-gray-300">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">Item</th>
+                                    <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">Category</th>
+                                    <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">UoM</th>
+                                    <th colspan="3" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Item Details (batch level)</th>
+                                    <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Beginning<br>Balance</th>
+                                    <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">QTY<br>Received</th>
+                                    <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">QTY<br>Issued</th>
+                                    <th colspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">Adjustments</th>
+                                    <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Closing<br>Balance</th>
+                                    <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Total<br>Cost</th>
+                                    <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Total<br>Closing<br>Balance</th>
+                                    <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">AMC</th>
+                                    <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">MOS<br>(Months<br>of Stock)</th>
+                                    <th rowspan="2" class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Stockout<br>Days</th>
+                                </tr>
+                                <tr class="bg-gray-50">
+                                    <th class="px-3 py-1 text-left text-xs font-medium text-gray-600 border border-gray-300">Batch No.:</th>
+                                    <th class="px-3 py-1 text-left text-xs font-medium text-gray-600 border border-gray-300">Expiry Date</th>
+                                    <th class="px-3 py-1 text-right text-xs font-medium text-gray-600 border border-gray-300">Unit cost</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">(-)</th>
+                                    <th class="px-3 py-1 text-center text-xs font-medium text-gray-600 border border-gray-300">(+)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white">
+                                <tr
+                                    v-for="(row, index) in filteredRows"
+                                    :key="row.report_item_id || index"
+                                    :class="row.is_first_batch ? 'border-t border-gray-400' : ''"
+                                    class="hover:bg-gray-50"
+                                >
+                                    <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 border border-gray-300 align-top">{{ row.item }}</td>
+                                    <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-600 border border-gray-300 align-top">{{ row.category }}</td>
+                                    <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-600 border border-gray-300 align-top">{{ row.uom }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-600 border border-gray-300 whitespace-nowrap">{{ row.batch_no || '–' }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-600 border border-gray-300 whitespace-nowrap">{{ formatExpiry(row.expiry_date) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatCost(row.unit_cost) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.beginning_balance) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.qty_received) }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.qty_issued) }}</td>
+                                    <td class="px-3 py-2 text-sm text-right border border-gray-300">
+                                        <input v-if="warehouseReportMeta && row.report_item_id" type="number" min="0" class="w-16 px-1 py-0.5 text-right text-sm border border-gray-400 rounded" v-model.number="row.adjustment_neg" @blur="saveReportItemAdjustment(row)" />
+                                        <span v-else>{{ formatNum(row.adjustment_neg) }}</span>
+                                    </td>
+                                    <td class="px-3 py-2 text-sm text-right border border-gray-300">
+                                        <input v-if="warehouseReportMeta && row.report_item_id" type="number" min="0" class="w-16 px-1 py-0.5 text-right text-sm border border-gray-400 rounded" v-model.number="row.adjustment_pos" @blur="saveReportItemAdjustment(row)" />
+                                        <span v-else>{{ formatNum(row.adjustment_pos) }}</span>
+                                    </td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.closing_balance) }}</td>
+                                    <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top font-medium">{{ formatCost(row.total_cost) }}</td>
+                                    <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top font-medium">{{ formatNum(row.total_closing_balance) }}</td>
+                                    <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300 align-top font-medium">{{ formatNum(row.amc) }}</td>
+                                    <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-right border border-gray-300 align-top font-medium">{{ row.mos ?? '–' }}</td>
+                                    <td v-if="row.is_first_batch" :rowspan="row.rowspan" class="px-3 py-2 text-sm text-right border border-gray-300 align-top">{{ formatNum(row.stockout_days) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
                 <!-- Facility LMIS: approval workflow header + table -->
                 <div v-else-if="isFacilityLmisReport && reportData.length > 0">
@@ -1120,7 +1170,7 @@
                 </div>
                 <div v-else class="p-8 text-center text-gray-500">
                     <template v-if="filters.report_type === 'warehouse_inventory'">
-                        Select Warehouse Inventory Report, choose Report Period (year and month), then click Generate Report.
+                        Select Report Period (e.g. Monthly, Quarterly), Year, and Month/Period, then click Generate Report. Use valid period starts (e.g. 1, 4, 7, 10 for Quarterly).
                     </template>
                     <template v-else-if="filters.report_type === 'facility_monthly_consumption'">
                         Select Region, District, Facility (required), and Report Period (Year and Month), then click Generate Report. Data comes from facility monthly reports.
@@ -1271,11 +1321,23 @@ watch(() => filters.value.report_period, () => {
     if (!valid) filters.value.periodValue = opts[0].value;
 }, { immediate: false });
 
-// When switching to warehouse_inventory, clear facility selection so Warehouse filter is used only
+// When switching report type, clear incompatible selections
 watch(() => filters.value.report_type, (newType) => {
     if (newType === 'warehouse_inventory' && filters.value.warehouse_or_facility?.startsWith('facility:')) {
         filters.value.warehouse_or_facility = '';
     }
+    if (newType === 'report_submission_rate' && filters.value.warehouse_or_facility?.startsWith('warehouse:')) {
+        filters.value.warehouse_or_facility = '';
+    }
+}, { immediate: false });
+
+// When report_type or report_period changes, ensure periodValue is valid for warehouse inventory and submission rate
+watch([() => filters.value.report_type, () => filters.value.report_period], () => {
+    if (!isWarehouseInventoryReport.value && !isSubmissionRateReport.value) return;
+    const opts = periodOptions.value;
+    if (!opts.length) return;
+    const valid = opts.some(o => o.value === filters.value.periodValue);
+    if (!valid) filters.value.periodValue = opts[0].value;
 }, { immediate: false });
 
 // Derived monthYear for API (e.g. warehouse workflow) when both year and month are needed
@@ -1394,6 +1456,46 @@ const hasFacilityLmisRequiredFilters = computed(() => {
         hasFacility &&
         filters.value.year &&
         filters.value.periodValue
+    );
+});
+
+const hasWarehouseInventoryRequiredFilters = computed(() => {
+    if (!isWarehouseInventoryReport.value) return true;
+    const period = filters.value.report_period || 'monthly';
+    const validMonths = {
+        monthly: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        'bi-monthly': [1, 3, 5, 7, 9, 11],
+        quarterly: [1, 4, 7, 10],
+        six_months: [1, 7],
+        yearly: [1],
+    };
+    const allowed = validMonths[period] || validMonths.monthly;
+    const pv = filters.value.periodValue;
+    return Boolean(
+        filters.value.year &&
+        pv != null &&
+        allowed.includes(Number(pv))
+    );
+});
+
+const hasSubmissionRateRequiredFilters = computed(() => {
+    if (!isSubmissionRateReport.value) return true;
+    const hasLocation = filters.value.region_id || filters.value.district_id || (filters.value.warehouse_or_facility && String(filters.value.warehouse_or_facility).startsWith('facility:'));
+    const period = filters.value.report_period || 'monthly';
+    const validMonths = {
+        monthly: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        'bi-monthly': [1, 3, 5, 7, 9, 11],
+        quarterly: [1, 4, 7, 10],
+        six_months: [1, 7],
+        yearly: [1],
+    };
+    const allowed = validMonths[period] || validMonths.monthly;
+    const pv = filters.value.periodValue;
+    return Boolean(
+        hasLocation &&
+        filters.value.year &&
+        pv != null &&
+        allowed.includes(Number(pv))
     );
 });
 const isLiquidationDisposalReport = computed(() => filters.value.report_type === 'liquidation_disposal');
@@ -2436,7 +2538,7 @@ function formatExpiry(d) {
 }
 
 function workflowStatusLabel(status) {
-    const labels = { pending: 'Pending', submitted: 'Submitted', under_review: 'Under Review', approved: 'Approved', rejected: 'Rejected' };
+    const labels = { pending: 'Pending', submitted: 'Submitted', under_review: 'Under Review', approved: 'Approved', rejected: 'Rejected', generated: 'Generated' };
     return labels[status] || status;
 }
 async function workflowAction(action) {
@@ -2564,7 +2666,10 @@ async function generateReport() {
             report_period: filters.value.report_period || 'monthly',
         };
         if (reportType === 'warehouse_inventory') {
-            // Filtered by report period only (year + month)
+            params.region_id = filters.value.region_id || undefined;
+            params.district_id = filters.value.district_id || undefined;
+            params.year = year ?? currentYear;
+            params.month = month ?? currentMonth;
         } else {
             params.region_id = filters.value.region_id || undefined;
             params.district_id = filters.value.district_id || undefined;

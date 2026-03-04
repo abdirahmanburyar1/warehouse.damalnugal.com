@@ -358,11 +358,29 @@ class ReportController extends Controller
                     'message' => 'Report Submission Rate requires Region, District or Facility.',
                 ]);
             }
-            if (!$request->filled('year')) {
+            $reportPeriod = $request->input('report_period', 'monthly');
+            $year = $request->filled('year') ? (int) $request->year : null;
+            $month = $request->filled('month') ? (int) $request->month : null;
+            if (!$year || !$month) {
                 return response()->json([
                     'success' => false,
                     'data' => ['rows' => []],
-                    'message' => 'Report Submission Rate requires a Year.',
+                    'message' => 'Report Submission Rate requires Report Period, Year, and Month/Period.',
+                ]);
+            }
+            $validPeriodMonths = [
+                'monthly' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                'bi-monthly' => [1, 3, 5, 7, 9, 11],
+                'quarterly' => [1, 4, 7, 10],
+                'six_months' => [1, 7],
+                'yearly' => [1],
+            ];
+            $allowedMonths = $validPeriodMonths[$reportPeriod] ?? $validPeriodMonths['monthly'];
+            if (!in_array($month, $allowedMonths, true)) {
+                return response()->json([
+                    'success' => false,
+                    'data' => ['rows' => []],
+                    'message' => 'For the selected Report Period, Month must be a valid period start (e.g. 1, 4, 7, 10 for Quarterly).',
                 ]);
             }
             $result = $this->getReportSubmissionRateData($request, $facilityIds);
@@ -416,6 +434,10 @@ class ReportController extends Controller
 
         $warehouseIds = $this->resolveWarehouseIdsFromFilters($request);
         $facilityIds = $this->resolveFacilityIdsFromFilters($request);
+        // Warehouse inventory: filtered by report period only, ignore region/district/warehouse
+        if ($reportType === 'warehouse_inventory') {
+            $warehouseIds = [];
+        }
         $data = $this->getUnifiedInventoryReportRows($reportType, $monthYear, $request->warehouse_id, $request->facility_id, $warehouseIds, $facilityIds, $request);
 
         // When warehouse inventory or Facility LMIS has no data, show the table with one zero row instead of empty
@@ -431,7 +453,8 @@ class ReportController extends Controller
             }
         }
         if ($reportType === 'facility_monthly_consumption' && is_array($data) && empty($data)) {
-            $message = 'No approved Facility LMIS report for this period/facility.';
+            $data = [$this->getWarehouseInventoryEmptyRow()];
+            $message = 'No Facility LMIS report for this period/facility. Table shown with zeros.';
         }
         if ($reportType === 'warehouse_inventory' && $monthYear) {
             $report = InventoryReport::where('month_year', $monthYear)->first();
@@ -718,20 +741,26 @@ class ReportController extends Controller
     private function getReportSubmissionRateData(Request $request, array $facilityIds): array
     {
         $year = (int) $request->year;
+        $month = (int) $request->month;
         $periodType = $request->input('report_period', 'monthly');
 
         $config = EmailNotificationSetting::getReportSubmissionRateConfig();
-        $expectedPerPeriod = (int) ($config['expected_reports'] ?? 1);
-        $periodsPerYear = [
-            'monthly' => 12,
-            'bi-monthly' => 6,
-            'quarterly' => 4,
-            'six_months' => 2,
-            'yearly' => 1,
-        ];
-        $expectedCount = ($periodsPerYear[$periodType] ?? 12) * $expectedPerPeriod;
-
+        $expectedPerMonth = (int) ($config['expected_reports'] ?? 1);
         $ontimeDay = (int) ($config['ontime_day'] ?? 5);
+
+        $monthsPerPeriod = [
+            'monthly' => 1,
+            'bi-monthly' => 2,
+            'quarterly' => 3,
+            'six_months' => 6,
+            'yearly' => 12,
+        ];
+        $monthsInPeriod = $monthsPerPeriod[$periodType] ?? 1;
+        $expectedCount = $expectedPerMonth * $monthsInPeriod;
+
+        $reportMonth = $this->getReportMonthForPeriod($periodType, $month);
+        $periodStart = sprintf('%04d-%02d', $year, $month);
+        $periodEnd = sprintf('%04d-%02d', $year, $reportMonth);
 
         $facilities = Facility::whereIn('id', $facilityIds)->orderBy('name')->get(['id', 'name']);
         $rows = [];
@@ -739,7 +768,7 @@ class ReportController extends Controller
         foreach ($facilities as $facility) {
             $reports = FacilityMonthlyReport::query()
                 ->where('facility_id', $facility->id)
-                ->where('report_period', 'like', $year . '-%')
+                ->whereBetween('report_period', [$periodStart, $periodEnd])
                 ->whereIn('status', ['submitted', 'approved'])
                 ->whereNotNull('submitted_at')
                 ->get(['id', 'report_period', 'submitted_at']);
@@ -748,7 +777,7 @@ class ReportController extends Controller
             $onTimeCount = 0;
             foreach ($reports as $r) {
                 $nextMonth = Carbon::parse($r->report_period . '-01')->addMonth();
-$deadline = $nextMonth->copy()->day(min($ontimeDay, $nextMonth->daysInMonth))->endOfDay();
+                $deadline = $nextMonth->copy()->day(min($ontimeDay, $nextMonth->daysInMonth))->endOfDay();
                 if ($r->submitted_at && $r->submitted_at->lte($deadline)) {
                     $onTimeCount++;
                 }

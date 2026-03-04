@@ -84,9 +84,9 @@
                                     </svg>
                                 </div>
                                 <div class="ml-4">
-                                    <p class="text-sm font-medium text-green-600">Active Assets</p>
+                                    <p class="text-sm font-medium text-green-600">Functioning Assets</p>
                                     <p class="text-2xl font-bold text-green-900">
-                                        {{props.assets.data.filter(a => a.status === 'active' || a.status ===
+                                        {{props.assets.data.filter(a => a.status === 'functioning' || a.status ===
                                         'in_use').length }}
                                     </p>
                                 </div>
@@ -346,17 +346,17 @@
                                 </td>
                                 <td class="px-4 py-3 align-top border-r border-gray-100">
                                     <span :class="{
-                                        'bg-green-100 text-green-800': asset.status === 'active' || asset.status === 'in_use' || asset.status === 'functioning',
+                                        'bg-green-100 text-green-800': asset.status === 'functioning' || asset.status === 'in_use',
                                         'bg-yellow-100 text-yellow-800': asset.status === 'pending_approval',
                                         'bg-orange-100 text-orange-800': asset.status === 'maintenance' || asset.status === 'not_functioning',
                                         'bg-red-100 text-red-800': asset.status === 'disposed' || asset.status === 'retired',
-                                        'bg-gray-100 text-gray-800': !['active', 'in_use', 'functioning', 'pending_approval', 'maintenance', 'not_functioning', 'disposed', 'retired'].includes(asset.status)
+                                        'bg-gray-100 text-gray-800': !['functioning', 'in_use', 'pending_approval', 'maintenance', 'not_functioning', 'disposed', 'retired'].includes(asset.status)
                                     }"
                                         class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">
                                         <span v-if="asset.status === 'pending_approval'"
                                             class="w-2 h-2 bg-yellow-400 rounded-full mr-1 animate-pulse"></span>
                                         <span
-                                            v-else-if="asset.status === 'active' || asset.status === 'in_use' || asset.status === 'functioning'"
+                                            v-else-if="asset.status === 'functioning' || asset.status === 'in_use'"
                                             class="w-2 h-2 bg-green-400 rounded-full mr-1"></span>
                                         <span v-else-if="asset.status === 'maintenance' || asset.status === 'not_functioning'"
                                             class="w-2 h-2 bg-orange-400 rounded-full mr-1 animate-pulse"></span>
@@ -1068,14 +1068,13 @@ const page = usePage();
 const formatStatus = (status) => {
     if (!status) return '-';
     const statusMap = {
-        'active': 'Active',
+        'functioning': 'Functioning',
+        'not_functioning': 'Not functioning',
         'in_use': 'In Use',
         'maintenance': 'Maintenance',
         'retired': 'Retired',
         'disposed': 'Disposed',
-        'pending_approval': 'Pending Approval',
-        'functioning': 'Functioning',
-        'not_functioning': 'Not functioning'
+        'pending_approval': 'Pending Approval'
     };
     return statusMap[status] || status.replace('_', ' ').toUpperCase();
 };
@@ -1281,14 +1280,13 @@ const selectedStatus = ref(null);
 
 // Status options for multiselect
 const statusOptions = ref([
-    { label: 'Active', value: 'active' },
+    { label: 'Functioning', value: 'functioning' },
+    { label: 'Not functioning', value: 'not_functioning' },
     { label: 'In Use', value: 'in_use' },
     { label: 'Maintenance', value: 'maintenance' },
     { label: 'Retired', value: 'retired' },
     { label: 'Disposed', value: 'disposed' },
-    { label: 'Pending Approval', value: 'pending_approval' },
-    { label: 'Functioning', value: 'functioning' },
-    { label: 'Not functioning', value: 'not_functioning' }
+    { label: 'Pending Approval', value: 'pending_approval' }
 ]);
 
 // Region, Location, SubLocation filter state
@@ -1678,8 +1676,8 @@ const toggleCollapse = (locationId) => {
 
 // Computed properties for the cards
 const totalAssets = computed(() => assets.value.length);
-const activeAssets = computed(
-    () => assets.value.filter((asset) => asset.status === "in_use").length
+const functioningAssets = computed(
+    () => assets.value.filter((asset) => asset.status === "functioning" || asset.status === "in_use").length
 );
 const maintenanceAssets = computed(
     () => assets.value.filter((asset) => asset.status === "maintenance").length

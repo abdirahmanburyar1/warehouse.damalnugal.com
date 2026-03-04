@@ -67,8 +67,6 @@ class AssetItem extends Model
     }
 
     // Constants
-    const STATUS_ACTIVE = 'active';
-    const STATUS_INACTIVE = 'inactive';
     const STATUS_MAINTENANCE = 'maintenance';
     const STATUS_RETIRED = 'retired';
     const STATUS_DISPOSED = 'disposed';
@@ -78,13 +76,13 @@ class AssetItem extends Model
     public static function getStatuses(): array
     {
         return [
-            self::STATUS_ACTIVE => 'Active',
-            self::STATUS_INACTIVE => 'Inactive',
-            self::STATUS_MAINTENANCE => 'Maintenance',
-            self::STATUS_RETIRED => 'Retired',
-            self::STATUS_DISPOSED => 'Disposed',
             self::STATUS_FUNCTIONING => 'Functioning',
             self::STATUS_NOT_FUNCTIONING => 'Not functioning',
+            'in_use' => 'In Use',
+            self::STATUS_MAINTENANCE => 'Maintenance',
+            'pending_approval' => 'Pending Approval',
+            self::STATUS_RETIRED => 'Retired',
+            self::STATUS_DISPOSED => 'Disposed',
         ];
     }
 
@@ -119,9 +117,15 @@ class AssetItem extends Model
         return $this->asset->acquisition_date?->format('Y-m-d') ?? 'Unknown';
     }
 
+    public function isFunctioning(): bool
+    {
+        return $this->status === self::STATUS_FUNCTIONING;
+    }
+
+    /** @deprecated Use isFunctioning() */
     public function isActive(): bool
     {
-        return $this->status === self::STATUS_ACTIVE;
+        return $this->isFunctioning();
     }
 
     public function needsMaintenance(): bool
@@ -345,9 +349,15 @@ class AssetItem extends Model
     }
 
     // Scopes
+    public function scopeFunctioning($query)
+    {
+        return $query->where('status', self::STATUS_FUNCTIONING);
+    }
+
+    /** @deprecated Use scopeFunctioning() */
     public function scopeActive($query)
     {
-        return $query->where('status', self::STATUS_ACTIVE);
+        return $query->where('status', self::STATUS_FUNCTIONING);
     }
 
     public function scopeByStatus($query, $status)

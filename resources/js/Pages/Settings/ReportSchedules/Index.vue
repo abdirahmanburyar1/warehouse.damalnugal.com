@@ -59,6 +59,19 @@
                                     class="block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400"
                                 />
                             </div>
+                            <div v-if="scheduleDef.quarterly">
+                                <label :for="`quarter_start_${slug}`" class="block text-sm font-medium text-slate-700 mb-1">Quarter of year (start month)</label>
+                                <select
+                                    :id="`quarter_start_${slug}`"
+                                    v-model.number="form[slug].quarter_start_month"
+                                    class="block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400"
+                                >
+                                    <option v-for="opt in quarterStartOptions" :key="opt.value" :value="opt.value">
+                                        {{ opt.label }}
+                                    </option>
+                                </select>
+                                <p class="mt-0.5 text-xs text-slate-500">Runs on quarter start dates only: {{ quarterStartDatesLabel(form[slug].quarter_start_month) }}.</p>
+                            </div>
                             <div>
                                 <label :for="`time_${slug}`" class="block text-sm font-medium text-slate-700 mb-1">Time (24-hour)</label>
                                 <input
@@ -70,11 +83,10 @@
                                     class="block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400 font-mono"
                                     @blur="form[slug].time = normalizeTime(form[slug].time)"
                                 />
-                                <p v-if="scheduleDef.quarterly" class="mt-0.5 text-xs text-slate-500">Runs on quarter start dates only: Dec 1, Mar 1, Jun 1, Sep 1.</p>
                             </div>
                         </div>
-                        <!-- Run now: all schedules -->
-                        <div class="pt-2 border-t border-slate-100">
+                        <!-- Run now: all schedules except orders_quarterly (heavy data/calculations) -->
+                        <div v-if="slug !== 'orders_quarterly'" class="pt-2 border-t border-slate-100">
                             <p class="text-xs text-slate-500 mb-2">Run this task now{{ scheduleDef.monthlyReport ? ' (optional: choose month below; defaults to previous month)' : '' }}.</p>
                             <div v-if="scheduleDef.monthlyReport" class="mb-2">
                                 <label :for="`run_month_${slug}`" class="sr-only">Month for Run now</label>
@@ -127,6 +139,22 @@
 import { ref, watch } from 'vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const quarterStartOptions = Array.from({ length: 12 }, (_, i) => {
+    const m = i + 1;
+    const dates = [m, m + 3, m + 6, m + 9].map((x) => (x > 12 ? x - 12 : x));
+    return {
+        value: m,
+        label: `${MONTH_NAMES[i]} (${dates.map((d) => `${MONTH_NAMES[d - 1]} 1`).join(', ')})`,
+    };
+});
+
+function quarterStartDatesLabel(month) {
+    if (!month || month < 1 || month > 12) return 'Jan 1, Apr 1, Jul 1, Oct 1';
+    const dates = [month, month + 3, month + 6, month + 9].map((x) => (x > 12 ? x - 12 : x));
+    return dates.map((d) => `${MONTH_NAMES[d - 1]} 1`).join(', ');
+}
 
 const scheduleDefs = {
     monthly_received_report: {
@@ -210,6 +238,7 @@ function buildFormFromSchedules() {
         f[slug] = {
             enabled: !!s.enabled,
             day_of_month: def.quarterly ? undefined : Math.max(1, Math.min(28, parseInt(s.day_of_month, 10) || 1)),
+            quarter_start_month: def.quarterly ? Math.max(1, Math.min(12, parseInt(s.quarter_start_month, 10) || 1)) : undefined,
             time: normalizeTime(s.time || '01:00'),
         };
     }
@@ -235,6 +264,8 @@ function submit() {
         };
         if (!def.quarterly) {
             payload[slug].day_of_month = Math.max(1, Math.min(28, parseInt(form.value[slug].day_of_month, 10) || 1));
+        } else {
+            payload[slug].quarter_start_month = Math.max(1, Math.min(12, parseInt(form.value[slug].quarter_start_month, 10) || 1));
         }
     }
     router.put(route('settings.report-schedules.update'), payload, {
