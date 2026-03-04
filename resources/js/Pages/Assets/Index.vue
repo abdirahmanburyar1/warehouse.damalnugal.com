@@ -346,19 +346,19 @@
                                 </td>
                                 <td class="px-4 py-3 align-top border-r border-gray-100">
                                     <span :class="{
-                                        'bg-green-100 text-green-800': asset.status === 'active' || asset.status === 'in_use',
+                                        'bg-green-100 text-green-800': asset.status === 'active' || asset.status === 'in_use' || asset.status === 'functioning',
                                         'bg-yellow-100 text-yellow-800': asset.status === 'pending_approval',
-                                        'bg-orange-100 text-orange-800': asset.status === 'maintenance',
+                                        'bg-orange-100 text-orange-800': asset.status === 'maintenance' || asset.status === 'not_functioning',
                                         'bg-red-100 text-red-800': asset.status === 'disposed' || asset.status === 'retired',
-                                        'bg-gray-100 text-gray-800': !['active', 'in_use', 'pending_approval', 'maintenance', 'disposed', 'retired'].includes(asset.status)
+                                        'bg-gray-100 text-gray-800': !['active', 'in_use', 'functioning', 'pending_approval', 'maintenance', 'not_functioning', 'disposed', 'retired'].includes(asset.status)
                                     }"
                                         class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">
                                         <span v-if="asset.status === 'pending_approval'"
                                             class="w-2 h-2 bg-yellow-400 rounded-full mr-1 animate-pulse"></span>
                                         <span
-                                            v-else-if="asset.status === 'active' || asset.status === 'in_use'"
+                                            v-else-if="asset.status === 'active' || asset.status === 'in_use' || asset.status === 'functioning'"
                                             class="w-2 h-2 bg-green-400 rounded-full mr-1"></span>
-                                        <span v-else-if="asset.status === 'maintenance'"
+                                        <span v-else-if="asset.status === 'maintenance' || asset.status === 'not_functioning'"
                                             class="w-2 h-2 bg-orange-400 rounded-full mr-1 animate-pulse"></span>
                                         <span v-else class="w-2 h-2 bg-gray-400 rounded-full mr-1"></span>
                                         {{ formatStatus(asset.status) }}
@@ -1073,7 +1073,9 @@ const formatStatus = (status) => {
         'maintenance': 'Maintenance',
         'retired': 'Retired',
         'disposed': 'Disposed',
-        'pending_approval': 'Pending Approval'
+        'pending_approval': 'Pending Approval',
+        'functioning': 'Functioning',
+        'not_functioning': 'Not functioning'
     };
     return statusMap[status] || status.replace('_', ' ').toUpperCase();
 };
@@ -1284,7 +1286,9 @@ const statusOptions = ref([
     { label: 'Maintenance', value: 'maintenance' },
     { label: 'Retired', value: 'retired' },
     { label: 'Disposed', value: 'disposed' },
-    { label: 'Pending Approval', value: 'pending_approval' }
+    { label: 'Pending Approval', value: 'pending_approval' },
+    { label: 'Functioning', value: 'functioning' },
+    { label: 'Not functioning', value: 'not_functioning' }
 ]);
 
 // Region, Location, SubLocation filter state

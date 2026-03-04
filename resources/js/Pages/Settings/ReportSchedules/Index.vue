@@ -27,6 +27,13 @@
                             <div class="min-w-0 flex-1">
                                 <h2 class="text-base font-semibold text-slate-900">{{ scheduleDef.title }}</h2>
                                 <p class="mt-0.5 text-sm text-slate-500">{{ scheduleDef.description }}</p>
+                                <Link
+                                    v-if="slug === 'facility_monthly_report'"
+                                    :href="route('reports.facility-lmis-report')"
+                                    class="mt-1 inline-flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900"
+                                >
+                                    Create or edit LMIS reports manually →
+                                </Link>
                             </div>
                             <label class="relative inline-flex items-center cursor-pointer shrink-0">
                                 <input
@@ -66,52 +73,20 @@
                                 <p v-if="scheduleDef.quarterly" class="mt-0.5 text-xs text-slate-500">Runs on quarter start dates only: Dec 1, Mar 1, Jun 1, Sep 1.</p>
                             </div>
                         </div>
-                        <!-- Inventory monthly report: submission expectations (for report submitting time status) -->
-                        <div v-if="slug === 'inventory_monthly_report'" class="pt-4 mt-4 border-t border-slate-200 space-y-4">
-                            <p class="text-sm font-medium text-slate-700">Report submission expectations</p>
-                            <p class="text-xs text-slate-500">Used to determine expected number of reports and on-time vs late submission (e.g. for Report Submitting Time Status).</p>
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div>
-                                    <label :for="`expected_${slug}`" class="block text-sm font-medium text-slate-700 mb-1">Expected number of reports</label>
-                                    <input
-                                        :id="`expected_${slug}`"
-                                        v-model.number="form[slug].expected_number_of_reports"
-                                        type="number"
-                                        min="1"
-                                        max="99"
-                                        class="block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400"
-                                    />
-                                    <p class="mt-0.5 text-xs text-slate-500">Default: 1</p>
-                                </div>
-                                <div>
-                                    <label :for="`ontime_start_${slug}`" class="block text-sm font-medium text-slate-700 mb-1">Ontime submission: from day</label>
-                                    <input
-                                        :id="`ontime_start_${slug}`"
-                                        v-model.number="form[slug].ontime_day_start"
-                                        type="number"
-                                        min="1"
-                                        max="28"
-                                        class="block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400"
-                                    />
-                                    <p class="mt-0.5 text-xs text-slate-500">Day of month (e.g. 1)</p>
-                                </div>
-                                <div>
-                                    <label :for="`ontime_end_${slug}`" class="block text-sm font-medium text-slate-700 mb-1">Ontime submission: to day</label>
-                                    <input
-                                        :id="`ontime_end_${slug}`"
-                                        v-model.number="form[slug].ontime_day_end"
-                                        type="number"
-                                        min="1"
-                                        max="28"
-                                        class="block w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400"
-                                    />
-                                    <p class="mt-0.5 text-xs text-slate-500">Day of month (e.g. 3 = ontime 1–3)</p>
-                                </div>
-                            </div>
-                        </div>
                         <!-- Run now: all schedules -->
                         <div class="pt-2 border-t border-slate-100">
-                            <p class="text-xs text-slate-500 mb-2">Run this task now (uses previous month for monthly reports).</p>
+                            <p class="text-xs text-slate-500 mb-2">Run this task now{{ scheduleDef.monthlyReport ? ' (optional: choose month below; defaults to previous month)' : '' }}.</p>
+                            <div v-if="scheduleDef.monthlyReport" class="mb-2">
+                                <label :for="`run_month_${slug}`" class="sr-only">Month for Run now</label>
+                                <input
+                                    :id="`run_month_${slug}`"
+                                    v-model="runMonthBySlug[slug]"
+                                    type="month"
+                                    class="block w-40 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400/50 focus:border-slate-400 px-2 py-1.5"
+                                    :disabled="runningSlug === slug"
+                                />
+                                <span class="ml-1 text-xs text-slate-500">Leave empty for previous month</span>
+                            </div>
                             <button
                                 type="button"
                                 :disabled="runningSlug === slug"
@@ -158,11 +133,13 @@ const scheduleDefs = {
         title: 'Monthly received quantities report',
         description: 'Generates the monthly report of received quantities for the previous month.',
         quarterly: false,
+        monthlyReport: true,
     },
     issue_quantities: {
         title: 'Issue quantities report',
         description: 'Generates the monthly report of issued quantities (report:issue-quantities).',
         quarterly: false,
+        monthlyReport: true,
     },
     monthly_consumption: {
         title: 'Monthly consumption data',
@@ -173,6 +150,7 @@ const scheduleDefs = {
         title: 'Inventory monthly report',
         description: 'Generates monthly inventory reports (inventory:generate-monthly-report).',
         quarterly: false,
+        monthlyReport: true,
     },
     orders_quarterly: {
         title: 'Quarterly orders',
@@ -183,11 +161,13 @@ const scheduleDefs = {
         title: 'Warehouse AMC',
         description: 'Generates AMC and reorder levels from issue quantity data (warehouse:generate-amc).',
         quarterly: false,
+        monthlyReport: true,
     },
     facility_monthly_report: {
         title: 'Facility LMIS report',
-        description: 'Generates facility monthly (LMIS) reports for all facilities for the previous month (facility:generate-monthly-report).',
+        description: 'Generates facility monthly (LMIS) reports from facility_inventory_movements for all facilities. Runs on the configured day and time for the previous month. You can also create or edit reports manually at Reports → LMIS Report.',
         quarterly: false,
+        monthlyReport: true,
     },
 };
 
@@ -202,6 +182,13 @@ const saving = ref(false);
 const success = ref(false);
 const error = ref('');
 const runningSlug = ref(null);
+const runMonthBySlug = ref(
+    Object.fromEntries(
+        Object.keys(scheduleDefs)
+            .filter((k) => scheduleDefs[k].monthlyReport)
+            .map((k) => [k, ''])
+    )
+);
 
 function normalizeTime(t) {
     if (!t || typeof t !== 'string') return '01:00';
@@ -225,11 +212,6 @@ function buildFormFromSchedules() {
             day_of_month: def.quarterly ? undefined : Math.max(1, Math.min(28, parseInt(s.day_of_month, 10) || 1)),
             time: normalizeTime(s.time || '01:00'),
         };
-        if (slug === 'inventory_monthly_report') {
-            f[slug].expected_number_of_reports = Math.max(1, Math.min(99, parseInt(s.expected_number_of_reports, 10) || 1));
-            f[slug].ontime_day_start = Math.max(1, Math.min(28, parseInt(s.ontime_day_start, 10) || 1));
-            f[slug].ontime_day_end = Math.max(1, Math.min(28, parseInt(s.ontime_day_end, 10) || 3));
-        }
     }
     return f;
 }
@@ -254,11 +236,6 @@ function submit() {
         if (!def.quarterly) {
             payload[slug].day_of_month = Math.max(1, Math.min(28, parseInt(form.value[slug].day_of_month, 10) || 1));
         }
-        if (slug === 'inventory_monthly_report') {
-            payload[slug].expected_number_of_reports = Math.max(1, Math.min(99, parseInt(form.value[slug].expected_number_of_reports, 10) || 1));
-            payload[slug].ontime_day_start = Math.max(1, Math.min(28, parseInt(form.value[slug].ontime_day_start, 10) || 1));
-            payload[slug].ontime_day_end = Math.max(1, Math.min(28, parseInt(form.value[slug].ontime_day_end, 10) || 3));
-        }
     }
     router.put(route('settings.report-schedules.update'), payload, {
         preserveScroll: true,
@@ -278,7 +255,12 @@ function submit() {
 function runScheduleNow(slug) {
     runningSlug.value = slug;
     error.value = '';
-    router.post(route('settings.report-schedules.run-schedule'), { slug }, {
+    const payload = { slug };
+    const month = runMonthBySlug.value[slug];
+    if (month && typeof month === 'string' && /^\d{4}-\d{2}$/.test(month)) {
+        payload.month = month;
+    }
+    router.post(route('settings.report-schedules.run-schedule'), payload, {
         preserveScroll: true,
         onSuccess: () => {
             success.value = true;

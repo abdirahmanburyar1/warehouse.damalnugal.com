@@ -198,6 +198,8 @@ class DashboardController extends Controller
         $formattedStatusData = [
             'In Use' => $assetStatusData['in_use'] ?? 0,
             'Active' => $assetStatusData['active'] ?? 0,
+            'Functioning' => $assetStatusData['functioning'] ?? 0,
+            'Not functioning' => $assetStatusData['not_functioning'] ?? 0,
             'Needs Maintenance' => $assetStatusData['maintenance'] ?? 0,
             'Pending Approval' => $assetStatusData['pending_approval'] ?? 0,
             'Retired' => $assetStatusData['retired'] ?? 0,

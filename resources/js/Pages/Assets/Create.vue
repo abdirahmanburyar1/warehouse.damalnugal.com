@@ -331,6 +331,8 @@ const statuses = ref([
     { value: "maintenance", label: "Maintenance" },
     { value: "retired", label: "Retired" },
     { value: "disposed", label: "Disposed" },
+    { value: "functioning", label: "Functioning" },
+    { value: "not_functioning", label: "Not functioning" },
 ]);
 
 const showLocationModal = ref(false);

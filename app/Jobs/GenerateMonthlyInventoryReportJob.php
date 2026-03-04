@@ -140,9 +140,9 @@ class GenerateMonthlyInventoryReportJob implements ShouldQueue
             ->selectRaw('product_id, warehouse_id, COALESCE(NULLIF(TRIM(batch_number), ""), "N/A") as batch_key')
             ->groupBy('product_id', 'warehouse_id', 'batch_key')
             ->get();
-        $allBatchKeys = $receivedBatches->map(fn ($r) => ['product_id' => $r->product_id, 'warehouse_id' => $r->warehouse_id, 'batch_key' => $r->batch_key])
-            ->merge($issuedBatches->map(fn ($r) => ['product_id' => $r->product_id, 'warehouse_id' => $r->warehouse_id, 'batch_key' => $r->batch_key]))
-            ->unique(fn ($item) => $item['product_id'] . '-' . $item['warehouse_id'] . '-' . $item['batch_key']);
+        $receivedMapped = $receivedBatches->map(fn ($r) => ['product_id' => $r->product_id, 'warehouse_id' => $r->warehouse_id, 'batch_key' => $r->batch_key]);
+        $issuedMapped = $issuedBatches->map(fn ($r) => ['product_id' => $r->product_id, 'warehouse_id' => $r->warehouse_id, 'batch_key' => $r->batch_key]);
+        $allBatchKeys = collect($receivedMapped->all())->merge($issuedMapped->all())->unique(fn ($item) => $item['product_id'] . '-' . $item['warehouse_id'] . '-' . $item['batch_key']);
 
         echo "Processing {$allBatchKeys->count()} unique product-warehouse-batch combinations\n";
 
@@ -153,7 +153,7 @@ class GenerateMonthlyInventoryReportJob implements ShouldQueue
             if ($processedCount % 10 == 0) {
                 echo "Processed {$processedCount}/{$allBatchKeys->count()} combinations\n";
             }
-            $product = Product::find($row['product_id']);
+            $product = Product::with('dosage')->find($row['product_id']);
             if (!$product) {
                 continue;
             }
@@ -176,23 +176,26 @@ class GenerateMonthlyInventoryReportJob implements ShouldQueue
     {
         $batchForDb = $batchNumber !== null && $batchNumber !== '' ? $batchNumber : 'N/A';
 
+        // Apply batch filter using TRIM so we match DB values with leading/trailing spaces (fixes QTY Received showing 0)
+        $applyBatchFilter = function ($q) use ($batchNumber) {
+            if ($batchNumber !== null && $batchNumber !== '') {
+                $trimmed = trim($batchNumber);
+                $q->whereRaw('TRIM(COALESCE(batch_number, "")) = ?', [$trimmed]);
+            } else {
+                $q->where(function ($sub) {
+                    $sub->whereNull('batch_number')->orWhere('batch_number', '')->orWhereRaw("TRIM(COALESCE(batch_number, '')) = ''");
+                });
+            }
+        };
+
         $receivedQtyQuery = ReceivedQuantity::whereBetween('received_at', [$startOfMonth, $endOfMonth])
             ->where('product_id', $product->id)
             ->where('warehouse_id', $warehouseId);
+        $receivedQtyQuery->where($applyBatchFilter);
         $issuedQtyQuery = IssuedQuantity::whereBetween('issued_date', [$startOfMonth, $endOfMonth])
             ->where('product_id', $product->id)
             ->where('warehouse_id', $warehouseId);
-        if ($batchNumber !== null && $batchNumber !== '') {
-            $receivedQtyQuery->where('batch_number', $batchNumber);
-            $issuedQtyQuery->where('batch_number', $batchNumber);
-        } else {
-            $receivedQtyQuery->where(function ($q) {
-                $q->whereNull('batch_number')->orWhere('batch_number', '')->orWhereRaw("TRIM(batch_number) = ''");
-            });
-            $issuedQtyQuery->where(function ($q) {
-                $q->whereNull('batch_number')->orWhere('batch_number', '')->orWhereRaw("TRIM(batch_number) = ''");
-            });
-        }
+        $issuedQtyQuery->where($applyBatchFilter);
         $receivedQuantity = (int) $receivedQtyQuery->sum('quantity');
         $issuedQuantity = (int) $issuedQtyQuery->sum('quantity');
         $beginningBalance = $this->getPreviousMonthClosingBalance($product->id, $warehouseId, $previousDate->format('Y-m'), $batchNumber);
@@ -205,13 +208,7 @@ class GenerateMonthlyInventoryReportJob implements ShouldQueue
             $costQtyReceived = ReceivedQuantity::whereBetween('received_at', [$startOfMonth, $endOfMonth])
                 ->where('product_id', $product->id)
                 ->where('warehouse_id', $warehouseId);
-            if ($batchNumber !== null && $batchNumber !== '') {
-                $costQtyReceived->where('batch_number', $batchNumber);
-            } else {
-                $costQtyReceived->where(function ($q) {
-                    $q->whereNull('batch_number')->orWhere('batch_number', '')->orWhereRaw("TRIM(batch_number) = ''");
-                });
-            }
+            $costQtyReceived->where($applyBatchFilter);
             $receivedCostQty = $costQtyReceived->selectRaw('COALESCE(SUM(total_cost), 0) as total_cost, COALESCE(SUM(quantity), 0) as qty')->first();
             if ($receivedCostQty && $receivedCostQty->qty > 0 && $receivedCostQty->total_cost > 0) {
                 $unitCost = (float) $receivedCostQty->total_cost / (float) $receivedCostQty->qty;
@@ -220,26 +217,23 @@ class GenerateMonthlyInventoryReportJob implements ShouldQueue
                 $costQtyIssued = IssuedQuantity::whereBetween('issued_date', [$startOfMonth, $endOfMonth])
                     ->where('product_id', $product->id)
                     ->where('warehouse_id', $warehouseId);
-                if ($batchNumber !== null && $batchNumber !== '') {
-                    $costQtyIssued->where('batch_number', $batchNumber);
-                } else {
-                    $costQtyIssued->where(function ($q) {
-                        $q->whereNull('batch_number')->orWhere('batch_number', '')->orWhereRaw("TRIM(batch_number) = ''");
-                    });
-                }
+                $costQtyIssued->where($applyBatchFilter);
                 $issuedCostQty = $costQtyIssued->selectRaw('COALESCE(SUM(total_cost), 0) as total_cost, COALESCE(SUM(quantity), 0) as qty')->first();
                 if ($issuedCostQty && $issuedCostQty->qty > 0 && $issuedCostQty->total_cost > 0) {
                     $unitCost = (float) $issuedCostQty->total_cost / (float) $issuedCostQty->qty;
                 }
             }
             if ($unitCost == 0) {
-                $prevItem = InventoryReportItem::whereHas('report', fn ($q) => $q->where('month_year', $previousDate->format('Y-m')))
-                    ->where('product_id', $product->id)
-                    // ->where('warehouse_id', $warehouseId)
-                    ->when($batchNumber !== null && $batchNumber !== '', fn ($q) => $q->where('batch_number', $batchNumber), fn ($q) => $q->where(function ($q2) {
-                        $q2->whereNull('batch_number')->orWhere('batch_number', '')->orWhere('batch_number', 'N/A');
-                    }))
-                    ->first();
+                $prevItemQuery = InventoryReportItem::whereHas('report', fn ($q) => $q->where('month_year', $previousDate->format('Y-m')))
+                    ->where('product_id', $product->id);
+                if ($batchNumber !== null && $batchNumber !== '') {
+                    $prevItemQuery->whereRaw('TRIM(COALESCE(batch_number, "")) = ?', [trim($batchNumber)]);
+                } else {
+                    $prevItemQuery->where(function ($q2) {
+                        $q2->whereNull('batch_number')->orWhere('batch_number', '')->orWhere('batch_number', 'N/A')->orWhereRaw("TRIM(COALESCE(batch_number, '')) = ''");
+                    });
+                }
+                $prevItem = $prevItemQuery->first();
                 if ($prevItem && (float) ($prevItem->unit_cost ?? 0) > 0) {
                     $unitCost = (float) $prevItem->unit_cost;
                 }
@@ -248,21 +242,17 @@ class GenerateMonthlyInventoryReportJob implements ShouldQueue
             // Item-level (product only, regardless of warehouse and batch): from IssuedQuantity/ReceivedQuantity dates
             $stockoutDays = $this->calculateStockoutDays($product->id, $startOfMonth, $endOfMonth);
             $expiryDate = now()->addYears(5)->format('Y-m-d');
-            $firstReceived = ReceivedQuantity::whereBetween('received_at', [$startOfMonth, $endOfMonth])
-                ->where('product_id', $product->id)
-                // ->where('warehouse_id', $warehouseId)
-                ->when($batchNumber !== null && $batchNumber !== '', fn ($q) => $q->where('batch_number', $batchNumber))
-                ->orderBy('received_at')
-                ->first();
+            $firstReceivedQuery = ReceivedQuantity::whereBetween('received_at', [$startOfMonth, $endOfMonth])
+                ->where('product_id', $product->id);
+            $firstReceivedQuery->where($applyBatchFilter);
+            $firstReceived = $firstReceivedQuery->orderBy('received_at')->first();
             if ($firstReceived && $firstReceived->expiry_date) {
                 $expiryDate = $firstReceived->expiry_date instanceof \DateTimeInterface ? $firstReceived->expiry_date->format('Y-m-d') : $firstReceived->expiry_date;
             } else {
-                $firstIssued = IssuedQuantity::whereBetween('issued_date', [$startOfMonth, $endOfMonth])
-                    ->where('product_id', $product->id)
-                    // ->where('warehouse_id', $warehouseId)
-                    ->when($batchNumber !== null && $batchNumber !== '', fn ($q) => $q->where('batch_number', $batchNumber))
-                    ->orderBy('issued_date')
-                    ->first();
+                $firstIssuedQuery = IssuedQuantity::whereBetween('issued_date', [$startOfMonth, $endOfMonth])
+                    ->where('product_id', $product->id);
+                $firstIssuedQuery->where($applyBatchFilter);
+                $firstIssued = $firstIssuedQuery->orderBy('issued_date')->first();
                 if ($firstIssued && $firstIssued->expiry_date) {
                     $expiryDate = $firstIssued->expiry_date instanceof \DateTimeInterface ? $firstIssued->expiry_date->format('Y-m-d') : $firstIssued->expiry_date;
                 } elseif ($product->expiry_date) {
@@ -283,6 +273,12 @@ class GenerateMonthlyInventoryReportJob implements ShouldQueue
                 'average_monthly_consumption' => $issuedQuantity > 0 ? $issuedQuantity : 1,
                 'quantity_in_pipeline' => 0,
             ];
+            if (Schema::hasColumn('inventory_report_items', 'negative_adjustment')) {
+                $attrs['negative_adjustment'] = $negativeAdjustment;
+            }
+            if (Schema::hasColumn('inventory_report_items', 'positive_adjustment')) {
+                $attrs['positive_adjustment'] = $positiveAdjustment;
+            }
             if (Schema::hasColumn('inventory_report_items', 'stockout_days')) {
                 $attrs['stockout_days'] = $stockoutDays;
             }
@@ -291,7 +287,7 @@ class GenerateMonthlyInventoryReportJob implements ShouldQueue
                 $attrs['total_cost'] = $totalCost;
             }
             if (Schema::hasColumn('inventory_report_items', 'uom')) {
-                $attrs['uom'] = $product->uom ?? 'pcs';
+                $attrs['uom'] = $product->dosage?->name ?? $product->uom ?? 'pcs';
             }
             if (Schema::hasColumn('inventory_report_items', 'batch_number')) {
                 $attrs['batch_number'] = $batchForDb;

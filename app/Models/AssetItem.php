@@ -72,6 +72,8 @@ class AssetItem extends Model
     const STATUS_MAINTENANCE = 'maintenance';
     const STATUS_RETIRED = 'retired';
     const STATUS_DISPOSED = 'disposed';
+    const STATUS_FUNCTIONING = 'functioning';
+    const STATUS_NOT_FUNCTIONING = 'not_functioning';
 
     public static function getStatuses(): array
     {
@@ -81,6 +83,8 @@ class AssetItem extends Model
             self::STATUS_MAINTENANCE => 'Maintenance',
             self::STATUS_RETIRED => 'Retired',
             self::STATUS_DISPOSED => 'Disposed',
+            self::STATUS_FUNCTIONING => 'Functioning',
+            self::STATUS_NOT_FUNCTIONING => 'Not functioning',
         ];
     }
 

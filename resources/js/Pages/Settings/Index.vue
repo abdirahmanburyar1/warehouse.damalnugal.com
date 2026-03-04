@@ -19,6 +19,10 @@
                                 <li><a href="#" class="text-gray-600 hover:text-indigo-600">Permissions</a></li>
                                 <li><a href="#" class="text-gray-600 hover:text-indigo-600">Audit Trials</a></li>
                             </ul>
+                            <h3 class="text-lg font-medium mb-2 mt-4">Report Configuration</h3>
+                            <ul class="space-y-2">
+                                <li><Link :href="route('settings.report-submission.index')" class="text-gray-600 hover:text-indigo-600">Report Submission Rate</Link></li>
+                            </ul>
                         </div>
                         
                         <div v-if="page.props.auth.can.asset_manage || page.props.auth.can.setting_manage || page.props.auth.isAdmin">

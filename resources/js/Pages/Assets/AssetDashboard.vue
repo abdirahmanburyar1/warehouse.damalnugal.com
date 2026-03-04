@@ -306,6 +306,8 @@ const assetStatusData = computed(() => {
     return props.assetStats?.asset_status_data || {
         'In Use': 0,
         'Active': 0,
+        'Functioning': 0,
+        'Not functioning': 0,
         'Needs Maintenance': 0,
         'Pending Approval': 0,
         'Retired': 0,

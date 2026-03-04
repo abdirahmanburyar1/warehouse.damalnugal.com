@@ -47,6 +47,7 @@ use App\Http\Controllers\AssetDepreciationSettingsController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\EmailNotificationSettingController;
 use App\Http\Controllers\ReportScheduleController;
+use App\Http\Controllers\ReportSubmissionSettingController;
 use Maatwebsite\Excel\Facades\Excel;
 
 // Welcome route - accessible without authentication
@@ -152,6 +153,9 @@ Route::middleware(['auth', \App\Http\Middleware\TwoFactorAuth::class])->group(fu
         Route::get('/reports/facility-lmis-report', [ReportController::class, 'facilityLmisReport'])->name('reports.facility-lmis-report');
         Route::post('/reports/facility-lmis-report/store', [ReportController::class, 'storeFacilityLmisReport'])->name('reports.facility-lmis-report.store');
         Route::post('/reports/facility-lmis-report/submit', [ReportController::class, 'submitFacilityLmisReport'])->name('reports.facility-lmis-report.submit');
+        Route::post('/reports/facility-lmis-report/review', [ReportController::class, 'reviewFacilityLmisReport'])->name('reports.facility-lmis-report.review');
+        Route::post('/reports/facility-lmis-report/approve', [ReportController::class, 'approveFacilityLmisReport'])->name('reports.facility-lmis-report.approve');
+        Route::post('/reports/facility-lmis-report/reject', [ReportController::class, 'rejectFacilityLmisReport'])->name('reports.facility-lmis-report.reject');
         Route::post('/reports/facility-lmis-report/generate-from-movements', [ReportController::class, 'generateFacilityLmisReportFromMovements'])->name('reports.facility-lmis-report.generate-from-movements');
         Route::get('/reports/facility-lmis-report/create', [ReportController::class, 'createFacilityLmisReport'])->name('reports.facility-lmis-report.create');
     });
@@ -772,6 +776,10 @@ Route::controller(LocationController::class)
         Route::put('/report-schedules', [ReportScheduleController::class, 'update'])->name('settings.report-schedules.update');
         Route::post('/report-schedules/run-inventory-monthly-report', [ReportScheduleController::class, 'runInventoryMonthlyReportNow'])->name('settings.report-schedules.run-inventory-monthly-report');
         Route::post('/report-schedules/run-schedule', [ReportScheduleController::class, 'runScheduleNow'])->name('settings.report-schedules.run-schedule');
+
+        // Report Submission Rate (programmable: expected reports, ontime/late rules)
+        Route::get('/report-submission', [ReportSubmissionSettingController::class, 'index'])->name('settings.report-submission.index');
+        Route::put('/report-submission', [ReportSubmissionSettingController::class, 'update'])->name('settings.report-submission.update');
         
         // Logistic Companies
         Route::get('/logistics/companies', [LogisticCompanyController::class, 'index'])->name('settings.logistics.companies.index');

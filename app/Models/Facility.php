@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Facility extends Model
@@ -44,5 +45,15 @@ class Facility extends Model
     {
         return $this->hasMany(FacilityMonthlyReport::class);
     }
-    
+
+    /**
+     * Get products eligible for this facility type (from eligible_items).
+     * Used for LMIS report generation to create empty rows for products with no movements.
+     */
+    public function eligibleProducts(): BelongsToMany
+    {
+        return $this->belongsToMany(Product::class, 'eligible_items', 'facility_type', 'product_id', 'facility_type', 'id')
+            ->where('products.is_active', true)
+            ->orderBy('products.name');
+    }
 }

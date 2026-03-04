@@ -46,6 +46,7 @@ use App\Jobs\ProcessPhysicalCountApprovalJob;
 use App\Models\IssueQuantityReport;
 use App\Http\Resources\PhysicalCountReportResource;
 use App\Models\District;
+use App\Models\EmailNotificationSetting;
 use App\Models\Region;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -284,6 +285,16 @@ class ReportController extends Controller
             return response()->json(['success' => true, 'data' => $result]);
         }
 
+        if ($reportType === 'facility_monthly_consumption') {
+            if (!$request->filled('facility_id')) {
+                return response()->json([
+                    'success' => false,
+                    'data' => ['rows' => []],
+                    'message' => 'For Facility LMIS report, you must select Region, District, and Facility.',
+                ]);
+            }
+        }
+
         if ($reportType === 'expiry_report') {
             $hasFacilityOrWarehouse = $request->filled('facility_id') || $request->filled('warehouse_id');
             if (!$hasFacilityOrWarehouse) {
@@ -359,45 +370,47 @@ class ReportController extends Controller
         }
 
         $monthYear = null;
-        if ($request->filled('year') && $request->filled('month')) {
-            $monthYear = sprintf('%04d-%02d', (int) $request->year, (int) $request->month);
-        } elseif ($request->filled('year')) {
-            $monthYear = (string) $request->year;
-        }
 
-        // Warehouse Inventory Report: when validation fails still return one zero row so the table style shows
-        if ($reportType === 'warehouse_inventory') {
-            if ($request->filled('year') && !$request->filled('month')) {
+        if ($reportType === 'warehouse_inventory' || $reportType === 'facility_monthly_consumption') {
+            $reportPeriod = $request->input('report_period', 'monthly');
+            $year = $request->filled('year') ? (int) $request->year : null;
+            $month = $request->filled('month') ? (int) $request->month : null;
+            $reportLabel = $reportType === 'warehouse_inventory' ? 'Warehouse Inventory Report' : 'Facility LMIS report';
+            if (!$year || !$month) {
                 return response()->json([
                     'success' => true,
                     'data' => [$this->getWarehouseInventoryEmptyRow()],
-                    'message' => 'For Warehouse Inventory Report, please select both year and month (Report Period).',
+                    'message' => "For {$reportLabel}, please select Report Period, Year, and Month.",
                 ]);
             }
-            if (!$monthYear || strlen($monthYear) < 7) {
+            $validPeriodMonths = [
+                'monthly' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                'bi-monthly' => [1, 3, 5, 7, 9, 11],
+                'quarterly' => [1, 4, 7, 10],
+                'six_months' => [1, 7],
+                'yearly' => [1],
+            ];
+            $allowedMonths = $validPeriodMonths[$reportPeriod] ?? $validPeriodMonths['monthly'];
+            if (!in_array($month, $allowedMonths, true)) {
                 return response()->json([
                     'success' => true,
                     'data' => [$this->getWarehouseInventoryEmptyRow()],
-                    'message' => 'For Warehouse Inventory Report, please select Report Period (year and month).',
+                    'message' => 'For the selected Report Period, Month must be a valid period start (e.g. 1,4,7,10 for Quarterly).',
                 ]);
             }
-        }
-
-        // Facility LMIS report: require report period (year + month)
-        if ($reportType === 'facility_monthly_consumption') {
-            if ($request->filled('year') && !$request->filled('month')) {
-                return response()->json([
-                    'success' => true,
-                    'data' => [$this->getWarehouseInventoryEmptyRow()],
-                    'message' => 'For Facility LMIS report, please select both year and month (Report Period).',
-                ]);
+            $reportMonth = $this->getReportMonthForPeriod($reportPeriod, $month);
+            $periodStart = sprintf('%04d-%02d', $year, $month);
+            $periodEnd = sprintf('%04d-%02d', $year, $reportMonth);
+            if ($reportType === 'warehouse_inventory') {
+                $monthYear = $this->resolveWarehouseInventoryMonthYear($periodStart, $periodEnd, $reportPeriod);
+            } else {
+                $monthYear = $this->resolveFacilityLmisMonthYear($periodStart, $periodEnd);
             }
-            if (!$monthYear || strlen($monthYear) < 7) {
-                return response()->json([
-                    'success' => true,
-                    'data' => [$this->getWarehouseInventoryEmptyRow()],
-                    'message' => 'For Facility LMIS report, please select Report Period (year and month).',
-                ]);
+        } else {
+            if ($request->filled('year') && $request->filled('month')) {
+                $monthYear = sprintf('%04d-%02d', (int) $request->year, (int) $request->month);
+            } elseif ($request->filled('year')) {
+                $monthYear = (string) $request->year;
             }
         }
 
@@ -418,8 +431,7 @@ class ReportController extends Controller
             }
         }
         if ($reportType === 'facility_monthly_consumption' && is_array($data) && empty($data)) {
-            $data = [$this->getWarehouseInventoryEmptyRow()];
-            $message = 'No Facility LMIS report for this period/facility. Table shown with zeros.';
+            $message = 'No approved Facility LMIS report for this period/facility.';
         }
         if ($reportType === 'warehouse_inventory' && $monthYear) {
             $report = InventoryReport::where('month_year', $monthYear)->first();
@@ -439,6 +451,22 @@ class ReportController extends Controller
                 ];
             }
         }
+        if ($reportType === 'facility_monthly_consumption' && $monthYear && !empty($facilityIds)) {
+            $fmr = FacilityMonthlyReport::where('report_period', $monthYear)
+                ->whereIn('facility_id', $facilityIds)
+                ->where('status', 'approved')
+                ->with(['facility:id,name', 'approvedBy:id,name'])
+                ->first();
+            if ($fmr) {
+                $reportMeta = [
+                    'report_id' => $fmr->id,
+                    'facility_id' => $fmr->facility_id,
+                    'facility_name' => $fmr->facility?->name ?? null,
+                    'report_period' => $fmr->report_period,
+                    'report_status' => 'approved',
+                ];
+            }
+        }
 
         return response()->json(array_filter([
             'success' => true,
@@ -446,6 +474,81 @@ class ReportController extends Controller
             'message' => $message,
             'report_meta' => $reportMeta,
         ]));
+    }
+
+    /**
+     * Get date range [start, end] for report period + year + period start month.
+     * Used by order and transfer reports to filter by order_date / transfer_date.
+     *
+     * @return array{0: string|null, 1: string|null} [startDate, endDate] in Y-m-d, or [null, null] if insufficient params
+     */
+    private function getDateRangeForPeriod(Request $request): array
+    {
+        $year = $request->filled('year') ? (int) $request->year : null;
+        $month = $request->filled('month') ? (int) $request->month : null;
+        $reportPeriod = $request->input('report_period', 'monthly');
+
+        if (!$year || !$month) {
+            return [null, null];
+        }
+
+        $endMonth = $this->getReportMonthForPeriod($reportPeriod, $month);
+        $startDate = sprintf('%04d-%02d-01', $year, $month);
+        $endDate = Carbon::parse(sprintf('%04d-%02d-01', $year, $endMonth))->endOfMonth()->format('Y-m-d');
+
+        return [$startDate, $endDate];
+    }
+
+    /**
+     * For Facility LMIS: find the most recent report_period within the period that has a facility monthly report.
+     * Uses facility_monthly_reports.report_period (Y-m format). whereBetween for period range.
+     */
+    private function resolveFacilityLmisMonthYear(string $periodStart, string $periodEnd): string
+    {
+        if ($periodStart === $periodEnd) {
+            return $periodStart;
+        }
+        $report = FacilityMonthlyReport::whereBetween('report_period', [$periodStart, $periodEnd])
+            ->orderBy('report_period', 'desc')
+            ->first(['report_period']);
+        return $report ? $report->report_period : $periodEnd;
+    }
+
+    /**
+     * For warehouse inventory: find the most recent month_year within the period that has a report.
+     * E.g. Jan-Mar (2026-01 to 2026-03): if only 2026-02 exists, use it; if 2026-01,02,03 exist, use 2026-03.
+     */
+    private function resolveWarehouseInventoryMonthYear(string $periodStart, string $periodEnd, string $reportPeriod): string
+    {
+        if ($periodStart === $periodEnd) {
+            return $periodStart;
+        }
+        $report = InventoryReport::whereBetween('month_year', [$periodStart, $periodEnd])
+            ->orderBy('month_year', 'desc')
+            ->first(['month_year']);
+        return $report ? $report->month_year : $periodEnd;
+    }
+
+    /**
+     * Map report period + period start month to the report month (last month of period).
+     * Inventory reports are stored per month; we show the end-of-period month for non-monthly.
+     */
+    private function getReportMonthForPeriod(string $reportPeriod, int $periodStartMonth): int
+    {
+        switch ($reportPeriod) {
+            case 'monthly':
+                return $periodStartMonth;
+            case 'bi-monthly':
+                return $periodStartMonth + 1; // Jan-Feb → 2, Mar-Apr → 4, ...
+            case 'quarterly':
+                return $periodStartMonth + 2; // Jan-Mar → 3, Apr-Jun → 6, ...
+            case 'six_months':
+                return $periodStartMonth === 1 ? 6 : 12; // Jan-Jun → 6, Jul-Dec → 12
+            case 'yearly':
+                return 12;
+            default:
+                return $periodStartMonth;
+        }
     }
 
     /**
@@ -610,21 +713,25 @@ class ReportController extends Controller
     /**
      * Report Submission Rate: per-facility expected vs actual submitted facility_monthly_reports,
      * with on-time vs late breakdown. Uses submitted_at and report_period.
-     * Filter: report_period = monthly|bi-monthly|quarterly|six_months|yearly (expected reports per facility).
+     * Config from Settings → Report Submission Rate (expected reports, ontime/late rules).
      */
     private function getReportSubmissionRateData(Request $request, array $facilityIds): array
     {
         $year = (int) $request->year;
         $periodType = $request->input('report_period', 'monthly');
 
-        $expectedByPeriod = [
+        $config = EmailNotificationSetting::getReportSubmissionRateConfig();
+        $expectedPerPeriod = (int) ($config['expected_reports'] ?? 1);
+        $periodsPerYear = [
             'monthly' => 12,
             'bi-monthly' => 6,
             'quarterly' => 4,
             'six_months' => 2,
             'yearly' => 1,
         ];
-        $expectedCount = $expectedByPeriod[$periodType] ?? 12;
+        $expectedCount = ($periodsPerYear[$periodType] ?? 12) * $expectedPerPeriod;
+
+        $ontimeDay = (int) ($config['ontime_day'] ?? 5);
 
         $facilities = Facility::whereIn('id', $facilityIds)->orderBy('name')->get(['id', 'name']);
         $rows = [];
@@ -640,8 +747,9 @@ class ReportController extends Controller
             $actualCount = $reports->count();
             $onTimeCount = 0;
             foreach ($reports as $r) {
-                $periodEnd = Carbon::parse($r->report_period . '-01')->endOfMonth();
-                if ($r->submitted_at && $r->submitted_at->lte($periodEnd)) {
+                $nextMonth = Carbon::parse($r->report_period . '-01')->addMonth();
+$deadline = $nextMonth->copy()->day(min($ontimeDay, $nextMonth->daysInMonth))->endOfDay();
+                if ($r->submitted_at && $r->submitted_at->lte($deadline)) {
                     $onTimeCount++;
                 }
             }
@@ -1076,10 +1184,9 @@ class ReportController extends Controller
         }
 
         $orderQuery = Order::query()->whereIn('facility_id', $facilityIds);
-        if ($request->filled('year') && $request->filled('month')) {
-            $monthStart = sprintf('%04d-%02d-01', (int) $request->year, (int) $request->month);
-            $monthEnd = Carbon::parse($monthStart)->endOfMonth()->format('Y-m-d');
-            $orderQuery->whereBetween('order_date', [$monthStart, $monthEnd]);
+        [$dateStart, $dateEnd] = $this->getDateRangeForPeriod($request);
+        if ($dateStart && $dateEnd) {
+            $orderQuery->whereBetween('order_date', [$dateStart, $dateEnd]);
         } elseif ($request->filled('year')) {
             $orderQuery->whereYear('order_date', (int) $request->year);
         }
@@ -1101,10 +1208,9 @@ class ReportController extends Controller
             $rejectedPct = $totalOrders > 0 ? round($rejectedOrders / $totalOrders * 100, 1) : 0;
 
             $receivedOrderIds = Order::query()->where('facility_id', $facility->id)->where('status', 'received');
-            if ($request->filled('year') && $request->filled('month')) {
-                $monthStart = sprintf('%04d-%02d-01', (int) $request->year, (int) $request->month);
-                $monthEnd = Carbon::parse($monthStart)->endOfMonth()->format('Y-m-d');
-                $receivedOrderIds->whereBetween('order_date', [$monthStart, $monthEnd]);
+            [$dateStart, $dateEnd] = $this->getDateRangeForPeriod($request);
+            if ($dateStart && $dateEnd) {
+                $receivedOrderIds->whereBetween('order_date', [$dateStart, $dateEnd]);
             } elseif ($request->filled('year')) {
                 $receivedOrderIds->whereYear('order_date', (int) $request->year);
             }
@@ -1306,10 +1412,9 @@ class ReportController extends Controller
         $baseQuery = Transfer::query()->where(function ($q) use ($facilityIds) {
             $q->whereIn('from_facility_id', $facilityIds)->orWhereIn('to_facility_id', $facilityIds);
         });
-        if ($request->filled('year') && $request->filled('month')) {
-            $monthStart = sprintf('%04d-%02d-01', (int) $request->year, (int) $request->month);
-            $monthEnd = Carbon::parse($monthStart)->endOfMonth()->format('Y-m-d');
-            $baseQuery->whereBetween('transfer_date', [$monthStart, $monthEnd]);
+        [$dateStart, $dateEnd] = $this->getDateRangeForPeriod($request);
+        if ($dateStart && $dateEnd) {
+            $baseQuery->whereBetween('transfer_date', [$dateStart, $dateEnd]);
         } elseif ($request->filled('year')) {
             $baseQuery->whereYear('transfer_date', (int) $request->year);
         }
@@ -1680,8 +1785,8 @@ class ReportController extends Controller
         $summaryTotal = 0;
         $summaryByCategory = [];
 
-        $functioningStatuses = ['Good', 'in_use', 'pending_approval'];
-        $notFunctioningStatuses = ['Non-functional', 'maintenance', 'retired', 'disposed'];
+        $functioningStatuses = ['Good', 'in_use', 'pending_approval', 'functioning'];
+        $notFunctioningStatuses = ['Non-functional', 'maintenance', 'retired', 'disposed', 'not_functioning'];
 
         foreach ($facilities as $facility) {
             $baseQuery = AssetItem::query()
@@ -2106,9 +2211,9 @@ class ReportController extends Controller
     }
 
     /**
-     * Facility LMIS report: uses facility_monthly_reports, facility_monthly_report_items, and
-     * facility_inventory_movements for batch-level detail (Batch No., Expiry Date).
-     * Same row shape and product grouping as warehouse inventory (rowspan, is_first_batch, report_item_id).
+     * Facility LMIS report: product-level rows from facility_monthly_reports / facility_monthly_report_items.
+     * AMC (Average Monthly Consumption) from monthly_consumption_reports / monthly_consumption_items via AmcCalculationService.
+     * Link: facility_id + product_id. monthly_consumption_reports.month_year = facility_monthly_reports.report_period (Y-m).
      */
     private function unifiedRowsFromFacilityMonthlyConsumption(?string $monthYear, array $facilityIds, Request $request): array
     {
@@ -2118,6 +2223,7 @@ class ReportController extends Controller
         $reports = FacilityMonthlyReport::query()
             ->where('report_period', $monthYear)
             ->whereIn('facility_id', $facilityIds)
+            ->whereIn('status', ['submitted', 'approved', 'rejected', 'reviewed'])
             ->with(['facility:id,name'])
             ->get();
         if ($reports->isEmpty()) {
@@ -2128,144 +2234,58 @@ class ReportController extends Controller
         $reportItems = FacilityMonthlyReportItem::query()
             ->whereIn('parent_id', $reportIds)
             ->with([
-                'product' => fn ($q) => $q->select('id', 'name', 'category_id', 'dosage_id')
+                'product' => fn ($q) => $q->select('id', 'name', 'productID', 'category_id', 'dosage_id')
                     ->with(['category:id,name', 'dosage:id,name']),
             ])
             ->orderBy('product_id')
             ->orderBy('id')
             ->get();
-        foreach ($reportItems as $item) {
-            $item->setRelation('report', $reportById->get($item->parent_id));
-        }
 
-        // Month bounds for movements (facility_inventory_movements feeds batch-level detail)
-        $monthStart = $monthYear . '-01 00:00:00';
-        $monthEnd = (new \DateTimeImmutable($monthYear . '-01'))->modify('last day of this month')->format('Y-m-d') . ' 23:59:59';
+        // Get AMC per facility+product from monthly_consumption_items (via AmcCalculationService)
+        $amcByFacilityProduct = [];
+        foreach ($reports as $report) {
+            $facilityId = (int) $report->facility_id;
+            $productIds = $reportItems->where('parent_id', $report->id)->pluck('product_id')->unique()->values()->toArray();
+            if (! empty($productIds)) {
+                $amcResults = app(\App\Services\AmcCalculationService::class)->calculateAmcForProducts(
+                    $facilityId,
+                    $productIds,
+                    $monthYear
+                );
+                foreach ($amcResults as $productId => $result) {
+                    $amcByFacilityProduct[$facilityId . '-' . $productId] = $result['amc'] ?? 0;
+                }
+            }
+        }
 
         $rows = [];
         foreach ($reportItems as $item) {
-            $report = $item->report;
+            $report = $reportById->get($item->parent_id);
             $facilityId = $report ? (int) $report->facility_id : 0;
             $facilityName = $report && $report->relationLoaded('facility') ? ($report->facility->name ?? null) : null;
             $productId = $item->product_id;
-            $productName = $item->product?->name ?? '';
-            $category = $item->product?->category?->name ?? '';
-            $uom = $item->product?->dosage?->name ?? '';
-            $reportBeginningBalance = (int) ($item->opening_balance ?? 0);
-            $reportReceivedQty = (int) ($item->stock_received ?? 0);
-            $reportIssuedQty = (int) ($item->stock_issued ?? 0);
-            $adjPos = (int) ($item->positive_adjustments ?? 0);
-            $adjNeg = (int) ($item->negative_adjustments ?? 0);
-            $reportClosingBalance = (int) ($item->closing_balance ?? 0);
-            $stockoutDays = (int) ($item->stockout_days ?? 0);
+            $amc = $amcByFacilityProduct[$facilityId . '-' . $productId] ?? 0;
 
-            // Batch-level rows from facility_inventory_movements for this facility + product + month
-            $batchAggregates = FacilityInventoryMovement::query()
-                ->where('facility_id', $facilityId)
-                ->where('product_id', $productId)
-                ->whereBetween('movement_date', [$monthStart, $monthEnd])
-                ->selectRaw('batch_number, expiry_date, SUM(facility_received_quantity) as received, SUM(facility_issued_quantity) as issued')
-                ->groupBy('batch_number', 'expiry_date')
-                ->get();
-
-            if ($batchAggregates->isEmpty()) {
-                // No movements with batch info: one product-level row (batch details empty)
-                $rows[] = [
-                    'product_id' => $productId,
-                    'facility_id' => $facilityId,
-                    'item' => $productName,
-                    'category' => $category,
-                    'uom' => $uom,
-                    'batch_no' => null,
-                    'expiry_date' => null,
-                    'beginning_balance' => $reportBeginningBalance,
-                    'qty_received' => $reportReceivedQty,
-                    'qty_issued' => $reportIssuedQty,
-                    'adjustment_neg' => $adjNeg,
-                    'adjustment_pos' => $adjPos,
-                    'closing_balance' => $reportClosingBalance,
-                    'warehouse_name' => null,
-                    'facility_name' => $facilityName,
-                    'rowspan' => 1,
-                    'is_first_batch' => true,
-                    'report_item_id' => $item->id,
-                    'total_closing_balance' => $reportClosingBalance,
-                    'amc' => 0,
-                    'mos' => '–',
-                    'stockout_days' => $stockoutDays,
-                    'unit_cost' => 0.0,
-                    'total_cost' => 0.0,
-                ];
-                continue;
-            }
-
-            // One row per batch; batch_no and expiry_date from movements; quantities per batch
-            $batchList = $batchAggregates->map(function ($b) {
-                $expiry = $b->expiry_date;
-                if ($expiry instanceof \DateTimeInterface) {
-                    $expiry = $expiry->format('Y-m-d');
-                }
-                $expiry = $expiry ? (string) $expiry : null;
-                $received = (int) round((float) $b->received);
-                $issued = (int) round((float) $b->issued);
-                return [
-                    'batch_no' => $b->batch_number ? (string) $b->batch_number : null,
-                    'expiry_date' => $expiry,
-                    'qty_received' => $received,
-                    'qty_issued' => $issued,
-                    'closing_balance' => $received - $issued,
-                ];
-            });
-            $rowspan = $batchList->count();
-            $totalClosingBalance = $reportClosingBalance;
-
-            foreach ($batchList->values() as $idx => $batch) {
-                $isFirst = $idx === 0;
-                $rows[] = [
-                    'product_id' => $productId,
-                    'facility_id' => $facilityId,
-                    'item' => $productName,
-                    'category' => $category,
-                    'uom' => $uom,
-                    'batch_no' => $batch['batch_no'],
-                    'expiry_date' => $batch['expiry_date'],
-                    'beginning_balance' => $isFirst ? $reportBeginningBalance : 0,
-                    'qty_received' => $batch['qty_received'],
-                    'qty_issued' => $batch['qty_issued'],
-                    'adjustment_neg' => $isFirst ? $adjNeg : 0,
-                    'adjustment_pos' => $isFirst ? $adjPos : 0,
-                    'closing_balance' => $batch['closing_balance'],
-                    'warehouse_name' => null,
-                    'facility_name' => $facilityName,
-                    'rowspan' => $rowspan,
-                    'is_first_batch' => $isFirst,
-                    'report_item_id' => $item->id,
-                    'total_closing_balance' => $totalClosingBalance,
-                    'amc' => 0,
-                    'mos' => '–',
-                    'stockout_days' => $stockoutDays,
-                    'unit_cost' => 0.0,
-                    'total_cost' => 0.0,
-                ];
-            }
+            $rows[] = [
+                'id' => $item->id,
+                'product_id' => $productId,
+                'item' => $item->product?->name ?? '',
+                'product_id_code' => $item->product?->productID ?? '',
+                'category' => $item->product?->category?->name ?? '',
+                'uom' => $item->product?->dosage?->name ?? '',
+                'opening_balance' => (float) ($item->opening_balance ?? 0),
+                'stock_received' => (float) ($item->stock_received ?? 0),
+                'stock_issued' => (float) ($item->stock_issued ?? 0),
+                'positive_adjustments' => (float) ($item->positive_adjustments ?? 0),
+                'negative_adjustments' => (float) ($item->negative_adjustments ?? 0),
+                'closing_balance' => (float) ($item->closing_balance ?? 0),
+                'stockout_days' => (int) ($item->stockout_days ?? 0),
+                'amc' => (float) $amc,
+                'facility_name' => $facilityName,
+            ];
         }
 
-        // Set rowspan and is_first_batch by grouping (facility_id, product_id)
-        $groupKey = function ($r) {
-            return $r['facility_id'] . '-' . $r['product_id'];
-        };
-        $byGroup = collect($rows)->groupBy($groupKey);
-        foreach ($rows as $i => $row) {
-            $key = $groupKey($row);
-            $group = $byGroup->get($key);
-            $rows[$i]['rowspan'] = $group->count();
-            $rows[$i]['is_first_batch'] = $group->first() === $row;
-        }
-        foreach ($rows as $i => $row) {
-            unset($rows[$i]['facility_id']);
-        }
-
-        return array_values($rows);
+        return $rows;
     }
     
     public function physicalCountReport(Request $request){
@@ -3098,28 +3118,35 @@ class ReportController extends Controller
 
     public function facilityLmisReport(Request $request)
     {
-        // Get all facilities for the dropdown
-        $facilities = Facility::select('id', 'name', 'facility_type', 'district', 'region')
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get();
-        
-        // Get all products for filtering
-        $products = Product::select('id', 'name', 'productID')
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get();
-        
+        $regions = Region::orderBy('name')->get(['id', 'name']);
+        $districts = District::orderBy('name')->get(['id', 'name', 'region']);
+
+        $facilities = collect();
+        $products = collect();
         $reports = null;
-        
-        // If filters are provided, get the report data
-        if ($request->filled(['month_year', 'facility_id'])) {
+
+        // Only load facilities when region and district are selected (avoids 1000+ facility load)
+        if ($request->filled(['region_id', 'district_id'])) {
+            $regionName = Region::find($request->region_id)?->name;
+            $districtName = District::find($request->district_id)?->name;
+            if ($regionName && $districtName) {
+                $facilities = Facility::select('id', 'name', 'facility_type', 'district', 'region')
+                    ->where('is_active', true)
+                    ->where('region', $regionName)
+                    ->where('district', $districtName)
+                    ->orderBy('name')
+                    ->get();
+            }
+        }
+
+        // Only load report and products when region, district, facility, and report period are all selected
+        if ($request->filled(['region_id', 'district_id', 'facility_id', 'month_year'])) {
             $facilityId = $request->facility_id;
             $monthYear = $request->month_year;
-            
-            // Get or create facility monthly report
+
             $reports = FacilityMonthlyReport::where('facility_id', $facilityId)
                 ->where('report_period', $monthYear)
+                ->whereIn('status', ['submitted', 'approved', 'rejected', 'reviewed'])
                 ->with([
                     'items.product.category:id,name',
                     'items.product.dosage:id,name',
@@ -3130,13 +3157,34 @@ class ReportController extends Controller
                     'rejectedBy:id,name'
                 ])
                 ->first();
+
+            if ($reports) {
+                $products = Product::select('id', 'name', 'productID')
+                    ->where('is_active', true)
+                    ->orderBy('name')
+                    ->get();
+
+                // Attach AMC from monthly_consumption_reports/items via AmcCalculationService
+                $productIds = $reports->items->pluck('product_id')->unique()->values()->toArray();
+                $amcResults = app(\App\Services\AmcCalculationService::class)->calculateAmcForProducts(
+                    $reports->facility_id,
+                    $productIds,
+                    $reports->report_period ?? $monthYear
+                );
+                foreach ($reports->items as $item) {
+                    $result = $amcResults[$item->product_id] ?? [];
+                    $item->setAttribute('amc', is_array($result) ? ($result['amc'] ?? 0) : $result);
+                }
+            }
         }
-        
+
         return inertia('Report/FacilityLmisReport', [
             'reports' => $reports,
+            'regions' => $regions,
+            'districts' => $districts,
             'facilities' => $facilities,
             'products' => $products,
-            'filters' => $request->only(['month_year', 'status', 'facility_id', 'product_id']),
+            'filters' => $request->only(['month_year', 'region_id', 'district_id', 'facility_id', 'product_id']),
         ]);
     }
     
@@ -3260,7 +3308,108 @@ class ReportController extends Controller
             ], 500);
         }
     }
-    
+
+    /**
+     * Review facility LMIS report (submitted → reviewed).
+     */
+    public function reviewFacilityLmisReport(Request $request)
+    {
+        $request->validate([
+            'year' => 'required|integer',
+            'month' => 'required|integer',
+            'facility_id' => 'required|exists:facilities,id',
+        ]);
+
+        try {
+            return DB::transaction(function () use ($request) {
+                $reportPeriod = sprintf('%04d-%02d', $request->year, $request->month);
+                $report = FacilityMonthlyReport::where('facility_id', $request->facility_id)
+                    ->where('report_period', $reportPeriod)
+                    ->where('status', 'submitted')
+                    ->firstOrFail();
+
+                $report->update([
+                    'status' => 'reviewed',
+                    'reviewed_at' => now(),
+                    'reviewed_by' => auth()->id(),
+                ]);
+
+                return response()->json(['success' => true, 'message' => 'Report marked under review.']);
+            });
+        } catch (\Exception $e) {
+            Log::error('Failed to review facility LMIS report', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Approve facility LMIS report (reviewed → approved).
+     */
+    public function approveFacilityLmisReport(Request $request)
+    {
+        $request->validate([
+            'year' => 'required|integer',
+            'month' => 'required|integer',
+            'facility_id' => 'required|exists:facilities,id',
+        ]);
+
+        try {
+            return DB::transaction(function () use ($request) {
+                $reportPeriod = sprintf('%04d-%02d', $request->year, $request->month);
+                $report = FacilityMonthlyReport::where('facility_id', $request->facility_id)
+                    ->where('report_period', $reportPeriod)
+                    ->where('status', 'reviewed')
+                    ->firstOrFail();
+
+                $report->update([
+                    'status' => 'approved',
+                    'approved_at' => now(),
+                    'approved_by' => auth()->id(),
+                ]);
+
+                return response()->json(['success' => true, 'message' => 'Report approved.']);
+            });
+        } catch (\Exception $e) {
+            Log::error('Failed to approve facility LMIS report', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Reject facility LMIS report (submitted or reviewed → rejected).
+     */
+    public function rejectFacilityLmisReport(Request $request)
+    {
+        $request->validate([
+            'year' => 'required|integer',
+            'month' => 'required|integer',
+            'facility_id' => 'required|exists:facilities,id',
+            'rejection_reason' => 'nullable|string|max:2000',
+        ]);
+
+        try {
+            return DB::transaction(function () use ($request) {
+                $reportPeriod = sprintf('%04d-%02d', $request->year, $request->month);
+                $report = FacilityMonthlyReport::where('facility_id', $request->facility_id)
+                    ->where('report_period', $reportPeriod)
+                    ->whereIn('status', ['submitted', 'reviewed'])
+                    ->firstOrFail();
+
+                $report->update([
+                    'status' => 'rejected',
+                    'rejected_at' => now(),
+                    'rejected_by' => auth()->id(),
+                    'comments' => $request->rejection_reason ?: $report->comments,
+                ]);
+
+                return response()->json(['success' => true, 'message' => 'Report rejected.']);
+            });
+        } catch (\Exception $e) {
+            Log::error('Failed to reject facility LMIS report', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
     /**
      * Generate facility LMIS report from movements for one facility and period.
      * Used by HTTP action and by the scheduled command. Returns data array or ['skipped' => true, 'reason' => ...].
@@ -3280,6 +3429,10 @@ class ReportController extends Controller
         }
 
         return DB::transaction(function () use ($facilityId, $year, $month, $reportPeriod) {
+            $startDate = Carbon::create($year, $month, 1)->startOfMonth();
+            $endDate = Carbon::create($year, $month, 1)->endOfMonth();
+            $previousMonth = $startDate->copy()->subMonth();
+
             $monthlyReport = FacilityMonthlyReport::firstOrCreate([
                 'facility_id' => $facilityId,
                 'report_period' => $reportPeriod,
@@ -3288,20 +3441,33 @@ class ReportController extends Controller
             ]);
 
             $facility = Facility::findOrFail($facilityId);
-            $eligibleProducts = $facility->eligibleProducts()->get();
+
+            // Opening balances from previous month's closing balance (align with facilities LMIS)
+            $previousReportItems = FacilityMonthlyReportItem::whereHas('report', function ($q) use ($facilityId, $previousMonth) {
+                $q->where('facility_id', $facilityId)
+                    ->where('report_period', $previousMonth->format('Y-m'));
+            })->get()->keyBy('product_id');
+
+            // Movements for the month grouped by product (align with facilities)
+            $movements = FacilityInventoryMovement::where('facility_id', $facilityId)
+                ->whereBetween('movement_date', [$startDate, $endDate])
+                ->with('product')
+                ->get()
+                ->groupBy('product_id');
+
             $createdCount = 0;
             $updatedCount = 0;
-            $movementsProcessed = 0;
 
-            foreach ($eligibleProducts as $product) {
-                $startDate = Carbon::create($year, $month, 1)->startOfMonth();
-                $endDate = Carbon::create($year, $month, 1)->endOfMonth();
-                $openingBalance = $this->calculateOpeningBalance($facilityId, $product->id, $startDate);
-                $stockReceived = $this->calculateStockReceived($facilityId, $product->id, $startDate, $endDate);
-                $stockIssued = $this->calculateStockIssued($facilityId, $product->id, $startDate, $endDate);
+            // 1. Process products with movements
+            foreach ($movements as $productId => $productMovements) {
+                $openingBalance = isset($previousReportItems[$productId])
+                    ? (float) $previousReportItems[$productId]->closing_balance
+                    : 0;
+                $stockReceived = (float) $productMovements->where('movement_type', 'facility_received')->sum('facility_received_quantity');
+                $stockIssued = (float) $productMovements->where('movement_type', 'facility_issued')->sum('facility_issued_quantity');
                 $closingBalance = $openingBalance + $stockReceived - $stockIssued;
                 $reportData = [
-                    'product_id' => $product->id,
+                    'product_id' => $productId,
                     'opening_balance' => $openingBalance,
                     'stock_received' => $stockReceived,
                     'stock_issued' => $stockIssued,
@@ -3310,7 +3476,7 @@ class ReportController extends Controller
                     'closing_balance' => $closingBalance,
                     'stockout_days' => 0,
                 ];
-                $existingItem = $monthlyReport->items()->where('product_id', $product->id)->first();
+                $existingItem = $monthlyReport->items()->where('product_id', $productId)->first();
                 if ($existingItem) {
                     $existingItem->update($reportData);
                     $updatedCount++;
@@ -3318,14 +3484,43 @@ class ReportController extends Controller
                     $monthlyReport->items()->create($reportData);
                     $createdCount++;
                 }
-                $movementsProcessed++;
+            }
+
+            // 2. Create empty items for eligible products with no movements (align with facilities)
+            $eligibleProducts = $facility->eligibleProducts()->select('products.id', 'products.name')->get();
+            $movementProductIds = $movements->keys()->toArray();
+
+            foreach ($eligibleProducts as $product) {
+                if (! in_array($product->id, $movementProductIds)) {
+                    $openingBalance = isset($previousReportItems[$product->id])
+                        ? (float) $previousReportItems[$product->id]->closing_balance
+                        : 0;
+                    $reportData = [
+                        'product_id' => $product->id,
+                        'opening_balance' => $openingBalance,
+                        'stock_received' => 0,
+                        'stock_issued' => 0,
+                        'positive_adjustments' => 0,
+                        'negative_adjustments' => 0,
+                        'closing_balance' => $openingBalance,
+                        'stockout_days' => 0,
+                    ];
+                    $existingItem = $monthlyReport->items()->where('product_id', $product->id)->first();
+                    if ($existingItem) {
+                        $existingItem->update($reportData);
+                        $updatedCount++;
+                    } else {
+                        $monthlyReport->items()->create($reportData);
+                        $createdCount++;
+                    }
+                }
             }
 
             return [
                 'created_count' => $createdCount,
                 'updated_count' => $updatedCount,
-                'total_products' => $eligibleProducts->count(),
-                'movements_processed' => $movementsProcessed,
+                'total_products' => $movements->count() + $eligibleProducts->filter(fn ($p) => ! in_array($p->id, $movementProductIds))->count(),
+                'movements_processed' => $movements->count(),
                 'report_id' => $monthlyReport->id,
             ];
         });
@@ -3411,62 +3606,4 @@ class ReportController extends Controller
         ]);
     }
     
-    /**
-     * Helper method to calculate opening balance
-     */
-    private function calculateOpeningBalance($facilityId, $productId, $startDate)
-    {
-        // This is a simplified calculation - in practice, you might need more complex logic
-        // to get the actual opening balance from inventory or previous reports
-        return 0;
-    }
-    
-    /**
-     * Helper method to calculate stock received
-     */
-    private function calculateStockReceived($facilityId, $productId, $startDate, $endDate)
-    {
-        // Calculate received quantities from transfers and orders
-        $transfersReceived = DB::table('transfer_items')
-            ->join('transfers', 'transfers.id', '=', 'transfer_items.transfer_id')
-            ->where('transfers.to_facility_id', $facilityId)
-            ->where('transfer_items.product_id', $productId)
-            ->where('transfers.status', 'delivered')
-            ->whereBetween('transfers.delivered_at', [$startDate, $endDate])
-            ->sum('transfer_items.received_quantity');
-            
-        $ordersReceived = DB::table('order_items')
-            ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->where('orders.facility_id', $facilityId)
-            ->where('order_items.product_id', $productId)
-            ->where('orders.status', 'received')
-            ->whereBetween('orders.updated_at', [$startDate, $endDate])
-            ->sum('order_items.received_quantity');
-        
-        return ($transfersReceived ?? 0) + ($ordersReceived ?? 0);
-    }
-    
-    /**
-     * Helper method to calculate stock issued
-     */
-    private function calculateStockIssued($facilityId, $productId, $startDate, $endDate)
-    {
-        // Calculate issued quantities from dispenses and transfers out
-        $dispenseIssued = DB::table('dispence_items')
-            ->join('dispences', 'dispences.id', '=', 'dispence_items.dispence_id')
-            ->where('dispences.facility_id', $facilityId)
-            ->where('dispence_items.product_id', $productId)
-            ->whereBetween('dispences.created_at', [$startDate, $endDate])
-            ->sum('dispence_items.quantity');
-            
-        $transfersIssued = DB::table('transfer_items')
-            ->join('transfers', 'transfers.id', '=', 'transfer_items.transfer_id')
-            ->where('transfers.from_facility_id', $facilityId)
-            ->where('transfer_items.product_id', $productId)
-            ->where('transfers.status', 'delivered')
-            ->whereBetween('transfers.created_at', [$startDate, $endDate])
-            ->sum('transfer_items.allocated_quantity');
-        
-        return ($dispenseIssued ?? 0) + ($transfersIssued ?? 0);
-    }
 }

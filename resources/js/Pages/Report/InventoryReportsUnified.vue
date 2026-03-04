@@ -38,15 +38,21 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">
-                            {{ isProductReport ? 'Select Facility' : 'Select Warehouse/Facility Name' }}
+                            {{ isWarehouseInventoryReport ? 'Warehouse' : (isProductReport || isFacilityLmisReport ? 'Select Facility' : 'Select Warehouse/Facility Name') }}
+                            <span v-if="isFacilityLmisReport" class="text-red-500">*</span>
                         </label>
                         <select
                             v-model="filters.warehouse_or_facility"
                             class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                            :disabled="!filters.region_id || !filters.district_id"
+                            :disabled="!isWarehouseInventoryReport && (!filters.region_id || !filters.district_id)"
                         >
-                            <option :value="''">{{ !filters.region_id ? 'Select Region first' : !filters.district_id ? 'Select District first' : (isProductReport ? 'Facility' : 'Warehouse/Facility') }}</option>
-                            <template v-if="isProductReport">
+                            <option :value="''">{{ isWarehouseInventoryReport ? 'All Warehouses' : (!filters.region_id ? 'Select Region first' : !filters.district_id ? 'Select District first' : (isProductReport || isFacilityLmisReport ? 'Select facility' : 'Warehouse/Facility')) }}</option>
+                            <template v-if="isWarehouseInventoryReport">
+                                <option v-for="w in warehousesForInventory" :key="'w-' + w.id" :value="'warehouse:' + w.id">
+                                    {{ w.name }}
+                                </option>
+                            </template>
+                            <template v-else-if="isProductReport || isFacilityLmisReport">
                                 <option v-for="f in filteredFacilities" :key="'f-' + f.id" :value="'facility:' + f.id">
                                     {{ f.name }}
                                 </option>
@@ -75,7 +81,7 @@
                             <option v-for="rt in reportTypes" :key="rt.value" :value="rt.value">{{ rt.label }}</option>
                         </select>
                     </div>
-                    <!-- Report Period column: Report Period (top), Year + Month (one row) -->
+                    <!-- Report Period column: Report Period (top), Year + Month/Period (one row); label dynamic by report_period -->
                     <div class="flex flex-col gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Report Period</label>
@@ -102,8 +108,8 @@
                                     <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
                                 </select>
                             </div>
-                            <div v-if="periodOptions.length > 1" class="flex-1 min-w-[100px]">
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Month</label>
+                            <div class="flex-1 min-w-[100px]">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">{{ periodLabel }}</label>
                                 <select
                                     v-model="filters.periodValue"
                                     class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2"
@@ -125,12 +131,15 @@
                     <button
                         type="button"
                         @click="generateReport"
-                        :disabled="generating"
+                        :disabled="generating || (isFacilityLmisReport && !hasFacilityLmisRequiredFilters)"
                         class="inline-flex justify-center items-center px-6 py-2.5 bg-emerald-600 border border-transparent rounded-md font-semibold text-sm text-white uppercase tracking-widest hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 transition ease-in-out duration-150"
                     >
                         <span v-if="generating">Generating...</span>
                         <span v-else>Generate Report</span>
                     </button>
+                    <p v-if="isFacilityLmisReport && !hasFacilityLmisRequiredFilters" class="mt-2 text-xs text-amber-600">
+                        Select Region, District, Facility, and Report Period (Year + Month) to generate the Facility LMIS report.
+                    </p>
                 </div>
             </div>
 
@@ -161,13 +170,13 @@
                 <div v-else-if="!hasAnyData && hasGenerated" class="p-8 text-center text-gray-600 max-w-xl mx-auto">
                     <p>{{ reportMessage || 'No data found for the selected filters. Try a different report type or period.' }}</p>
                     <p v-if="filters.report_type === 'warehouse_inventory'" class="mt-3 text-sm text-gray-500">
-                        For Warehouse Inventory Report: select Report Period (year and month), then Generate Report. You may optionally filter by Region, District, or Warehouse. If you see no data, generate the monthly reports first in Settings → Report Schedules (Monthly received quantities → Issue quantities → Inventory monthly report).
+                        For Warehouse Inventory Report: select Report Period (year and month), then Generate Report. Filtered by report period only. If you see no data, generate the monthly reports first in Settings → Report Schedules (Monthly received quantities → Issue quantities → Inventory monthly report).
                     </p>
                     <p v-else-if="filters.report_type === 'facility_monthly_consumption'" class="mt-3 text-sm text-gray-500">
-                        For Facility LMIS report: select Report Period (year and month) and at least one Facility (or Region/District), then Generate Report. Data comes from facility monthly reports for the selected period.
+                        For Facility LMIS report: select Region, District, then Facility (required), and Report Period (Year + Month). Only submitted, reviewed, approved, or rejected reports are shown (drafts excluded).
                     </p>
                     <p v-else-if="filters.report_type === 'report_submission_rate'" class="mt-3 text-sm text-gray-500">
-                        Select Report Period (monthly, bi-monthly, quarterly, six months, or yearly), Year and Month, and at least one Region, District or Facility. Data is based on facility monthly report submission dates.
+                        Select Report Period, Year, and at least one Region, District or Facility. Data is based on <code class="bg-slate-100 px-1 rounded text-xs">facility_monthly_reports.submitted_at</code>. Configure expected reports and ontime/late rules in <Link :href="route('settings.report-submission.index')" class="font-medium text-indigo-600 hover:text-indigo-800">Settings → Report Submission Rate</Link>.
                     </p>
                 </div>
 
@@ -979,7 +988,7 @@
                     </div>
                 </div>
 
-                <!-- Warehouse Inventory: approval workflow bar (from inventory_report) -->
+                <!-- Warehouse Inventory: view-only status bar -->
                 <div v-if="filters.report_type === 'warehouse_inventory' && warehouseReportMeta" class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
                     <span class="text-sm font-medium text-gray-700">Report status:</span>
                     <span
@@ -998,59 +1007,57 @@
                         <span class="text-sm text-gray-500">Rejection reason:</span>
                         <span class="text-sm text-gray-700">{{ warehouseReportMeta.rejection_reason }}</span>
                     </span>
-                    <div class="ml-auto flex flex-wrap items-center gap-2">
-                        <button
-                            v-if="warehouseReportMeta.report_can_submit"
-                            type="button"
-                            class="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-                            :disabled="workflowActionLoading"
-                            @click="workflowAction('submit')"
-                        >
-                            Submit for review
-                        </button>
-                        <button
-                            v-if="warehouseReportMeta.report_can_review"
-                            type="button"
-                            class="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
-                            :disabled="workflowActionLoading"
-                            @click="workflowAction('review')"
-                        >
-                            Mark under review
-                        </button>
-                        <button
-                            v-if="warehouseReportMeta.report_can_approve_reject"
-                            type="button"
-                            class="rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700"
-                            :disabled="workflowActionLoading"
-                            @click="workflowAction('approve')"
-                        >
-                            Approve
-                        </button>
-                        <button
-                            v-if="warehouseReportMeta.report_can_approve_reject"
-                            type="button"
-                            class="rounded border border-red-600 bg-white px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
-                            :disabled="workflowActionLoading"
-                            @click="showRejectModal = true"
-                        >
-                            Reject
-                        </button>
-                    </div>
                 </div>
-                <!-- Reject reason modal -->
-                <div v-if="showRejectModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showRejectModal = false">
-                    <div class="w-full max-w-md rounded-lg bg-white p-4 shadow-xl">
-                        <h3 class="text-lg font-semibold text-gray-900">Reject report</h3>
-                        <p class="mt-1 text-sm text-gray-500">Optionally provide a reason for rejection (shown to the report owner).</p>
-                        <textarea v-model="rejectReason" rows="3" class="mt-3 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" placeholder="Reason for rejection..."></textarea>
-                        <div class="mt-4 flex justify-end gap-2">
-                            <button type="button" class="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50" @click="showRejectModal = false">Cancel</button>
-                            <button type="button" class="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700" :disabled="workflowActionLoading" @click="workflowAction('reject')">Reject report</button>
-                        </div>
-                    </div>
+                <!-- Facility LMIS: approval workflow header + table -->
+                <div v-else-if="isFacilityLmisReport && reportData.length > 0">
+                <div v-if="facilityReportMeta" class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                    <span class="text-sm font-semibold text-gray-700">Approval Workflow</span>
+                    <span class="text-sm text-gray-600">{{ facilityReportMeta.facility_name || 'Facility' }}</span>
+                    <span class="text-sm text-gray-500">·</span>
+                    <span class="text-sm text-gray-600">{{ formatReportPeriodShort(facilityReportMeta.report_period) }}</span>
+                    <span class="text-sm text-gray-500">·</span>
+                    <span class="rounded-full px-3 py-1 text-xs font-semibold bg-green-100 text-green-800">Approved</span>
                 </div>
-                <!-- Default Inventory Report Table -->
-                <div v-else-if="!isProductReport && !isLiquidationDisposalReport && !isExpiryReport && !isFacilitiesReport && !isOrderReport && !isTransferReport && !isProcurementReport && !isAssetReport && !isSubmissionRateReport && reportData.length > 0" class="overflow-x-auto">
+                <!-- Facility LMIS Report Table -->
+                <div class="overflow-x-auto">
+                    <table class="min-w-full border-collapse border border-gray-300">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">Product</th>
+                                <th class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">Category</th>
+                                <th class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300">UoM</th>
+                                <th class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Opening Balance</th>
+                                <th class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Stock Received</th>
+                                <th class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Stock Issued</th>
+                                <th class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Positive Adj.</th>
+                                <th class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Negative Adj.</th>
+                                <th class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Closing Balance</th>
+                                <th class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">Stockout Days</th>
+                                <th class="px-3 py-2 text-right text-xs font-bold text-gray-700 border border-gray-300">AMC</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white">
+                            <tr v-for="(row, index) in filteredRows" :key="row.id || index" class="hover:bg-gray-50">
+                                <td class="px-3 py-2 text-sm text-gray-900 border border-gray-300">
+                                    <span class="font-medium">{{ row.item }}</span>
+                                </td>
+                                <td class="px-3 py-2 text-sm text-gray-600 border border-gray-300">{{ row.category || '–' }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-600 border border-gray-300">{{ row.uom || '–' }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-900 text-right border border-gray-300">{{ formatNum(row.opening_balance) }}</td>
+                                <td class="px-3 py-2 text-sm text-green-600 text-right border border-gray-300">{{ formatNum(row.stock_received) }}</td>
+                                <td class="px-3 py-2 text-sm text-red-600 text-right border border-gray-300">{{ formatNum(row.stock_issued) }}</td>
+                                <td class="px-3 py-2 text-sm text-right border border-gray-300">{{ formatNum(row.positive_adjustments) }}</td>
+                                <td class="px-3 py-2 text-sm text-right border border-gray-300">{{ formatNum(row.negative_adjustments) }}</td>
+                                <td class="px-3 py-2 text-sm font-medium text-blue-600 text-right border border-gray-300">{{ formatNum(row.closing_balance) }}</td>
+                                <td class="px-3 py-2 text-sm text-right border border-gray-300">{{ formatNum(row.stockout_days) }}</td>
+                                <td class="px-3 py-2 text-sm text-right border border-gray-300">{{ formatNum(row.amc) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                </div>
+                <!-- Default Inventory Report Table (Warehouse) -->
+                <div v-else-if="!isProductReport && !isFacilityLmisReport && !isLiquidationDisposalReport && !isExpiryReport && !isFacilitiesReport && !isOrderReport && !isTransferReport && !isProcurementReport && !isAssetReport && !isSubmissionRateReport && reportData.length > 0" class="overflow-x-auto">
                     <table class="min-w-full border-collapse border border-gray-300">
                         <thead class="bg-gray-50">
                             <tr>
@@ -1113,7 +1120,10 @@
                 </div>
                 <div v-else class="p-8 text-center text-gray-500">
                     <template v-if="filters.report_type === 'warehouse_inventory'">
-                        Select Warehouse Inventory Report, choose Report Period (e.g. 2026-02), then click Generate Report. Optionally filter by Region, District, or Warehouse.
+                        Select Warehouse Inventory Report, choose Report Period (year and month), then click Generate Report.
+                    </template>
+                    <template v-else-if="filters.report_type === 'facility_monthly_consumption'">
+                        Select Region, District, Facility (required), and Report Period (Year and Month), then click Generate Report. Data comes from facility monthly reports.
                     </template>
                     <template v-else>
                         Select report type, report period, and at least one location (Region, District, or Warehouse/Facility), then click Generate Report.
@@ -1125,7 +1135,7 @@
 </template>
 
 <script setup>
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { ref, computed, watch } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import axios from 'axios';
@@ -1261,6 +1271,13 @@ watch(() => filters.value.report_period, () => {
     if (!valid) filters.value.periodValue = opts[0].value;
 }, { immediate: false });
 
+// When switching to warehouse_inventory, clear facility selection so Warehouse filter is used only
+watch(() => filters.value.report_type, (newType) => {
+    if (newType === 'warehouse_inventory' && filters.value.warehouse_or_facility?.startsWith('facility:')) {
+        filters.value.warehouse_or_facility = '';
+    }
+}, { immediate: false });
+
 // Derived monthYear for API (e.g. warehouse workflow) when both year and month are needed
 const filtersMonthYear = computed(() => {
     const y = filters.value.year;
@@ -1292,6 +1309,7 @@ const assetReportTab = ref('table');
 const assetReportCategoryColumns = ref([]);
 const assetReportSummary = ref({ total_assets: 0, by_category: {} });
 const warehouseReportMeta = ref(null);
+const facilityReportMeta = ref(null);
 const workflowActionLoading = ref(false);
 const showRejectModal = ref(false);
 const rejectReason = ref('');
@@ -1315,6 +1333,18 @@ const filteredWarehouses = computed(() => {
         if (districtName) list = list.filter(w => w.district === districtName);
     }
     return list;
+});
+
+// For warehouse inventory report: all warehouses (no Region/District required)
+const warehousesForInventory = computed(() => props.warehouses || []);
+
+// Dynamic label for period dropdown (Month, Quarter, Period) based on report_period
+const periodLabel = computed(() => {
+    const p = filters.value.report_period || 'monthly';
+    if (p === 'monthly') return 'Month';
+    if (p === 'quarterly') return 'Quarter';
+    if (p === 'bi-monthly' || p === 'six_months' || p === 'yearly') return 'Period';
+    return 'Month';
 });
 
 const filteredFacilities = computed(() => {
@@ -1350,7 +1380,22 @@ const filteredProductRows = computed(() => {
     return productReportRows.value.filter(row => (row.name || '').toLowerCase().includes(q));
 });
 
+const isWarehouseInventoryReport = computed(() => filters.value.report_type === 'warehouse_inventory');
+const isFacilityLmisReport = computed(() => filters.value.report_type === 'facility_monthly_consumption');
 const isProductReport = computed(() => filters.value.report_type === 'product_report');
+
+const hasFacilityLmisRequiredFilters = computed(() => {
+    if (!isFacilityLmisReport.value) return true;
+    const wof = filters.value.warehouse_or_facility;
+    const hasFacility = wof && String(wof).startsWith('facility:');
+    return Boolean(
+        filters.value.region_id &&
+        filters.value.district_id &&
+        hasFacility &&
+        filters.value.year &&
+        filters.value.periodValue
+    );
+});
 const isLiquidationDisposalReport = computed(() => filters.value.report_type === 'liquidation_disposal');
 const isExpiryReport = computed(() => filters.value.report_type === 'expiry_report');
 const isFacilitiesReport = computed(() => filters.value.report_type === 'facilities_report');
@@ -2357,6 +2402,9 @@ watch(() => filters.value.report_type, (reportType) => {
     if (reportType === 'product_report' && filters.value.warehouse_or_facility?.startsWith('warehouse:')) {
         filters.value.warehouse_or_facility = '';
     }
+    if (reportType === 'facility_monthly_consumption' && filters.value.warehouse_or_facility?.startsWith('warehouse:')) {
+        filters.value.warehouse_or_facility = '';
+    }
     if (reportType === 'liquidation_disposal' && filters.value.warehouse_or_facility?.startsWith('facility:')) {
         filters.value.warehouse_or_facility = '';
     }
@@ -2431,6 +2479,13 @@ async function workflowAction(action) {
     }
 }
 
+function formatReportPeriodShort(ym) {
+    if (!ym || ym.length < 7) return ym || '–';
+    const [y, m] = ym.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[parseInt(m, 10) - 1] || m} ${y}`;
+}
+
 const reportFieldSaving = ref(false);
 async function saveReportField(field) {
     const meta = warehouseReportMeta.value;
@@ -2501,19 +2556,24 @@ async function generateReport() {
     try {
         const year = filters.value.year || currentYear;
         const month = filters.value.periodValue ?? currentMonth;
+        const reportType = filters.value.report_type || 'warehouse_inventory';
         const params = {
-            report_type: filters.value.report_type || 'warehouse_inventory',
-            region_id: filters.value.region_id || undefined,
-            district_id: filters.value.district_id || undefined,
+            report_type: reportType,
             year: year || undefined,
             month: month || undefined,
+            report_period: filters.value.report_period || 'monthly',
         };
-        if (filters.value.warehouse_or_facility) {
-            const [type, id] = filters.value.warehouse_or_facility.split(':');
-            if (type === 'warehouse') params.warehouse_id = id;
-            if (type === 'facility') params.facility_id = id;
+        if (reportType === 'warehouse_inventory') {
+            // Filtered by report period only (year + month)
+        } else {
+            params.region_id = filters.value.region_id || undefined;
+            params.district_id = filters.value.district_id || undefined;
+            if (filters.value.warehouse_or_facility) {
+                const [type, id] = filters.value.warehouse_or_facility.split(':');
+                if (type === 'warehouse') params.warehouse_id = id;
+                if (type === 'facility') params.facility_id = id;
+            }
         }
-        params.report_period = filters.value.report_period || 'monthly';
         const { data } = await axios.get(route('reports.inventoryReportsUnified.data'), { params });
         reportMessage.value = data.message || '';
         if (data.success) {
@@ -2620,6 +2680,7 @@ async function generateReport() {
                 }
                 reportData.value = rows;
                 warehouseReportMeta.value = (filters.value.report_type === 'warehouse_inventory' && data.report_meta) ? data.report_meta : null;
+                facilityReportMeta.value = (filters.value.report_type === 'facility_monthly_consumption' && data.report_meta) ? data.report_meta : null;
                 productReportRows.value = [];
                 categoryColumns.value = [];
                 supplyClassColumns.value = [];
@@ -2633,6 +2694,7 @@ async function generateReport() {
         } else {
             reportData.value = [];
             warehouseReportMeta.value = null;
+            facilityReportMeta.value = null;
             productReportRows.value = [];
             categoryColumns.value = [];
             supplyClassColumns.value = [];
@@ -2646,6 +2708,7 @@ async function generateReport() {
     } catch (e) {
         reportData.value = [];
         warehouseReportMeta.value = null;
+        facilityReportMeta.value = null;
         productReportRows.value = [];
         categoryColumns.value = [];
         supplyClassColumns.value = [];

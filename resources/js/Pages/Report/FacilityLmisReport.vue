@@ -29,7 +29,7 @@
                             </button>
                             <button
                                 @click="generateReportsFromMovements"
-                                :disabled="isGenerating || isLoading"
+                                :disabled="isGenerating || isLoading || !hasAllRequiredFilters"
                                 class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
                             >
                                 <svg v-if="!isGenerating" class="-ml-0.5 mr-1.5 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -46,53 +46,59 @@
                         </div>
                     </div>
 
-                    <!-- Filters -->
+                    <!-- Filters: Region → District → Facility → Report Period (all required) -->
                     <div class="bg-gray-50 p-3 mx-4 rounded-lg mb-4">
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 mb-3">
-                            <!-- Year Filter -->
+                        <p class="text-xs text-amber-700 mb-3 font-medium">All filters are required. Select in order: Region → District → Facility → Report Period.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-3">
+                            <!-- Region (required) -->
                             <div>
-                                <label class="block text-xs font-medium text-gray-700 mb-1">Year</label>
-                                <input 
-                                    v-model="month_year" 
-                                    type="month"
+                                <label class="block text-xs font-medium text-gray-700 mb-1">Region <span class="text-red-500">*</span></label>
+                                <select
+                                    v-model="region_id"
                                     class="w-full text-xs border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                            </div>
-
-                            <!-- Status Filter -->
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700 mb-1">Status</label>
-                                <select 
-                                    v-model="status"
-                                    class="w-full text-xs border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <option value="">All Status</option>
-                                    <option value="draft">Draft</option>
-                                    <option value="submitted">Submitted</option>
-                                    <option value="approved">Approved</option>
+                                    <option :value="null">Select Region</option>
+                                    <option v-for="r in regions" :key="r.id" :value="r.id">{{ r.name }}</option>
                                 </select>
                             </div>
 
-                            <!-- Facility Filter -->
+                            <!-- District (required, depends on region) -->
                             <div>
-                                <label class="block text-xs font-medium text-gray-700 mb-1">Facility</label>
-                                <Multiselect
+                                <label class="block text-xs font-medium text-gray-700 mb-1">District <span class="text-red-500">*</span></label>
+                                <select
+                                    v-model="district_id"
+                                    class="w-full text-xs border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    :disabled="!region_id"
+                                >
+                                    <option :value="null">Select District</option>
+                                    <option v-for="d in filteredDistricts" :key="d.id" :value="d.id">{{ d.name }}</option>
+                                </select>
+                            </div>
+
+                            <!-- Facility (required, depends on district) -->
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700 mb-1">Facility <span class="text-red-500">*</span></label>
+                                <select
                                     v-model="facility_id"
-                                    :options="facilities"
-                                    :multiple="false"
-                                    :close-on-select="true"
-                                    :clear-on-select="false"
-                                    :preserve-search="true"
-                                    placeholder="Select facility"
-                                    label="name"
-                                    track-by="id"
-                                    :preselect-first="false"
-                                    :disabled="isLoading"
-                                    class="text-xs"
+                                    class="w-full text-xs border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    :disabled="!district_id || !facilities.length"
+                                >
+                                    <option :value="null">Select Facility</option>
+                                    <option v-for="f in facilities" :key="f.id" :value="f.id">{{ f.name }}</option>
+                                </select>
+                            </div>
+
+                            <!-- Report Period (required) -->
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700 mb-1">Report Period <span class="text-red-500">*</span></label>
+                                <input
+                                    v-model="month_year"
+                                    type="month"
+                                    class="w-full text-xs border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
                             </div>
 
-                            <!-- Product Filter -->
+                            <!-- Product (optional filter when report loaded) -->
                             <div>
                                 <label class="block text-xs font-medium text-gray-700 mb-1">Item</label>
                                 <Multiselect
@@ -106,7 +112,7 @@
                                     label="name"
                                     track-by="id"
                                     :preselect-first="false"
-                                    :disabled="isLoading"
+                                    :disabled="isLoading || !products.length"
                                     class="text-xs"
                                 />
                             </div>
@@ -115,15 +121,90 @@
 
                 </div>
 
-                <!-- Report Header -->
+                <!-- Approval Workflow Header Bar -->
+                <div v-if="reports && reports.id" class="mx-4 mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                    <span class="text-sm font-semibold text-gray-700">Approval Workflow:</span>
+                    <span
+                        :class="{
+                            'bg-amber-100 text-amber-800': reports.status === 'draft',
+                            'bg-blue-100 text-blue-800': reports.status === 'submitted',
+                            'bg-indigo-100 text-indigo-800': reports.status === 'reviewed',
+                            'bg-green-100 text-green-800': reports.status === 'approved',
+                            'bg-red-100 text-red-800': reports.status === 'rejected',
+                        }"
+                        class="rounded-full px-3 py-1 text-xs font-semibold"
+                    >
+                        {{ formatStatus(reports.status) }}
+                    </span>
+                    <span v-if="reports.status === 'rejected' && reports.comments" class="ml-2 flex items-center gap-2">
+                        <span class="text-sm text-gray-500">Rejection reason:</span>
+                        <span class="text-sm text-gray-700">{{ reports.comments }}</span>
+                    </span>
+                    <div class="ml-auto flex flex-wrap items-center gap-2">
+                        <button
+                            v-if="reports.status === 'draft' && reports.items && reports.items.length > 0"
+                            type="button"
+                            class="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+                            :disabled="isSubmitting || workflowActionLoading"
+                            @click="submitReport"
+                        >
+                            {{ isSubmitting ? 'Submitting...' : 'Submit for review' }}
+                        </button>
+                        <button
+                            v-if="reports.status === 'submitted'"
+                            type="button"
+                            class="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+                            :disabled="workflowActionLoading"
+                            @click="workflowAction('review')"
+                        >
+                            Mark under review
+                        </button>
+                        <button
+                            v-if="reports.status === 'reviewed'"
+                            type="button"
+                            class="rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700"
+                            :disabled="workflowActionLoading"
+                            @click="workflowAction('approve')"
+                        >
+                            Approve
+                        </button>
+                        <button
+                            v-if="reports.status === 'submitted' || reports.status === 'reviewed'"
+                            type="button"
+                            class="rounded border border-red-600 bg-white px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
+                            :disabled="workflowActionLoading"
+                            @click="showRejectModal = true"
+                        >
+                            Reject
+                        </button>
+                    </div>
+                </div>
+                <!-- Reject reason modal -->
+                <div v-if="showRejectModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showRejectModal = false">
+                    <div class="w-full max-w-md rounded-lg bg-white p-4 shadow-xl">
+                        <h3 class="text-lg font-semibold text-gray-900">Reject report</h3>
+                        <p class="mt-1 text-sm text-gray-500">Optionally provide a reason for rejection (shown to the report owner).</p>
+                        <textarea v-model="rejectReason" rows="3" class="mt-3 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" placeholder="Reason for rejection..."></textarea>
+                        <div class="mt-4 flex justify-end gap-2">
+                            <button type="button" class="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50" @click="showRejectModal = false">Cancel</button>
+                            <button type="button" class="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700" :disabled="workflowActionLoading" @click="workflowAction('reject')">Reject report</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Report Header (facility_monthly_reports fields) -->
                 <div v-if="reports && reports.id" class="mx-4 mb-6">
                     <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
                         <div class="flex justify-between items-start">
-                            <div>
-                                <h3 class="text-xl font-bold text-gray-900 mb-2">
+                            <div class="flex-1">
+                                <h3 class="text-xl font-bold text-gray-900 mb-3">
                                     LMIS Report
                                 </h3>
-                                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 text-sm mb-4">
+                                    <div>
+                                        <span class="text-gray-600">ID:</span>
+                                        <p class="font-medium text-gray-900">{{ reports.id }}</p>
+                                    </div>
                                     <div>
                                         <span class="text-gray-600">Facility:</span>
                                         <p class="font-medium text-gray-900">{{ reports.facility?.name }}</p>
@@ -141,6 +222,24 @@
                                     <div>
                                         <span class="text-gray-600">Total Items:</span>
                                         <p class="font-medium text-gray-900">{{ filteredItems.length || 0 }}</p>
+                                    </div>
+                                </div>
+                                <div v-if="reports.comments" class="mb-3">
+                                    <span class="text-gray-600">Comments:</span>
+                                    <p class="font-medium text-gray-900 mt-0.5">{{ reports.comments }}</p>
+                                </div>
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-gray-600 border-t border-blue-200 pt-3 mt-3">
+                                    <div v-if="reports.submitted_at">
+                                        <span class="text-gray-500">Submitted:</span>
+                                        <p class="font-medium text-gray-900">{{ formatDateTime(reports.submitted_at) }}{{ (reports.submitted_by || reports.submittedBy) ? ` by ${(reports.submitted_by || reports.submittedBy)?.name || '—'}` : '' }}</p>
+                                    </div>
+                                    <div v-if="reports.reviewed_at">
+                                        <span class="text-gray-500">Reviewed:</span>
+                                        <p class="font-medium text-gray-900">{{ formatDateTime(reports.reviewed_at) }}{{ (reports.reviewed_by || reports.reviewedBy) ? ` by ${(reports.reviewed_by || reports.reviewedBy)?.name || '—'}` : '' }}</p>
+                                    </div>
+                                    <div v-if="reports.rejected_at">
+                                        <span class="text-gray-500">Rejected:</span>
+                                        <p class="font-medium text-gray-900">{{ formatDateTime(reports.rejected_at) }}{{ (reports.rejected_by || reports.rejectedBy) ? ` by ${(reports.rejected_by || reports.rejectedBy)?.name || '—'}` : '' }}</p>
                                     </div>
                                 </div>
                             </div>
@@ -196,6 +295,7 @@
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Negative Adj.</th>
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Closing Balance</th>
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stockout Days</th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">AMC</th>
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
@@ -203,9 +303,6 @@
                                         <td class="px-6 py-4">
                                             <div class="flex flex-col">
                                                 <div class="text-sm font-medium text-gray-900">{{ item.product?.name || 'N/A' }}</div>
-                                                <div class="text-xs text-gray-500">
-                                                    <span class="font-medium">ID:</span> {{ item.product?.productID || 'N/A' }}
-                                                </div>
                                                 <div class="text-xs text-gray-500">
                                                     <span class="font-medium">Category:</span> {{ item.product?.category?.name || 'N/A' }}
                                                 </div>
@@ -301,6 +398,7 @@
                                                 </span>
                                             </div>
                                         </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ formatNumber(item.amc) }}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -309,7 +407,7 @@
                 </div>
 
                 <!-- No Data Message -->
-                <div v-else-if="month_year && facility_id" class="mx-4 py-12">
+                <div v-else-if="hasAllRequiredFilters && reports === null" class="mx-4 py-12">
                     <div class="text-center">
                         <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
@@ -319,14 +417,14 @@
                     </div>
                 </div>
 
-                <!-- No Month/Year or Facility Selected Message -->
+                <!-- Required filters message -->
                 <div v-else class="mx-4 py-12">
                     <div class="text-center">
                         <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                         </svg>
-                        <h3 class="text-lg font-medium text-gray-900 mb-2">Select Month, Year, and Facility</h3>
-                        <p class="text-gray-600 mb-4">Please select month, year, and facility to view LMIS reports.</p>
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">Select required filters</h3>
+                        <p class="text-gray-600 mb-4">Please select Region, District, Facility, and Report Period (Year + Month) to view LMIS reports.</p>
                     </div>
                 </div>
             </div>
@@ -372,6 +470,14 @@ const props = defineProps({
         type: Array,
         default: () => []
     },
+    regions: {
+        type: Array,
+        default: () => []
+    },
+    districts: {
+        type: Array,
+        default: () => []
+    },
     months: {
         type: Object,
         default: () => ({})
@@ -387,25 +493,34 @@ const isGenerating = ref(false)
 const isExporting = ref(false)
 const isFiltering = ref(false)
 const isSubmitting = ref(false)
+const workflowActionLoading = ref(false)
+const showRejectModal = ref(false)
+const rejectReason = ref('')
 
 const month_year = ref(props.filters?.month_year || '')
-const status = ref(props.filters?.status || '')
+const region_id = ref(props.filters?.region_id ?? null)
+const district_id = ref(props.filters?.district_id ?? null)
+const facility_id = ref(props.filters?.facility_id ?? null)
 const product_id = ref(null)
-const facility_id = ref(null)
 
-// Initialize filters from props
+const filteredDistricts = computed(() => {
+    const list = props.districts || [];
+    if (!region_id.value) return [];
+    const regionName = props.regions?.find(r => r.id == region_id.value)?.name;
+    if (!regionName) return [];
+    return list.filter(d => (d.region || '') === regionName);
+});
+
+const hasAllRequiredFilters = computed(() =>
+    Boolean(region_id.value && district_id.value && facility_id.value && month_year.value)
+);
+
+// Initialize product filter from props
 onMounted(() => {
     if (props.filters?.product_id && props.products?.length > 0) {
         const foundProduct = props.products.find(p => p.id == props.filters.product_id);
         if (foundProduct) {
             product_id.value = foundProduct;
-        }
-    }
-    
-    if (props.filters?.facility_id && props.facilities?.length > 0) {
-        const foundFacility = props.facilities.find(f => f.id == props.filters.facility_id);
-        if (foundFacility) {
-            facility_id.value = foundFacility;
         }
     }
 });
@@ -417,27 +532,39 @@ const filteredItems = computed(() => {
     if (!product_id.value) {
         return props.reports.items; // Show all items if no filter
     }
-    
-    return props.reports.items.filter(item => item.product_id === product_id.value.id);
+    const pid = product_id.value?.id ?? product_id.value;
+    return props.reports.items.filter(item => item.product_id == pid);
+});
+
+// Reset district when region changes; reset facility when district changes
+watch(region_id, () => {
+    district_id.value = null;
+    facility_id.value = null;
+});
+watch(district_id, () => {
+    facility_id.value = null;
 });
 
 watch([
     () => month_year.value,
-    () => status.value,
+    () => region_id.value,
+    () => district_id.value,
     () => facility_id.value
 ], () => {
-    applyFilters()
+    applyFilters();
 });
 
 function applyFilters() {
     const query = {};
+    if (region_id.value) query.region_id = region_id.value;
+    if (district_id.value) query.district_id = district_id.value;
+    if (facility_id.value) query.facility_id = facility_id.value;
     if (month_year.value) query.month_year = month_year.value;
-    if (status.value) query.status = status.value;
-    if (facility_id.value) query.facility_id = facility_id.value.id;
+    if (product_id.value) query.product_id = product_id.value?.id ?? product_id.value;
     router.get(route('reports.facility-lmis-report'), query, {
         preserveState: true,
         preserveScroll: true,
-        only: ['reports']
+        only: ['reports', 'facilities', 'products', 'filters']
     });
 }
 
@@ -445,11 +572,19 @@ function formatNumber(value) {
     return parseFloat(value || 0).toLocaleString();
 }
 
+function formatDateTime(value) {
+    if (!value) return '—';
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+}
+
 function formatStatus(status) {
     const statusMap = {
         'draft': 'Draft',
         'submitted': 'Submitted',
-        'approved': 'Approved'
+        'reviewed': 'Reviewed',
+        'approved': 'Approved',
+        'rejected': 'Rejected'
     };
     return statusMap[status] || status;
 }
@@ -458,7 +593,9 @@ function getStatusClass(status) {
     const classMap = {
         'draft': 'bg-gray-100 text-gray-800',
         'submitted': 'bg-yellow-100 text-yellow-800',
-        'approved': 'bg-green-100 text-green-800'
+        'reviewed': 'bg-blue-100 text-blue-800',
+        'approved': 'bg-green-100 text-green-800',
+        'rejected': 'bg-red-100 text-red-800'
     };
     return classMap[status] || 'bg-gray-100 text-gray-800';
 }
@@ -503,24 +640,26 @@ async function exportToExcel() {
         // Create workbook
         const wb = XLSX.utils.book_new();
         
-        // Create header information first
+        // Create header information first (facility_monthly_reports fields)
         const headerInfo = [
             ['LMIS Report'],
             [''],
+            ['Report ID:', props.reports.id || 'N/A'],
             ['Facility:', props.reports.facility?.name || 'N/A'],
             ['Report Period:', formatReportPeriod(props.reports.report_period)],
             ['Status:', formatStatus(props.reports.status)],
-            ['Generated Date:', new Date().toLocaleDateString()],
+            ...(props.reports.comments ? [['Comments:', props.reports.comments]] : []),
+            ['Submitted:', props.reports.submitted_at ? `${formatDateTime(props.reports.submitted_at)}${(props.reports.submitted_by || props.reports.submittedBy) ? ` by ${(props.reports.submitted_by || props.reports.submittedBy)?.name || ''}` : ''}` : '—'],
             ['Total Items:', itemsToExport.length || 0],
             [''],
             [''], // Extra spacing before data
-            // Column headers for the data
-            ['S/N', 'Product Name', 'Category', 'Dosage Form', 'Opening Balance', 'Stock Received', 'Stock Issued', 'Positive Adjustments', 'Negative Adjustments', 'Closing Balance', 'Stockout Days']
+            // Column headers (facility_monthly_report_items fields)
+            ['S/N', 'Product Name', 'Category', 'Dosage Form', 'Opening Balance', 'Stock Received', 'Stock Issued', 'Positive Adjustments', 'Negative Adjustments', 'Closing Balance', 'Stockout Days', 'AMC']
         ];
         
-        // Prepare data rows
+        // Prepare data rows (facility_monthly_report_items fields)
         const dataRows = itemsToExport.map((item, index) => [
-            index + 1, // S/N - Sequential number starting from 1
+            index + 1, // S/N
             item.product?.name || 'N/A',
             item.product?.category?.name || 'N/A',
             item.product?.dosage?.name || 'N/A',
@@ -530,7 +669,8 @@ async function exportToExcel() {
             parseFloat(item.positive_adjustments || 0),
             parseFloat(item.negative_adjustments || 0),
             parseFloat(item.closing_balance || 0),
-            parseInt(item.stockout_days || 0)
+            parseInt(item.stockout_days || 0),
+            parseFloat(item.amc || 0)
         ]);
         
         // Combine header and data
@@ -541,7 +681,7 @@ async function exportToExcel() {
 
         // Set column widths
         const colWidths = [
-            { wch: 8 },  // S/N - Smaller width for numbers
+            { wch: 6 },  // S/N
             { wch: 40 }, // Product Name
             { wch: 20 }, // Category
             { wch: 15 }, // Dosage Form
@@ -551,7 +691,8 @@ async function exportToExcel() {
             { wch: 20 }, // Positive Adjustments
             { wch: 20 }, // Negative Adjustments
             { wch: 15 }, // Closing Balance
-            { wch: 15 }  // Stockout Days
+            { wch: 12 }, // Stockout Days
+            { wch: 12 }  // AMC
         ];
         ws['!cols'] = colWidths;
 
@@ -590,10 +731,10 @@ async function exportToExcel() {
 const exportData = exportToExcel;
 
 async function submitReport() {
-    if (!month_year.value || !facility_id.value) {
+    if (!hasAllRequiredFilters.value) {
         Swal.fire({
             title: 'Missing Information',
-            text: 'Please select a month, year, and facility first',
+            text: 'Please select Region, District, Facility, and Report Period first',
             icon: 'warning',
             confirmButtonText: 'OK'
         });
@@ -622,7 +763,7 @@ async function submitReport() {
         const response = await axios.post(route('reports.facility-lmis-report.submit'), {
             year: parseInt(year),
             month: parseInt(month),
-            facility_id: facility_id.value.id
+            facility_id: facility_id.value
         });
 
         Swal.fire({
@@ -651,6 +792,30 @@ async function submitReport() {
         });
     } finally {
         isSubmitting.value = false;
+    }
+}
+
+async function workflowAction(action) {
+    if (!hasAllRequiredFilters.value) return;
+    if (action === 'reject') showRejectModal.value = false;
+    workflowActionLoading.value = true;
+    try {
+        const [year, month] = month_year.value.split('-');
+        let url, payload = { year: parseInt(year), month: parseInt(month), facility_id: facility_id.value };
+        if (action === 'review') url = route('reports.facility-lmis-report.review');
+        else if (action === 'approve') url = route('reports.facility-lmis-report.approve');
+        else if (action === 'reject') { url = route('reports.facility-lmis-report.reject'); payload.rejection_reason = rejectReason.value; }
+        else return;
+        const res = await axios.post(url, payload);
+        if (res.data?.success) {
+            Swal.fire({ title: 'Success', text: res.data.message || 'Action completed.', icon: 'success', confirmButtonText: 'OK' });
+            router.reload({ only: ['reports'] });
+        } else throw new Error(res.data?.message || 'Action failed');
+    } catch (err) {
+        Swal.fire({ title: 'Error', text: err.response?.data?.message || err.message || 'Action failed', icon: 'error', confirmButtonText: 'OK' });
+    } finally {
+        workflowActionLoading.value = false;
+        rejectReason.value = '';
     }
 }
 
@@ -700,7 +865,7 @@ const debouncedSaveFieldChange = debounce(async (item, fieldName) => {
         const requestData = {
             year: parseInt(year),
             month: parseInt(month),
-            facility_id: facility_id.value.id,
+            facility_id: facility_id.value,
             reports: [itemData], // Save only this item
         };
         
@@ -757,10 +922,10 @@ function saveFieldChange(item, fieldName) {
 async function generateReportsFromMovements() {
     isGenerating.value = true;
     try {
-        if (!month_year.value || !facility_id.value) {
+        if (!hasAllRequiredFilters.value) {
             Swal.fire({
                 title: 'Missing Information',
-                text: 'Please select a month, year, and facility first',
+                text: 'Please select Region, District, Facility, and Report Period first',
                 icon: 'warning',
                 confirmButtonText: 'OK'
             });
@@ -771,7 +936,7 @@ async function generateReportsFromMovements() {
         const response = await axios.post(route('reports.facility-lmis-report.generate-from-movements'), {
             year: parseInt(year),
             month: parseInt(month),
-            facility_id: facility_id.value.id
+            facility_id: facility_id.value
         });
         
         Swal.fire({
@@ -792,18 +957,19 @@ async function generateReportsFromMovements() {
             confirmButtonText: 'View Report',
             cancelButtonText: 'Edit Report'
         }).then((result) => {
+            const query = {
+                region_id: region_id.value,
+                district_id: district_id.value,
+                facility_id: facility_id.value,
+                month_year: `${year}-${month.toString().padStart(2, '0')}`,
+            };
             if (result.isConfirmed) {
-                // Refresh the current page with the generated report data
-                router.get(route('reports.facility-lmis-report'), {
-                    month_year: `${year}-${month.toString().padStart(2, '0')}`,
-                    facility_id: facility_id.value.id
-                });
+                router.get(route('reports.facility-lmis-report'), query);
             } else if (result.dismiss === Swal.DismissReason.cancel) {
-                // Navigate to the create page to edit the generated report
                 router.get(route('reports.facility-lmis-report.create'), {
                     year: parseInt(year),
                     month: parseInt(month),
-                    facility_id: facility_id.value.id
+                    facility_id: facility_id.value
                 });
             }
         });

@@ -50,22 +50,10 @@ class EmailNotificationSetting extends Model
         return static::getForKey('monthly_consumption_schedule');
     }
 
-    /** Schedule for inventory monthly report (day_of_month, time, expected_number_of_reports, ontime_day_start, ontime_day_end in config). */
+    /** Schedule for inventory monthly report (day_of_month, time in config). */
     public static function inventoryMonthlyReportSchedule(): ?self
     {
         return static::getForKey('inventory_monthly_report_schedule');
-    }
-
-    /** Get inventory report submission expectation config: expected_number_of_reports (default 1), ontime_day_start (1), ontime_day_end (3). */
-    public static function inventoryReportExpectationConfig(): array
-    {
-        $setting = static::inventoryMonthlyReportSchedule();
-        $config = $setting?->config ?? [];
-        return [
-            'expected_number_of_reports' => (int) ($config['expected_number_of_reports'] ?? 1),
-            'ontime_day_start' => (int) ($config['ontime_day_start'] ?? 1),
-            'ontime_day_end' => (int) ($config['ontime_day_end'] ?? 3),
-        ];
     }
 
     /** Schedule for quarterly orders (time in config; runs on quarter start days only). */
@@ -84,5 +72,27 @@ class EmailNotificationSetting extends Model
     public static function facilityMonthlyReportSchedule(): ?self
     {
         return static::getForKey('facility_monthly_report_schedule');
+    }
+
+    /**
+     * Report Submission Rate config: expected_reports (per period), ontime_day (1-31).
+     * expected_reports=1 means 1 per period (12/year for monthly). ontime_day=5 means 1-5 ontime, 6+ late.
+     */
+    public static function reportSubmissionRateConfig(): ?self
+    {
+        return static::getForKey('report_submission_rate_config');
+    }
+
+    public static function getReportSubmissionRateConfig(): array
+    {
+        $defaults = [
+            'expected_reports' => 1,
+            'ontime_day' => 5,
+        ];
+        $setting = static::reportSubmissionRateConfig();
+        if (! $setting || ! is_array($setting->config)) {
+            return $defaults;
+        }
+        return array_merge($defaults, $setting->config);
     }
 }

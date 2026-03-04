@@ -189,6 +189,9 @@ class AssetsImport implements ToCollection, WithHeadingRow, WithChunkReading, Sk
             'maintenance' => 'maintenance',
             'retired' => 'retired',
             'disposed' => 'disposed',
+            'functioning' => 'functioning',
+            'not functioning' => 'not_functioning',
+            'not_functioning' => 'not_functioning',
         ];
 
         return $statusMap[strtolower(trim($status))] ?? 'in_use';

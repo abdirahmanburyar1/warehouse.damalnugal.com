@@ -194,6 +194,8 @@ const statuses = ref([
     { value: 'pending_approval', label: 'Pending Approval' },
     { value: 'retired', label: 'Retired' },
     { value: 'disposed', label: 'Disposed' },
+    { value: 'functioning', label: 'Functioning' },
+    { value: 'not_functioning', label: 'Not functioning' },
 ]);
 
 // Normalize status in case asset has a value not allowed for editing

@@ -108,13 +108,14 @@ class GenerateMonthlyReceivedReport extends Command
 
             $this->info("Created monthly report record with ID: {$report->id}");
 
-            // Get the start and end dates for the month
-            $startDate = Carbon::parse($month . '-01 00:00:00');
-            $endDate = Carbon::parse($month . '-01 23:59:59')->endOfMonth();
+            // Start and end of month (inclusive) for consistent date range
+            $startDate = Carbon::parse($month . '-01')->startOfMonth()->startOfDay();
+            $endDate = Carbon::parse($month . '-01')->endOfMonth()->endOfDay();
 
-            // Get all received quantities for the month
+            // Get all received quantities for the month (received_at within range only)
             $receivedQuantities = ReceivedQuantity::whereBetween('received_at', [$startDate, $endDate])
                 ->with('warehouse')
+                ->orderBy('id')
                 ->get();
 
             $this->info("Found {$receivedQuantities->count()} received quantities for {$month}");
@@ -129,9 +130,13 @@ class GenerateMonthlyReceivedReport extends Command
             $totalQuantity = 0;
 
             foreach ($receivedQuantities as $receivedQuantity) {
-                // Skip if warehouse_id is null (log warning)
                 if (is_null($receivedQuantity->warehouse_id)) {
                     $this->warn("Skipping received quantity ID {$receivedQuantity->id} - no warehouse_id specified");
+                    $bar->advance();
+                    continue;
+                }
+                if (is_null($receivedQuantity->product_id)) {
+                    $this->warn("Skipping received quantity ID {$receivedQuantity->id} - no product_id specified");
                     $bar->advance();
                     continue;
                 }
