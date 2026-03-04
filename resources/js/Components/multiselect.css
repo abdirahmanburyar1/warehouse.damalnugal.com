@@ -53,3 +53,48 @@
 .multiselect__option:not(.multiselect__option--highlight) .add-new-option span {
     color: #5145cd;
 }
+
+/* Fixed width for multiselect - prevents overflow in constrained layouts */
+.multiselect-fixed-width {
+    max-width: 100%;
+    min-width: 0;
+}
+.multiselect-fixed-width .multiselect__tags {
+    max-width: 100%;
+    overflow: hidden;
+}
+
+/* Asset table multiselects - fixed widths to prevent overflow */
+.multiselect-asset-table {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+/* Category: 130px, Type: 120px, Assignee: 120px - use width var or fixed in TD */
+.multiselect-asset-table.multiselect-asset-category {
+    width: 130px !important;
+    min-width: 130px !important;
+}
+.multiselect-asset-table.multiselect-asset-type {
+    width: 120px !important;
+    min-width: 120px !important;
+}
+.multiselect-asset-table.multiselect-asset-assignee {
+    width: 120px !important;
+    min-width: 120px !important;
+}
+.multiselect-asset-table .multiselect__content-wrapper {
+    width: 180px !important;
+    min-width: 180px !important;
+    max-width: 180px !important;
+    white-space: normal !important;
+}
+.multiselect-asset-table .multiselect__option {
+    white-space: normal !important;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.multiselect--active {
+    z-index: 99999 !important;
+}

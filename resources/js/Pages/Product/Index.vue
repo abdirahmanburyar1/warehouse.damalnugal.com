@@ -409,6 +409,11 @@
                                     <span class="font-medium">eligibility_level</span>
                                     <span class="text-gray-400 ml-2">(optional, comma-separated)</span>
                                 </li>
+                                <li class="flex items-center">
+                                    <span class="w-2 h-2 bg-gray-400 rounded-full mr-3"></span>
+                                    <span class="font-medium">supply_class</span>
+                                    <span class="text-gray-400 ml-2">(optional, comma-separated)</span>
+                                </li>
                             </ul>
                         </div>
                     </div>
@@ -725,10 +730,12 @@ const downloadTemplate = async () => {
             draggable: false,
         });
         const XLSX = await import("xlsx");
-        // Headers must match ProductsImport: item_description, category, dosage_form, eligibility_level
-        const headers = ["item_description", "category", "dosage_form", "eligibility_level"];
+        // Headers must match ProductsImport: item_description, category, dosage_form, eligibility_level, supply_class
+        const headers = ["item_description", "category", "dosage_form", "eligibility_level", "supply_class"];
+        // Sample row showing comma-separated format for eligibility_level and supply_class
+        const sampleRow = ["Sample Product", "Category A", "Tablet", "Health Center, Hospital", "Class A, Class B, Class C"];
         const workbook = XLSX.utils.book_new();
-        const worksheet = XLSX.utils.aoa_to_sheet([headers]);
+        const worksheet = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
         XLSX.utils.book_append_sheet(workbook, worksheet, "Products Template");
         XLSX.writeFile(workbook, "products_import_template.xlsx");
         toast.dismiss(loadingToast);

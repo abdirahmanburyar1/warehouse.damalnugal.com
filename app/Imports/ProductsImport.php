@@ -90,6 +90,17 @@ class ProductsImport implements
                 $dosageId = $this->dosageCache[$dosageForm];
             }
 
+            // Supply class (comma-separated values, stored as string)
+            $supplyClassValue = null;
+            if (!empty($row['supply_class'])) {
+                $supplyClass = trim($row['supply_class']);
+                if (strlen($supplyClass) > 0) {
+                    $parts = array_map('trim', explode(',', $supplyClass));
+                    $parts = array_filter($parts);
+                    $supplyClassValue = !empty($parts) ? implode(',', $parts) : null;
+                }
+            }
+
             $this->importedCount++;
 
             $product = Product::updateOrCreate([
@@ -98,6 +109,7 @@ class ProductsImport implements
                 'name' => $itemName,
                 'category_id' => $categoryId,
                 'dosage_id' => $dosageId,
+                'supply_class' => $supplyClassValue,
                 'is_active' => true,
             ]);
 
@@ -163,6 +175,7 @@ class ProductsImport implements
             'category' => 'nullable|string|max:255',
             'dosage_form' => 'nullable|string|max:255',
             'eligibility_level' => 'nullable|string',
+            'supply_class' => 'nullable|string',
         ];
     }
 

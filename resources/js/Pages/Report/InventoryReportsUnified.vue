@@ -38,21 +38,21 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">
-                            {{ isWarehouseInventoryReport ? 'Warehouse' : (isProductReport || isFacilityLmisReport || isSubmissionRateReport ? 'Select Facility' : 'Select Warehouse/Facility Name') }}
+                            {{ isWarehouseInventoryReport ? 'Warehouse' : (isProductReport || isFacilityLmisReport || isSubmissionRateReport || isAssetReport ? 'Select Facility' : 'Select Warehouse/Facility Name') }}
                             <span v-if="isFacilityLmisReport" class="text-red-500">*</span>
                         </label>
                         <select
                             v-model="filters.warehouse_or_facility"
                             class="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm py-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                            :disabled="!isWarehouseInventoryReport && (!filters.region_id || !filters.district_id)"
+                            :disabled="!isWarehouseInventoryReport && (!filters.region_id || (!filters.district_id && !isAssetReport))"
                         >
-                            <option :value="''">{{ isWarehouseInventoryReport ? 'All Warehouses' : (!filters.region_id ? 'Select Region first' : !filters.district_id ? 'Select District first' : (isProductReport || isFacilityLmisReport || isSubmissionRateReport ? 'Select facility' : 'Warehouse/Facility')) }}</option>
+                            <option :value="''">{{ isWarehouseInventoryReport ? 'All Warehouses' : (!filters.region_id ? 'Select Region first' : (!filters.district_id && !isAssetReport) ? 'Select District first' : (isProductReport || isFacilityLmisReport || isSubmissionRateReport || isAssetReport ? 'All (aggregate by region/district)' : 'Warehouse/Facility')) }}</option>
                             <template v-if="isWarehouseInventoryReport">
                                 <option v-for="w in warehousesForInventory" :key="'w-' + w.id" :value="'warehouse:' + w.id">
                                     {{ w.name }}
                                 </option>
                             </template>
-                            <template v-else-if="isProductReport || isFacilityLmisReport || isSubmissionRateReport">
+                            <template v-else-if="isProductReport || isFacilityLmisReport || isSubmissionRateReport || isAssetReport">
                                 <option v-for="f in filteredFacilities" :key="'f-' + f.id" :value="'facility:' + f.id">
                                     {{ f.name }}
                                 </option>
@@ -131,7 +131,7 @@
                     <button
                         type="button"
                         @click="generateReport"
-                        :disabled="generating || (isFacilityLmisReport && !hasFacilityLmisRequiredFilters) || (isWarehouseInventoryReport && !hasWarehouseInventoryRequiredFilters) || (isSubmissionRateReport && !hasSubmissionRateRequiredFilters)"
+                        :disabled="generating || (isFacilityLmisReport && !hasFacilityLmisRequiredFilters) || (isWarehouseInventoryReport && !hasWarehouseInventoryRequiredFilters) || (isSubmissionRateReport && !hasSubmissionRateRequiredFilters) || (isAssetReport && !hasAssetReportRequiredFilters)"
                         class="inline-flex justify-center items-center px-6 py-2.5 bg-emerald-600 border border-transparent rounded-md font-semibold text-sm text-white uppercase tracking-widest hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 transition ease-in-out duration-150"
                     >
                         <span v-if="generating">Generating...</span>
@@ -145,6 +145,9 @@
                     </p>
                     <p v-else-if="isSubmissionRateReport && !hasSubmissionRateRequiredFilters" class="mt-2 text-xs text-amber-600">
                         Select at least one of Region, District or Facility, plus Report Period (Year and Month/Period). Use valid period starts (e.g. 1, 4, 7, 10 for Quarterly).
+                    </p>
+                    <p v-else-if="isAssetReport && !hasAssetReportRequiredFilters" class="mt-2 text-xs text-amber-600">
+                        Select Region, District and/or Facility to filter. Region only = aggregate by region; District = aggregate by district; Facility = one row per facility.
                     </p>
                 </div>
             </div>
@@ -885,7 +888,7 @@
                         <table class="min-w-full border-collapse border border-gray-300">
                             <thead class="bg-gray-100">
                                 <tr>
-                                    <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300 align-middle">Facility Name</th>
+                                    <th rowspan="2" class="px-3 py-2 text-left text-xs font-bold text-gray-700 border border-gray-300 align-middle">{{ assetReportNameColumnLabel }}</th>
                                     <th rowspan="2" class="px-3 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300 align-middle">Total Assets</th>
                                     <th v-for="cat in assetReportCategoryColumns" :key="cat" colspan="3" class="px-2 py-2 text-center text-xs font-bold text-gray-700 border border-gray-300">{{ cat }}</th>
                                 </tr>
@@ -1370,6 +1373,7 @@ const procurementReportSummary = ref({ total_pos: 0, completed: 0, rejected: 0, 
 const assetReportTab = ref('table');
 const assetReportCategoryColumns = ref([]);
 const assetReportSummary = ref({ total_assets: 0, by_category: {} });
+const assetReportNameColumnLabel = ref('Facility Name');
 const warehouseReportMeta = ref(null);
 const facilityReportMeta = ref(null);
 const workflowActionLoading = ref(false);
@@ -1475,6 +1479,15 @@ const hasWarehouseInventoryRequiredFilters = computed(() => {
         filters.value.year &&
         pv != null &&
         allowed.includes(Number(pv))
+    );
+});
+
+const hasAssetReportRequiredFilters = computed(() => {
+    if (!isAssetReport.value) return true;
+    return Boolean(
+        filters.value.region_id ||
+        filters.value.district_id ||
+        (filters.value.warehouse_or_facility && String(filters.value.warehouse_or_facility).startsWith('facility:'))
     );
 });
 
@@ -2510,6 +2523,9 @@ watch(() => filters.value.report_type, (reportType) => {
     if (reportType === 'liquidation_disposal' && filters.value.warehouse_or_facility?.startsWith('facility:')) {
         filters.value.warehouse_or_facility = '';
     }
+    if (reportType === 'asset_report' && filters.value.warehouse_or_facility?.startsWith('warehouse:')) {
+        filters.value.warehouse_or_facility = '';
+    }
 });
 
 const FACILITY_TYPE_LABEL_TO_KEY = {
@@ -2754,11 +2770,13 @@ async function generateReport() {
                 transferReportSummary.value = {};
                 assetReportCategoryColumns.value = [];
                 assetReportSummary.value = {};
+                assetReportNameColumnLabel.value = 'Facility Name';
             } else if (filters.value.report_type === 'asset_report') {
                 const d = data.data || {};
                 reportData.value = d.rows || [];
                 assetReportCategoryColumns.value = d.category_columns || [];
                 assetReportSummary.value = d.summary || {};
+                assetReportNameColumnLabel.value = d.name_column_label || 'Facility Name';
                 productReportRows.value = [];
                 categoryColumns.value = [];
                 supplyClassColumns.value = [];
@@ -2778,7 +2796,9 @@ async function generateReport() {
                 procurementReportSummary.value = {};
                 assetReportCategoryColumns.value = [];
                 assetReportSummary.value = {};
+                assetReportNameColumnLabel.value = 'Facility Name';
             } else {
+                assetReportNameColumnLabel.value = 'Facility Name';
                 let rows = data.data || [];
                 if (filters.value.report_type === 'warehouse_inventory' && rows.length === 0) {
                     rows = [WAREHOUSE_INVENTORY_EMPTY_ROW];
@@ -2809,6 +2829,7 @@ async function generateReport() {
             procurementReportSummary.value = {};
             assetReportCategoryColumns.value = [];
             assetReportSummary.value = {};
+            assetReportNameColumnLabel.value = 'Facility Name';
         }
     } catch (e) {
         reportData.value = [];

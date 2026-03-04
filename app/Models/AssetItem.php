@@ -146,6 +146,35 @@ class AssetItem extends Model
     }
 
     /**
+     * Get full depreciation data for API/Resource (annual, YTD, accumulated, remaining life, replacement year)
+     */
+    public function getDepreciationDataForResource(): array
+    {
+        $depreciation = $this->getDepreciationRecord();
+        if (!$depreciation) {
+            return [
+                'current_value' => (float) $this->original_value,
+                'accumulated_depreciation' => 0,
+                'has_depreciation' => false,
+                'annual_depreciation' => null,
+                'ytd_depreciation' => null,
+                'remaining_life_years' => null,
+                'replacement_year' => null,
+            ];
+        }
+
+        return [
+            'current_value' => (float) $depreciation->current_value,
+            'accumulated_depreciation' => (float) $depreciation->accumulated_depreciation,
+            'has_depreciation' => true,
+            'annual_depreciation' => round($depreciation->getAnnualDepreciation(), 2),
+            'ytd_depreciation' => round($depreciation->getYtdDepreciation(), 2),
+            'remaining_life_years' => $depreciation->getRemainingLifeDecimal(),
+            'replacement_year' => $depreciation->getReplacementYear(),
+        ];
+    }
+
+    /**
      * Get or create the single depreciation record for this asset
      */
     public function getDepreciationRecord(): ?AssetDepreciation

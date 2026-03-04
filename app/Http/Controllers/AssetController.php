@@ -438,6 +438,23 @@ class AssetController extends Controller
     }
 
     /**
+     * Toggle asset item status between functioning and not_functioning.
+     */
+    public function toggleStatus(Request $request, AssetItem $assetItem)
+    {
+        $request->validate([
+            'status' => 'required|string|in:functioning,not_functioning',
+        ]);
+
+        $assetItem->update(['status' => $request->status]);
+
+        return response()->json([
+            'status' => $assetItem->status,
+            'message' => 'Status updated successfully',
+        ], 200);
+    }
+
+    /**
      * Display the asset locations index page.
      */
     public function locationIndex()

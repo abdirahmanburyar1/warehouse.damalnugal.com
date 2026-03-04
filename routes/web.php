@@ -604,6 +604,7 @@ Route::controller(LocationController::class)
             Route::get('/workflow', 'approvalsIndex')->name('assets.workflow.index');
             Route::get('/asset-items/{assetItem}/history', 'showHistory')->name('assets.history.index');
             Route::get('/asset-items/{assetItem}/detailed-history', 'showAssetItemHistory')->name('assets.items.history.index');
+            Route::patch('/asset-items/{assetItem}/status', 'toggleStatus')->name('assets.items.toggle-status');
             
             // Create routes - require asset-create permission
             Route::get('/create', 'create')->name('assets.get-create');

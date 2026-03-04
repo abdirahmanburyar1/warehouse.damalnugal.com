@@ -89,6 +89,49 @@ class AssetDepreciation extends Model
         return max(0, $this->useful_life_years - $yearsElapsed);
     }
 
+    /**
+     * Years elapsed since depreciation start (decimal, e.g. 2.9)
+     */
+    public function getYearsElapsedDecimal(): float
+    {
+        if (!$this->depreciation_start_date) {
+            return 0;
+        }
+        $days = $this->depreciation_start_date->diffInDays(now());
+        return round($days / 365.25, 1);
+    }
+
+    /**
+     * Remaining useful life in years (decimal, e.g. 7.1)
+     */
+    public function getRemainingLifeDecimal(): float
+    {
+        $age = $this->getYearsElapsedDecimal();
+        return max(0, round($this->useful_life_years - $age, 1));
+    }
+
+    /**
+     * Year-to-date depreciation for current year: Annual × (Months/12)
+     */
+    public function getYtdDepreciation(): float
+    {
+        $annual = $this->getAnnualDepreciation();
+        $monthsElapsed = (int) now()->format('n'); // 1-12
+        return round($annual * ($monthsElapsed / 12), 2);
+    }
+
+    /**
+     * Replacement year: Current Year + Remaining Life
+     */
+    public function getReplacementYear(): ?int
+    {
+        $remaining = $this->getRemainingLifeDecimal();
+        if ($remaining <= 0) {
+            return (int) now()->format('Y'); // Fully depreciated, replace now
+        }
+        return (int) (now()->format('Y') + $remaining);
+    }
+
     public function getDepreciationPercentage(): float
     {
         if ($this->useful_life_years <= 0) {

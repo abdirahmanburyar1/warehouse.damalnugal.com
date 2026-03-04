@@ -341,7 +341,13 @@ class ReportController extends Controller
             if (empty($facilityIds)) {
                 return response()->json([
                     'success' => false,
-                    'data' => ['rows' => [], 'summary' => $this->getAssetReportSummary([]), 'category_columns' => []],
+                    'data' => [
+                        'rows' => [],
+                        'summary' => $this->getAssetReportSummary(['total_assets' => 0, 'by_category' => array_fill_keys(self::ASSET_REPORT_CATEGORIES, ['total' => 0, 'functioning' => 0, 'not_functioning' => 0])]),
+                        'category_columns' => self::ASSET_REPORT_CATEGORIES,
+                        'aggregation_level' => null,
+                        'name_column_label' => 'Facility Name',
+                    ],
                     'message' => 'Asset Report requires Region, District or Facility.',
                 ]);
             }
@@ -1802,53 +1808,119 @@ class ReportController extends Controller
     }
 
     /**
-     * Asset Report: one row per facility with Total Assets and per-category Total / Functioning / Not Functioning.
-     * Filtered by facility (region -> district -> facilities). Uses assets.facility_id and asset_items.status.
-     * Functioning: Good, in_use, pending_approval. Not functioning: Non-functional, maintenance, retired, disposed.
+     * Fixed asset report categories. All are always shown; DB categories map into these or "Others".
+     */
+    private const ASSET_REPORT_CATEGORIES = ['Medical Equipment', 'Furniture', 'IT Equipment', 'Vehicles', 'Others'];
+
+    /**
+     * Map a DB category name to one of the fixed asset report categories.
+     */
+    private function mapToAssetReportCategory(string $dbCategoryName): string
+    {
+        $name = strtolower(trim($dbCategoryName));
+        if (str_contains($name, 'medical')) {
+            return 'Medical Equipment';
+        }
+        if (str_contains($name, 'furniture')) {
+            return 'Furniture';
+        }
+        if (str_contains($name, 'it ') || $name === 'it') {
+            return 'IT Equipment';
+        }
+        if (str_contains($name, 'vehicle')) {
+            return 'Vehicles';
+        }
+        return 'Others';
+    }
+
+    /**
+     * Asset Report: rows aggregated by region, district, or facility based on filters.
+     * - Region only: one row per region (region name)
+     * - District: one row per district (district name)
+     * - Facility: one row per facility (facility name)
+     * Uses fixed categories: Medical Equipment, Furniture, IT Equipment, Vehicles, Others. All shown with zeros when empty.
      */
     private function getAssetReportData(Request $request, array $facilityIds): array
     {
-        $facilities = Facility::whereIn('id', $facilityIds)->orderBy('name')->get(['id', 'name']);
-        $categoryNames = AssetCategory::orderBy('name')->pluck('name')->toArray();
+        $aggregationLevel = $request->filled('facility_id') ? 'facility' : ($request->filled('district_id') ? 'district' : 'region');
+        $facilities = Facility::whereIn('id', $facilityIds)
+            ->orderBy('region')
+            ->orderBy('district')
+            ->orderBy('name')
+            ->get(['id', 'name', 'region', 'district']);
+
+        // Group facilities by aggregation key
+        $groups = [];
+        foreach ($facilities as $f) {
+            if ($aggregationLevel === 'facility') {
+                $key = 'f:' . $f->id;
+                $label = $f->name;
+            } elseif ($aggregationLevel === 'district') {
+                $key = 'd:' . ($f->district ?? 'Unknown');
+                $label = $f->district ?? 'Unknown';
+            } else {
+                $key = 'r:' . ($f->region ?? 'Unknown');
+                $label = $f->region ?? 'Unknown';
+            }
+            if (!isset($groups[$key])) {
+                $groups[$key] = ['label' => $label, 'facility_ids' => []];
+            }
+            $groups[$key]['facility_ids'][] = $f->id;
+        }
+
+        $categoryNames = self::ASSET_REPORT_CATEGORIES;
         $rows = [];
         $summaryTotal = 0;
-        $summaryByCategory = [];
-
+        $summaryByCategory = array_fill_keys($categoryNames, ['total' => 0, 'functioning' => 0, 'not_functioning' => 0]);
         $functioningStatuses = ['Good', 'in_use', 'pending_approval', 'functioning'];
         $notFunctioningStatuses = ['Non-functional', 'maintenance', 'retired', 'disposed', 'not_functioning'];
 
-        foreach ($facilities as $facility) {
+        $nameColumnLabel = match ($aggregationLevel) {
+            'region' => 'Region',
+            'district' => 'District',
+            default => 'Facility Name',
+        };
+
+        foreach ($groups as $group) {
+            $facilityIdsInGroup = $group['facility_ids'];
             $baseQuery = AssetItem::query()
-                ->whereHas('asset', function ($q) use ($facility) {
-                    $q->where('facility_id', $facility->id);
+                ->whereHas('asset', function ($q) use ($facilityIdsInGroup) {
+                    $q->whereIn('facility_id', $facilityIdsInGroup);
                 })
                 ->join('asset_categories', 'asset_items.asset_category_id', '=', 'asset_categories.id');
 
             $totalAssets = (int) (clone $baseQuery)->count();
 
-            $byCategory = (clone $baseQuery)
+            $byDbCategory = (clone $baseQuery)
                 ->selectRaw("asset_categories.name as category_name,
                     count(asset_items.id) as total,
                     sum(case when asset_items.status in ('" . implode("','", array_map('addslashes', $functioningStatuses)) . "') then 1 else 0 end) as functioning,
                     sum(case when asset_items.status in ('" . implode("','", array_map('addslashes', $notFunctioningStatuses)) . "') then 1 else 0 end) as not_functioning")
                 ->groupBy('asset_categories.name')
-                ->get()
-                ->keyBy('category_name');
+                ->get();
+
+            $byCategory = [];
+            foreach ($byDbCategory as $r) {
+                $mapped = $this->mapToAssetReportCategory($r->category_name);
+                if (!isset($byCategory[$mapped])) {
+                    $byCategory[$mapped] = ['total' => 0, 'functioning' => 0, 'not_functioning' => 0];
+                }
+                $byCategory[$mapped]['total'] += (int) $r->total;
+                $byCategory[$mapped]['functioning'] += (int) $r->functioning;
+                $byCategory[$mapped]['not_functioning'] += (int) $r->not_functioning;
+            }
 
             $row = [
-                'facility_id' => $facility->id,
-                'facility_name' => $facility->name,
+                'facility_id' => $aggregationLevel === 'facility' && count($facilityIdsInGroup) === 1 ? $facilityIdsInGroup[0] : null,
+                'facility_name' => $group['label'],
                 'total_assets' => $totalAssets,
             ];
             foreach ($categoryNames as $catName) {
                 $key = 'category_' . preg_replace('/\s+/', '_', strtolower($catName));
-                $data = $byCategory->get($catName);
-                $row[$key . '_total'] = $data ? (int) $data->total : 0;
-                $row[$key . '_functioning'] = $data ? (int) $data->functioning : 0;
-                $row[$key . '_not_functioning'] = $data ? (int) $data->not_functioning : 0;
-                if (! isset($summaryByCategory[$catName])) {
-                    $summaryByCategory[$catName] = ['total' => 0, 'functioning' => 0, 'not_functioning' => 0];
-                }
+                $data = $byCategory[$catName] ?? null;
+                $row[$key . '_total'] = $data ? (int) $data['total'] : 0;
+                $row[$key . '_functioning'] = $data ? (int) $data['functioning'] : 0;
+                $row[$key . '_not_functioning'] = $data ? (int) $data['not_functioning'] : 0;
                 $summaryByCategory[$catName]['total'] += $row[$key . '_total'];
                 $summaryByCategory[$catName]['functioning'] += $row[$key . '_functioning'];
                 $summaryByCategory[$catName]['not_functioning'] += $row[$key . '_not_functioning'];
@@ -1866,6 +1938,8 @@ class ReportController extends Controller
             'rows' => $rows,
             'summary' => $summary,
             'category_columns' => $categoryNames,
+            'aggregation_level' => $aggregationLevel,
+            'name_column_label' => $nameColumnLabel,
         ];
     }
 

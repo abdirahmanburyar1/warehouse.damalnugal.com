@@ -90,22 +90,34 @@
                     </div>
                     <div>
                         <InputLabel value="Warehouse" />
-                        <SearchableSelect
+                        <Multiselect
                             v-model="form.warehouse"
                             :options="warehouses"
+                            :searchable="true"
+                            :close-on-select="true"
+                            :show-labels="false"
+                            track-by="id"
+                            label="name"
                             placeholder="Select warehouse"
                             class="mt-1.5"
                             @select="handleSelectWarehouse"
+                            @remove="() => handleSelectWarehouse(null)"
                         />
                     </div>
                     <div>
                         <InputLabel value="Facility" />
-                        <SearchableSelect
+                        <Multiselect
                             v-model="form.facility"
                             :options="facilities"
+                            :searchable="true"
+                            :close-on-select="true"
+                            :show-labels="false"
+                            track-by="id"
+                            label="name"
                             placeholder="Select facility"
                             class="mt-1.5"
                             @select="handleSelectFacility"
+                            @remove="() => handleSelectFacility(null)"
                         />
                     </div>
                     <div>
@@ -269,7 +281,6 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import UserAuthTab from '@/Layouts/UserAuthTab.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import Modal from '@/Components/Modal.vue';
-import SearchableSelect from '@/Components/SearchableSelect.vue';
 import Multiselect from 'vue-multiselect';
 import 'vue-multiselect/dist/vue-multiselect.css';
 import '@/Components/multiselect.css';

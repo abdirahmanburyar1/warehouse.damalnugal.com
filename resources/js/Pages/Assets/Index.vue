@@ -309,6 +309,9 @@
                                     <span>Current Value</span>
                                 </th>
                                 <th class="px-3 py-2 text-xs font-bold border-r" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6; border-right-color: #B7C6E6;">
+                                    <span>Depreciation</span>
+                                </th>
+                                <th class="px-3 py-2 text-xs font-bold border-r" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6; border-right-color: #B7C6E6;">
                                     <span>Fund Source</span>
                                 </th>
                                 <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">
@@ -426,6 +429,22 @@
                                 </td>
                                 <td class="px-4 py-3 align-top border-r border-gray-100">
                                     <div class="text-xs text-gray-900">
+                                        <template v-if="asset.depreciation_data?.has_depreciation">
+                                            <div class="group relative">
+                                                <div class="space-y-1">
+                                                    <div>Annual: {{ formatCurrency(asset.depreciation_data?.annual_depreciation) }}</div>
+                                                    <div>YTD: {{ formatCurrency(asset.depreciation_data?.ytd_depreciation) }}</div>
+                                                    <div>Accumulated: {{ formatCurrency(asset.depreciation_data?.accumulated_depreciation) }}</div>
+                                                    <div>Remaining: {{ asset.depreciation_data?.remaining_life_years ?? '—' }} yr</div>
+                                                    <div>Replace: {{ asset.depreciation_data?.replacement_year ?? '—' }}</div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                        <span v-else class="text-gray-400">—</span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 align-top border-r border-gray-100">
+                                    <div class="text-xs text-gray-900">
                                         {{ asset.fund_source?.name || 'N/A' }}
                                     </div>
                                 </td>
@@ -470,13 +489,22 @@
                                                     </svg>
                                                     Transfer Asset
                                                 </button>
-                                                
-                                                <button v-if="page.props.auth.can.asset_manage" @click="openRetirementModal(asset); closeDropdown()"
+
+                                                <button v-if="page.props.auth.can.asset_edit && isFunctioningStatus(asset.status)"
+                                                    @click="toggleAssetStatus(asset, 'not_functioning'); closeDropdown()"
                                                     class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
                                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 mr-2 text-orange-600">
-                                                        <path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 11-.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807c1.123 0 2.087-.816 2.285-1.917l.841-10.52.149.023a.75.75 0 11-.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4zM8.58 7.72a.75.75 0 00-1.5.06l.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clip-rule="evenodd" />
+                                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
                                                     </svg>
-                                                    Retire Asset
+                                                    Mark as Not functioning
+                                                </button>
+                                                <button v-if="page.props.auth.can.asset_edit && !isFunctioningStatus(asset.status)"
+                                                    @click="toggleAssetStatus(asset, 'functioning'); closeDropdown()"
+                                                    class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 mr-2 text-green-600">
+                                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
+                                                    </svg>
+                                                    Mark as Functioning
                                                 </button>
                                                                                             </div>
                                         </div>
@@ -1330,6 +1358,25 @@ function toggleDropdown(assetId) {
 
 function closeDropdown() {
     activeDropdown.value = null;
+}
+
+function isFunctioningStatus(status) {
+    return status === 'functioning' || status === 'in_use';
+}
+
+const togglingStatus = ref(false);
+async function toggleAssetStatus(asset, newStatus) {
+    if (togglingStatus.value) return;
+    togglingStatus.value = true;
+    try {
+        await axios.patch(route('assets.items.toggle-status', asset.id), { status: newStatus });
+        toast.success(`Asset marked as ${newStatus === 'functioning' ? 'Functioning' : 'Not functioning'}`);
+        router.reload();
+    } catch (e) {
+        toast.error(e.response?.data?.message || 'Failed to update status');
+    } finally {
+        togglingStatus.value = false;
+    }
 }
 
 // Function to determine dropdown position to avoid overlapping with pagination
