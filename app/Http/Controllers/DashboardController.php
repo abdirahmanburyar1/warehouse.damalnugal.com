@@ -269,8 +269,6 @@ class DashboardController extends Controller
 
         // Combine warehouse data first, then facility types
         $facilityTypes = $warehouseData->concat($facilityTypes);
-
-        logger()->info($facilityTypes);
         
         $filter = $request->input('order_filter', 'PO'); // default to PO
 
@@ -606,12 +604,7 @@ class DashboardController extends Controller
                 })
             ], 200);
 
-        } catch (\Throwable $th) {
-            logger()->error('Error fetching warehouse tracert items', [
-                'error' => $th->getMessage(),
-                'request' => $request->all()
-            ]);
-            
+        } catch (\Throwable $th) {            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch warehouse data: ' . $th->getMessage(),
@@ -786,12 +779,7 @@ class DashboardController extends Controller
                 })
             ], 200);
 
-        } catch (\Throwable $th) {
-            logger()->error('Error fetching facility tracert items', [
-                'error' => $th->getMessage(),
-                'request' => $request->all()
-            ]);
-            
+        } catch (\Throwable $th) {             
             // Try to get facilities list even on error
             $facilities = collect();
             try {
