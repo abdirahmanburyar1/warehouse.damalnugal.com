@@ -94,7 +94,7 @@ class AssetItem extends Model
 
     public function getAssetLocation(): string
     {
-        return $this->asset->assetLocation->name ?? 'Unknown';
+        return $this->asset->facility->name ?? 'Unknown';
     }
 
     public function getSubLocation(): string

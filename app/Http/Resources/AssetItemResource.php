@@ -35,7 +35,8 @@ class AssetItemResource extends JsonResource
                 'acquisition_date' => $this->asset->acquisition_date ?? null,
                 'fund_source_id' => $this->asset->fund_source_id ?? null,
                 'region_id' => $this->asset->region_id ?? null,
-                'asset_location_id' => $this->asset->asset_location_id ?? null,
+                'district_id' => $this->asset->district_id ?? null,
+                'facility_id' => $this->asset->facility_id ?? null,
                 'sub_location_id' => $this->asset->sub_location_id ?? null,
             ],
             
@@ -55,9 +56,21 @@ class AssetItemResource extends JsonResource
                 'name' => $this->assignee->name ?? null,
             ],
             
+            'district' => [
+                'id' => $this->asset->district->id ?? null,
+                'name' => $this->asset->district->name ?? null,
+                'region' => $this->asset->district->region ?? null,
+            ],
+            
+            'facility' => [
+                'id' => $this->asset->facility->id ?? null,
+                'name' => $this->asset->facility->name ?? null,
+                'district' => $this->asset->facility->district ?? null,
+            ],
+            
             'asset_location' => [
-                'id' => $this->asset->assetLocation->id ?? null,
-                'name' => $this->asset->assetLocation->name ?? null,
+                'id' => $this->asset->facility->id ?? null,
+                'name' => $this->asset->facility->name ?? null,
             ],
             
             'sub_location' => [
@@ -86,7 +99,8 @@ class AssetItemResource extends JsonResource
             'asset_category_id' => $this->asset_category_id,
             'type_id' => $this->asset_type_id,
             'assignee_id' => $this->assignee_id,
-            'asset_location_id' => $this->asset->asset_location_id ?? null,
+            'district_id' => $this->asset->district_id ?? null,
+            'facility_id' => $this->asset->facility_id ?? null,
             'sub_location_id' => $this->asset->sub_location_id ?? null,
             'fund_source_id' => $this->asset->fund_source_id ?? null,
             'region_id' => $this->asset->region_id ?? null,
@@ -98,7 +112,7 @@ class AssetItemResource extends JsonResource
             
             // Additional computed fields
             'asset_number' => $this->asset->asset_number ?? null,
-            'location_name' => $this->asset->assetLocation->name ?? null,
+            'location_name' => $this->asset->facility->name ?? null,
             'sub_location_name' => $this->asset->subLocation->name ?? null,
             'region_name' => $this->asset->region->name ?? null,
             'fund_source_name' => $this->asset->fundSource->name ?? null,

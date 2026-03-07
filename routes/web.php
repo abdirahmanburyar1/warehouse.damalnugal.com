@@ -32,6 +32,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\LiquidateDisposalController;
 use App\Http\Controllers\ConsumptionUploadController;
 use App\Http\Controllers\ReceivedBackorderController;
+use App\Http\Controllers\WarehouseAmcController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Broadcast;
@@ -675,6 +676,13 @@ Route::controller(LocationController::class)
         Route::get('/get-locations', [InventoryController::class, 'getLocations'])->name('inventories.getLocations');
         Route::get('/get-all-locations', [InventoryController::class, 'getAllLocations'])->name('inventories.getAllLocations');
         Route::post('/import', [InventoryController::class, 'import'])->name('inventories.import');
+
+            // Warehouse AMC: under inventory namespace (same as warehouse.mohjss.so)
+            Route::get('/warehouse-amc', [WarehouseAmcController::class, 'index'])->name('inventories.warehouse-amc');
+            Route::get('/warehouse-amc/export', [WarehouseAmcController::class, 'export'])->name('inventories.warehouse-amc.export');
+            Route::get('/warehouse-amc/template', [WarehouseAmcController::class, 'downloadTemplate'])->name('inventories.warehouse-amc.template');
+            Route::post('/warehouse-amc/import', [WarehouseAmcController::class, 'import'])->name('inventories.warehouse-amc.import');
+            Route::get('/warehouse-amc/import-status/{importId}', [WarehouseAmcController::class, 'checkImportStatus'])->name('inventories.warehouse-amc.import.status');
     });
     });
 
@@ -712,8 +720,6 @@ Route::controller(LocationController::class)
         Route::put('/warehouse-monthly/approve', [ReportController::class, 'approveInventoryReport'])->name('reports.warehouseMonthly.approve');
         Route::put('/warehouse-monthly/reject', [ReportController::class, 'rejectInventoryReport'])->name('reports.warehouseMonthly.reject');
         Route::post('/warehouse-monthly/export-to-excel', [ReportController::class, 'exportToExcel'])->name('reports.warehouseMonthly.exportToExcel');
-
-        // Warehouse AMC: no report page; data is fed by schedule (warehouse:generate-amc) into warehouse_amcs and reorder_levels
     });
 
     // MOH Inventory Routes (own permissions: view, create, review, approve, reject)
@@ -818,6 +824,9 @@ Route::controller(LocationController::class)
         Route::post('asset-depreciation/install-defaults', [AssetDepreciationSettingsController::class, 'installDefaults'])->name('settings.asset-depreciation.install-defaults');
         Route::post('asset-depreciation/reset-to-defaults', [AssetDepreciationSettingsController::class, 'resetToDefaults'])->name('settings.asset-depreciation.reset-to-defaults');
         Route::get('asset-depreciation/export', [AssetDepreciationSettingsController::class, 'export'])->name('settings.asset-depreciation.export');
+
+        // Audit Trail Route
+        Route::get('/audit-trail', [\App\Http\Controllers\Settings\AuditTrailController::class, 'index'])->name('settings.audit-trail.index');
 
     });
 

@@ -12,12 +12,12 @@ class SubLocation extends Model
 
     protected $fillable = [
         'name',
-        'asset_location_id'
+        'facility_id'
     ];
 
     public function location()
     {
-        return $this->belongsTo(AssetLocation::class, 'asset_location_id');
+        return $this->belongsTo(Facility::class, 'facility_id');
     }
 
     public function assets()

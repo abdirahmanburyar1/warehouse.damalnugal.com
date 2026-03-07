@@ -26,6 +26,15 @@ class EventServiceProvider extends ServiceProvider
         ],
     ];
 
+    /**
+     * The subscriber classes to register.
+     *
+     * @var array
+     */
+    protected $subscribe = [
+        \App\Listeners\LogUserAuthentication::class,
+    ];
+
     public function boot(): void
     {
         \App\Models\User::observe(\App\Observers\UserObserver::class);

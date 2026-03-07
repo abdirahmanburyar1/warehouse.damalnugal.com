@@ -8,7 +8,7 @@ use App\Models\AssetCategory;
 use App\Models\AssetType;
 use App\Models\FundSource;
 use App\Models\Region;
-use App\Models\AssetLocation;
+use App\Models\Facility;
 use App\Models\SubLocation;
 use App\Models\Assignee;
 use Illuminate\Support\Collection;
@@ -73,10 +73,20 @@ class AssetsImport implements ToCollection, WithHeadingRow, WithChunkReading, Sk
                     $region = Region::firstOrCreate(['name' => trim($row['region'])]);
                     $fundSource = FundSource::firstOrCreate(['name' => trim($row['fund_source'])]);
                     
-                    $assetLocation = AssetLocation::firstOrCreate(['name' => trim($row['asset_location'])]);
+                    $assetLocation = Facility::where('name', trim($row['asset_location']))->first();
+                    if (!$assetLocation) {
+                        $assetLocation = Facility::create([
+                            'name' => trim($row['asset_location']),
+                            'district' => 'Unknown',
+                            'region' => trim($row['region']) ?? 'Unknown',
+                            'facility_type' => 'Other',
+                            'has_cold_storage' => 0,
+                            'is_active' => 1
+                        ]);
+                    }
                     $subLocation = SubLocation::firstOrCreate([
                         'name' => trim($row['sub_location']),
-                        'asset_location_id' => $assetLocation->id,
+                        'facility_id' => $assetLocation->id,
                     ]);
 
                     // Create or get assignee
@@ -141,7 +151,7 @@ class AssetsImport implements ToCollection, WithHeadingRow, WithChunkReading, Sk
                         'organization' => auth()->user()->organization ?? 'PSI', // Default to PSI if no organization
                         'fund_source_id' => $fundSource->id,
                         'region_id' => $region->id,
-                        'asset_location_id' => $assetLocation->id,
+                        'facility_id' => $assetLocation->id,
                         'sub_location_id' => $subLocation->id,
                         'status' => $status,
                         'submitted_by' => $this->userId,

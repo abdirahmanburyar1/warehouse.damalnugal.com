@@ -11,10 +11,11 @@ use App\Models\User;
 use App\Models\OrderItem;
 use App\Models\Approval;
 use App\Models\Warehouse;
+use App\Traits\Auditable;
 
 class Order extends Model
 {
-    use HasFactory;
+    use HasFactory, Auditable;
 
     protected $fillable = [
         'facility_id',

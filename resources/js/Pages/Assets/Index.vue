@@ -86,8 +86,7 @@
                                 <div class="ml-4">
                                     <p class="text-sm font-medium text-green-600">Functioning Assets</p>
                                     <p class="text-2xl font-bold text-green-900">
-                                        {{props.assets.data.filter(a => a.status === 'functioning' || a.status ===
-                                        'in_use').length }}
+                                        {{props.assets.data.filter(a => a.status === 'functioning').length }}
                                     </p>
                                 </div>
                             </div>
@@ -122,12 +121,6 @@
                                             d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-1.72 6.97a.75.75 0 10-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 101.06 1.06L12 13.06l1.72 1.72a.75.75 0 101.06-1.06L13.06 12l1.72-1.72a.75.75 0 10-1.06-1.06L12 10.94l-1.72-1.72z"
                                             clip-rule="evenodd" />
                                     </svg>
-                                </div>
-                                <div class="ml-4">
-                                    <p class="text-sm font-medium text-red-600">Retired</p>
-                                    <p class="text-2xl font-bold text-red-900">
-                                        {{ props.assets.data.filter(a => a.status === 'retired').length }}
-                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -177,17 +170,31 @@
                         </div>
 
                         <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">District</label>
+                            <Multiselect v-model="districtFilter" :options="districtsOptions" :placeholder="regionFilter ? 'All Districts' : 'Select Region first'"
+                                label="name" track-by="id" :show-labels="false" :close-on-select="true" :disabled="!regionFilter" />
+                        </div>
+
+                        <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Asset Location</label>
                             <Multiselect
                                 v-model="locationFilter"
                                 :options="locationOptions"
-                                placeholder="All Locations"
+                                :placeholder="districtFilter ? 'All Locations' : 'Select District first'"
                                 label="name"
                                 track-by="id"
                                 :show-labels="false"
                                 :close-on-select="true"
+                                :disabled="!districtFilter"
                                 @select="onLocationChange"
-                            />
+                            >
+                                <template #option="{ option }">
+                                    <div>
+                                        <span class="font-medium text-gray-900 block">{{ option.name }}</span>
+                                        <span v-if="option.district || option.region" class="text-gray-500 text-xs block">{{ [option.district, option.region].filter(Boolean).join(' · ') }}</span>
+                                    </div>
+                                </template>
+                            </Multiselect>
                         </div>
 
                         <div>
@@ -208,15 +215,6 @@
                             <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
                             <Multiselect v-model="selectedStatus" :options="statusOptions" placeholder="All Statuses"
                                 label="label" track-by="value" :show-labels="false" :close-on-select="true" />
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Depreciation</label>
-                            <select v-model="depreciationFilter" class="block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500">
-                                <option value="">All Assets</option>
-                                <option value="with_depreciation">With Depreciation</option>
-                                <option value="without_depreciation">Without Depreciation</option>
-                            </select>
                         </div>
 
                         <div>
@@ -259,13 +257,20 @@
                 </div>
 
                 <div v-else-if="props.assets.data.length === 0" class="text-center py-12">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                    <svg v-if="!hasActiveFilters" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-16 h-16 text-gray-400 mx-auto mb-4">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" />
+                    </svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
                         class="w-16 h-16 text-gray-400 mx-auto mb-4">
                         <path
                             d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27z" />
                     </svg>
-                    <h3 class="text-lg font-medium text-gray-900 mb-2">No assets found</h3>
-                    <p class="text-gray-500">No assets match your current filters.</p>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">
+                        {{ hasActiveFilters ? 'No assets found' : 'Select filters to view assets' }}
+                    </h3>
+                    <p class="text-gray-500">
+                        {{ hasActiveFilters ? 'No assets match your current filters.' : 'Please select at least one filter or enter a search term above to load assets.' }}
+                    </p>
                 </div>
 
                 <div v-else class="relative bg-white/90 backdrop-blur-sm rounded-xl shadow-sm ring-1 ring-gray-200/70">
@@ -303,13 +308,7 @@
                                     <span>Acquisition Date</span>
                                 </th>
                                 <th class="px-3 py-2 text-xs font-bold border-r" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6; border-right-color: #B7C6E6;">
-                                    <span>Original Value</span>
-                                </th>
-                                <th class="px-3 py-2 text-xs font-bold border-r" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6; border-right-color: #B7C6E6;">
-                                    <span>Current Value</span>
-                                </th>
-                                <th class="px-3 py-2 text-xs font-bold border-r" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6; border-right-color: #B7C6E6;">
-                                    <span>Depreciation</span>
+                                    <span>Value</span>
                                 </th>
                                 <th class="px-3 py-2 text-xs font-bold border-r" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6; border-right-color: #B7C6E6;">
                                     <span>Fund Source</span>
@@ -349,17 +348,17 @@
                                 </td>
                                 <td class="px-4 py-3 align-top border-r border-gray-100">
                                     <span :class="{
-                                        'bg-green-100 text-green-800': asset.status === 'functioning' || asset.status === 'in_use',
+                                        'bg-green-100 text-green-800': asset.status === 'functioning',
                                         'bg-yellow-100 text-yellow-800': asset.status === 'pending_approval',
                                         'bg-orange-100 text-orange-800': asset.status === 'maintenance' || asset.status === 'not_functioning',
-                                        'bg-red-100 text-red-800': asset.status === 'disposed' || asset.status === 'retired',
-                                        'bg-gray-100 text-gray-800': !['functioning', 'in_use', 'pending_approval', 'maintenance', 'not_functioning', 'disposed', 'retired'].includes(asset.status)
+                                        'bg-red-100 text-red-800': asset.status === 'disposed',
+                                        'bg-gray-100 text-gray-800': !['functioning', 'pending_approval', 'maintenance', 'not_functioning', 'disposed'].includes(asset.status)
                                     }"
                                         class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">
                                         <span v-if="asset.status === 'pending_approval'"
                                             class="w-2 h-2 bg-yellow-400 rounded-full mr-1 animate-pulse"></span>
                                         <span
-                                            v-else-if="asset.status === 'functioning' || asset.status === 'in_use'"
+                                            v-else-if="asset.status === 'functioning'"
                                             class="w-2 h-2 bg-green-400 rounded-full mr-1"></span>
                                         <span v-else-if="asset.status === 'maintenance' || asset.status === 'not_functioning'"
                                             class="w-2 h-2 bg-orange-400 rounded-full mr-1 animate-pulse"></span>
@@ -379,7 +378,7 @@
                                 </td>
                                 <td class="px-4 py-3 align-top border-r border-gray-100">
                                     <div class="text-xs text-gray-900">
-                                        {{ asset.asset_location?.name || 'N/A' }}
+                                        {{ asset.facility?.name || 'N/A' }}
                                     </div>
                                 </td>
                                 <td class="px-4 py-3 align-top border-r border-gray-100">
@@ -395,52 +394,6 @@
                                 <td class="px-4 py-3 align-top border-r border-gray-100">
                                     <div class="text-xs text-gray-900">
                                         {{ formatCurrency(asset.original_value) }}
-                                    </div>
-                                </td>
-                                <td class="px-4 py-3 align-top border-r border-gray-100">
-                                    <div class="text-xs text-gray-900">
-                                        <div class="font-medium">
-                                            {{ formatCurrency(asset.depreciation_data?.current_value || asset.original_value) }}
-                                        </div>
-                                        <div v-if="asset.depreciation_data?.has_depreciation" class="text-xs text-gray-500 mt-1">
-                                            <div class="flex items-center space-x-2">
-                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-800">
-                                                    Depreciated
-                                                </span>
-                                                <div class="group relative">
-                                                    <svg class="w-4 h-4 text-blue-500 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                    </svg>
-                                                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
-                                                        <div class="text-center">
-                                                            <div class="font-medium">Depreciation Details</div>
-                                                            <div class="mt-1">
-                                                                <div>Original: {{ formatCurrency(asset.original_value) }}</div>
-                                                                <div>Current: {{ formatCurrency(asset.depreciation_data?.current_value) }}</div>
-                                                                <div>Accumulated: {{ formatCurrency(asset.depreciation_data?.accumulated_depreciation) }}</div>
-                                                            </div>
-                                                        </div>
-                                                        <div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="px-4 py-3 align-top border-r border-gray-100">
-                                    <div class="text-xs text-gray-900">
-                                        <template v-if="asset.depreciation_data?.has_depreciation">
-                                            <div class="group relative">
-                                                <div class="space-y-1">
-                                                    <div>Annual: {{ formatCurrency(asset.depreciation_data?.annual_depreciation) }}</div>
-                                                    <div>YTD: {{ formatCurrency(asset.depreciation_data?.ytd_depreciation) }}</div>
-                                                    <div>Accumulated: {{ formatCurrency(asset.depreciation_data?.accumulated_depreciation) }}</div>
-                                                    <div>Remaining: {{ asset.depreciation_data?.remaining_life_years ?? '—' }} yr</div>
-                                                    <div>Replace: {{ asset.depreciation_data?.replacement_year ?? '—' }}</div>
-                                                </div>
-                                            </div>
-                                        </template>
-                                        <span v-else class="text-gray-400">—</span>
                                     </div>
                                 </td>
                                 <td class="px-4 py-3 align-top border-r border-gray-100">
@@ -516,13 +469,13 @@
                 
 
                 <!-- Pagination -->
-                <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 mb-[80px] flex justify-between">
+                <div v-if="hasActiveFilters" class="bg-gray-50 px-6 py-3 border-t border-gray-200 mb-[80px] flex justify-between">
                     <!-- FROM TO COUNT -->
                     <div class="text-sm text-gray-500">
-                        Showing {{ props.assets.meta.from }} to {{ props.assets.meta.to }} of {{ props.assets.meta.total }} assets
+                        Showing {{ props.assets?.meta?.from || 0 }} to {{ props.assets?.meta?.to || 0 }} of {{ props.assets?.meta?.total || 0 }} assets
                     </div>
                     <div class="flex items-center justify-end">
-                        <TailwindPagination :data="props.assets" @pagination-change-page="getResults" :limit="2" />
+                        <TailwindPagination v-if="props.assets?.meta" :data="props.assets" @pagination-change-page="getResults" :limit="2" />
                     </div>
                 </div>
             </div>
@@ -573,7 +526,55 @@
                                             <div class="mt-4 space-y-4">
                                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div>
-                                                        <label class="block text-sm font-medium text-gray-700 mb-1">New Assignee (Required)</label>
+                                                        <label class="block text-sm font-medium text-gray-700 mb-1">Region</label>
+                                                        <Multiselect
+                                                            v-model="transferData.region"
+                                                            :options="props.regions || []"
+                                                            :searchable="true"
+                                                            :close-on-select="true"
+                                                            :show-labels="false"
+                                                            :allow-empty="true"
+                                                            placeholder="Select Region"
+                                                            track-by="id"
+                                                            label="name"
+                                                            :open-direction="'bottom'"
+                                                            @select="() => { transferData.district = null; transferData.facility = null; }"
+                                                            @clear="() => { transferData.district = null; transferData.facility = null; }" />
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-sm font-medium text-gray-700 mb-1">District</label>
+                                                        <Multiselect
+                                                            v-model="transferData.district"
+                                                            :options="transferDistrictOptions"
+                                                            :searchable="true"
+                                                            :close-on-select="true"
+                                                            :show-labels="false"
+                                                            :allow-empty="true"
+                                                            placeholder="Select District"
+                                                            track-by="id"
+                                                            label="name"
+                                                            :open-direction="'bottom'"
+                                                            :disabled="!transferData.region"
+                                                            @select="() => { transferData.facility = null; }"
+                                                            @clear="() => { transferData.facility = null; }" />
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-sm font-medium text-gray-700 mb-1">Asset Location</label>
+                                                        <Multiselect
+                                                            v-model="transferData.facility"
+                                                            :options="transferFacilityOptions"
+                                                            :searchable="true"
+                                                            :close-on-select="true"
+                                                            :show-labels="false"
+                                                            :allow-empty="true"
+                                                            placeholder="Select Location"
+                                                            track-by="id"
+                                                            label="name"
+                                                            :open-direction="'bottom'"
+                                                            :disabled="!transferData.district" />
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-sm font-medium text-gray-700 mb-1">Assignee</label>
                                                         <Multiselect 
                                                             v-model="transferData.assignee" 
                                                             :options="assigneeOptions"
@@ -581,7 +582,7 @@
                                                             :close-on-select="true" 
                                                             :show-labels="false"
                                                             :allow-empty="true" 
-                                                            placeholder="Select New Assignee" 
+                                                            placeholder="Select Assignee" 
                                                             track-by="id" 
                                                             label="name" 
                                                             :open-direction="'bottom'"
@@ -589,9 +590,9 @@
                                                             @clear="onAssigneeClear" />
                                                     </div>
                                                     <div>
-                                                        <label class="block text-sm font-medium text-gray-700 mb-1">Transfer Date</label>
+                                                        <label class="block text-sm font-medium text-gray-700 mb-1">Transfer Date (Required)</label>
                                                         <input v-model="transferData.transfer_date" type="date"
-                                                            class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:ring-indigo-500 focus:border-indigo-500" />
+                                                            class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
                                                     </div>
                                                 </div>
                                                 
@@ -604,21 +605,6 @@
                                                     </div>
                                                 </div>
                                                 
-                                                <div class="bg-blue-50 border border-blue-200 rounded-md p-3">
-                                                    <div class="flex">
-                                                        <div class="flex-shrink-0">
-                                                            <svg class="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                                                            </svg>
-                                                        </div>
-                                                        <div class="ml-3">
-                                                            <p class="text-sm text-blue-700">
-                                                                <strong>Note:</strong> This transfer will only change the assignee and status of the asset item. 
-                                                                The asset's location (region, asset location, sub-location) will remain unchanged to avoid affecting other asset items under the same asset.
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1098,9 +1084,7 @@ const formatStatus = (status) => {
     const statusMap = {
         'functioning': 'Functioning',
         'not_functioning': 'Not functioning',
-        'in_use': 'In Use',
         'maintenance': 'Maintenance',
-        'retired': 'Retired',
         'disposed': 'Disposed',
         'pending_approval': 'Pending Approval'
     };
@@ -1121,10 +1105,11 @@ const formatCurrency = (value) => {
 };
 
 const props = defineProps({
-    locations: {
+    facilities: {
         type: Array,
         required: true,
     },
+    districts: { type: Array, required: false },
     categories: { type: Array, required: false },
     types: { type: Array, required: false },
     assignees: { type: Array, required: false },
@@ -1155,8 +1140,21 @@ const selectedAsset = ref(null);
 const transferData = reactive({
     asset_id: null,
     assignee: null,
+    region: null,
+    district: null,
+    facility: null,
     transfer_date: "",
     assignment_notes: "",
+});
+
+const transferDistrictOptions = computed(() => {
+    if (!transferData.region) return [];
+    return (props.districts || []).filter(d => d.region === transferData.region.name);
+});
+
+const transferFacilityOptions = computed(() => {
+    if (!transferData.district) return [];
+    return (props.facilities || []).filter(f => f.district === transferData.district.name);
 });
 
 // Assignee management
@@ -1207,12 +1205,30 @@ function openTransferModal(asset) {
     console.log('AssetItem data:', asset);
     console.log('Asset assignee:', asset.assignee);
     
-                    // Note: We're not updating asset location during transfers, so we don't need to populate these
-    // transferData.region = asset.region || null;
-    // transferData.asset_location = asset.asset_location || null;
-    // transferData.sub_location = asset.sub_location || null;
+    if (asset.assignee) {
+        transferData.assignee = { id: asset.assignee.id, name: asset.assignee.name };
+    } else {
+        transferData.assignee = null;
+    }
     
-    transferData.assignee = null;
+    if (asset.region) {
+        transferData.region = { id: asset.region.id, name: asset.region.name };
+    } else {
+        transferData.region = null;
+    }
+    
+    if (asset.district) {
+        transferData.district = { id: asset.district.id, name: asset.district.name, region: asset.district.region };
+    } else {
+        transferData.district = null;
+    }
+    
+    if (asset.facility) {
+        transferData.facility = { id: asset.facility.id, name: asset.facility.name, district: asset.facility.district };
+    } else {
+        transferData.facility = null;
+    }
+    
     transferData.transfer_date = "";
     transferData.assignment_notes = "";
     showTransferModal.value = true;
@@ -1310,22 +1326,20 @@ const selectedStatus = ref(null);
 const statusOptions = ref([
     { label: 'Functioning', value: 'functioning' },
     { label: 'Not functioning', value: 'not_functioning' },
-    { label: 'In Use', value: 'in_use' },
     { label: 'Maintenance', value: 'maintenance' },
-    { label: 'Retired', value: 'retired' },
     { label: 'Disposed', value: 'disposed' },
     { label: 'Pending Approval', value: 'pending_approval' }
 ]);
 
 // Region, Location, SubLocation filter state
 const regionFilter = ref(null);
+const districtFilter = ref(null);
 const locationFilter = ref(null);
 const subLocationFilter = ref(null);
 const subLocationOptions = ref([]);
 
                 // Note: filteredSubLocationOptions removed since we're not using asset location fields in transfers
 const fundSourceFilter = ref(null);
-const depreciationFilter = ref(props.filters?.depreciation_filter || '');
 const categoryFilter = ref(null);
 const typeFilter = ref(null);
 const assigneeFilter = ref(null);
@@ -1333,6 +1347,25 @@ const acquisitionFrom = ref(props.filters?.acquisition_from || '');
 const acquisitionTo = ref(props.filters?.acquisition_to || '');
 const createdFrom = ref(props.filters?.created_from || '');
 const createdTo = ref(props.filters?.created_to || '');
+
+const hasActiveFilters = computed(() => {
+    return !!(
+        search.value ||
+        regionFilter.value ||
+        districtFilter.value ||
+        locationFilter.value ||
+        subLocationFilter.value ||
+        fundSourceFilter.value ||
+        categoryFilter.value ||
+        typeFilter.value ||
+        assigneeFilter.value ||
+        selectedStatus.value ||
+        acquisitionFrom.value ||
+        acquisitionTo.value ||
+        createdFrom.value ||
+        createdTo.value
+    );
+});
 
 const filteredTypeOptions = computed(() => {
     if (!props.types) return [];
@@ -1361,7 +1394,7 @@ function closeDropdown() {
 }
 
 function isFunctioningStatus(status) {
-    return status === 'functioning' || status === 'in_use';
+    return status === 'functioning';
 }
 
 const togglingStatus = ref(false);
@@ -1427,10 +1460,17 @@ onMounted(async () => {
             const reg = props.regions.find(r => String(r.id) === String(regionId));
             if (reg) regionFilter.value = reg;
         }
+
+        const districtId = params.get('district_id');
+        if (districtId && Array.isArray(props.districts)) {
+            const dist = props.districts.find(d => String(d.id) === String(districtId));
+            if (dist) districtFilter.value = dist;
+        }
+
                         // Asset Location and Sub-location (dependent)
         const locationId = params.get('location_id');
-        if (locationId && Array.isArray(props.locations)) {
-            const loc = props.locations.find(l => String(l.id) === String(locationId));
+        if (locationId && Array.isArray(props.facilities)) {
+            const loc = props.facilities.find(l => String(l.id) === String(locationId));
             if (loc) {
                 locationFilter.value = loc;
                 await onLocationChange(loc);
@@ -1448,11 +1488,25 @@ onMounted(async () => {
 
 const regionOptions = computed(() => props.regions || []);
 
-                // Asset Location options: show all asset locations (not filtered by region since they're independent)
-const locationOptions = computed(() => props.locations || []);
+const districtsOptions = computed(() => {
+    if (!regionFilter.value) return [];
+    return (props.districts || []).filter(d => d.region === regionFilter.value.name);
+});
+
+const locationOptions = computed(() => {
+    if (!districtFilter.value) return [];
+    return (props.facilities || []).filter(f => f.district === districtFilter.value.name).map((f) => ({ id: f.id, name: f.name, district: f.district, region: f.region }));
+});
 
 // Clear dependent filters when region changes
 watch(() => regionFilter.value, () => {
+    districtFilter.value = null;
+    locationFilter.value = null;
+    subLocationFilter.value = null;
+    subLocationOptions.value = [];
+});
+
+watch(() => districtFilter.value, () => {
     locationFilter.value = null;
     subLocationFilter.value = null;
     subLocationOptions.value = [];
@@ -1510,10 +1564,10 @@ async function transferAsset() {
             transfer_date: transferData.transfer_date,
             assignment_notes: transferData.assignment_notes,
             assignee_name: transferData.assignee.name,
-                            // Note: We're not updating the asset's asset location during transfers
-            // as it would affect all asset items under that asset
-                            // If you need to update asset location, set update_asset_location: true
-                            // and include the asset location fields below
+            update_asset_location: true,
+            region_id: transferData.region?.id,
+            district_id: transferData.district?.id,
+            facility_id: transferData.facility?.id,
         });
 
         console.log('Transfer response:', response.data);
@@ -1575,6 +1629,7 @@ watch(
         () => (selectedLocation.value ? selectedLocation.value.id : null),
         () => (selectedStatus.value ? selectedStatus.value.value : null),
         () => (regionFilter.value ? regionFilter.value.id : null),
+        () => (districtFilter.value ? districtFilter.value.id : null),
         () => (locationFilter.value ? locationFilter.value.id : null),
         () => (fundSourceFilter.value ? fundSourceFilter.value.id : null),
         () => (categoryFilter.value ? categoryFilter.value.id : null),
@@ -1585,7 +1640,6 @@ watch(
         () => acquisitionTo.value,
         () => createdFrom.value,
         () => createdTo.value,
-        () => depreciationFilter.value,
     ],
     () => {
         reloadAssets();
@@ -1620,6 +1674,8 @@ function reloadAssets() {
         query.status = selectedStatus.value.value;
     if (regionFilter.value && regionFilter.value.id)
         query.region_id = regionFilter.value.id;
+    if (districtFilter.value && districtFilter.value.id)
+        query.district_id = districtFilter.value.id;
     if (locationFilter.value && locationFilter.value.id)
         query.location_id = locationFilter.value.id;
     // Single sub-location filter (dependent on location)
@@ -1638,7 +1694,6 @@ function reloadAssets() {
     if (acquisitionTo.value) query.acquisition_to = acquisitionTo.value;
     if (createdFrom.value) query.created_from = createdFrom.value;
     if (createdTo.value) query.created_to = createdTo.value;
-    if (depreciationFilter.value) query.depreciation_filter = depreciationFilter.value;
     router.get(route("assets.index"), query, {
         preserveState: true,
         preserveScroll: true,
@@ -1652,7 +1707,7 @@ const toggleLocation = (locationId) => {
     if (index === -1) {
         selectedLocations.value.push(locationId);
         // Auto-select all sub-locations
-        const location = props.locations.find((l) => l.id === locationId);
+        const location = props.facilities.find((l) => l.id === locationId);
         if (location?.sub_locations) {
             location.sub_locations.forEach((sub) => {
                 if (!selectedSubLocations.value.includes(sub.id)) {
@@ -1663,7 +1718,7 @@ const toggleLocation = (locationId) => {
     } else {
         selectedLocations.value.splice(index, 1);
         // Deselect all sub-locations of this location
-        const location = props.locations.find((l) => l.id === locationId);
+        const location = props.facilities.find((l) => l.id === locationId);
         if (location?.sub_locations) {
             location.sub_locations.forEach((sub) => {
                 const subIndex = selectedSubLocations.value.indexOf(sub.id);
@@ -1697,7 +1752,7 @@ const toggleSubLocation = (subLocationId, parentLocationId) => {
     } else {
         selectedSubLocations.value.splice(index, 1);
         // Check if all sub-locations are deselected
-        const location = props.locations.find((l) => l.id === parentLocationId);
+        const location = props.facilities.find((l) => l.id === parentLocationId);
         const anySubSelected = location?.sub_locations.some((sub) =>
             selectedSubLocations.value.includes(sub.id)
         );
@@ -1724,7 +1779,7 @@ const toggleCollapse = (locationId) => {
 // Computed properties for the cards
 const totalAssets = computed(() => assets.value.length);
 const functioningAssets = computed(
-    () => assets.value.filter((asset) => asset.status === "functioning" || asset.status === "in_use").length
+    () => assets.value.filter((asset) => asset.status === "functioning").length
 );
 const maintenanceAssets = computed(
     () => assets.value.filter((asset) => asset.status === "maintenance").length
@@ -1741,6 +1796,7 @@ const clearFilters = () => {
     selectedLocation.value = null;
     selectedStatus.value = null;
     regionFilter.value = null;
+    districtFilter.value = null;
     locationFilter.value = null;
     subLocationFilter.value = null;
     selectedSubLocations.value = [];
@@ -1753,7 +1809,6 @@ const clearFilters = () => {
     acquisitionTo.value = '';
     createdFrom.value = '';
     createdTo.value = '';
-    depreciationFilter.value = '';
     props.filters.page = 1;
     reloadAssets();
 };

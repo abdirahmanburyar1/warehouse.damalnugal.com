@@ -126,7 +126,7 @@ test('asset item has all relationship methods', function () {
     expect($assetItem)->toHaveMethod('asset');
     expect($assetItem)->toHaveMethod('category');
     expect($assetItem)->toHaveMethod('type');
-    expect($assetItem)->toHaveMethod('assetLocation');
+    expect($assetItem)->toHaveMethod('getAssetLocation');
     expect($assetItem)->toHaveMethod('subLocation');
     expect($assetItem)->toHaveMethod('region');
     expect($assetItem)->toHaveMethod('assignedTo');

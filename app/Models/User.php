@@ -9,11 +9,12 @@ use Illuminate\Notifications\Notifiable;
 use App\Traits\HasPermissions;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
+use App\Traits\Auditable;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasPermissions;
+    use HasFactory, Notifiable, HasPermissions, Auditable;
 
     /**
      * The attributes that are mass assignable.

@@ -24,6 +24,7 @@ const props = defineProps({
     types: { type: Array, required: false, default: () => [] },
     fundSources: { type: Array, required: true, default: () => [] },
     regions: { type: Array, required: true, default: () => [] },
+    districts: { type: Array, required: true, default: () => [] },
     assignees: { type: Array, required: false, default: () => [] },
     facilities: { type: Array, required: false, default: () => [] },
 });
@@ -58,7 +59,15 @@ watch(() => props.types, (list) => {
     typeOptions.value = [{ id: 'new', name: '+ Add New Type', isAddNew: true }, ...(list || [])];
 }, { immediate: true, deep: true });
 
-const facilityOptions = computed(() => (props.facilities || []).map(f => ({ id: f.id, name: f.name, district: f.district, region: f.region })));
+const districtsOptions = computed(() => {
+    if (!form.value.region) return [];
+    return (props.districts || []).filter(d => d.region === form.value.region.name);
+});
+
+const facilityOptions = computed(() => {
+    if (!form.value.district) return [];
+    return (props.facilities || []).filter(f => f.district === form.value.district.name).map((f) => ({ id: f.id, name: f.name, district: f.district, region: f.region }));
+});
 
 const filteredTypeOptions = computed(() => {
     const categoryId = form.value.asset_category_id || form.value.category?.id;
@@ -190,10 +199,8 @@ const loadSubLocations = async (locationId) => {
 const statuses = ref([
     { value: 'functioning', label: 'Functioning' },
     { value: 'not_functioning', label: 'Not functioning' },
-    { value: 'in_use', label: 'In Use' },
     { value: 'maintenance', label: 'Maintenance' },
     { value: 'pending_approval', label: 'Pending Approval' },
-    { value: 'retired', label: 'Retired' },
     { value: 'disposed', label: 'Disposed' },
 ]);
 
@@ -208,7 +215,7 @@ watch(() => form.value.status, (newStatus) => {
 });
 
 // Modals + new entries
-const showLocationModal = ref(false);
+    // Location modal logic removed as facilities are managed elsewhere
 const showSubLocationModal = ref(false);
 const showCategoryModal = ref(false);
 const showFundSourceModal = ref(false);
@@ -285,11 +292,46 @@ const handleRegionSelect = (selected) => {
     if (!selected) { 
         form.value.region_id = null; 
         form.value.region = null; 
+        form.value.district_id = null;
+        form.value.district = null;
+        form.value.facility_id = null;
+        form.value.facility = null;
         return; 
     }
     if (selected.isAddNew) { showRegionModal.value = true; return; }
     form.value.region_id = selected.id; 
     form.value.region = selected;
+
+    form.value.district_id = null;
+    form.value.district = null;
+    form.value.facility_id = null;
+    form.value.facility = null;
+};
+
+const handleDistrictSelect = (selected) => {
+    if (!selected) {
+        form.value.district_id = null;
+        form.value.district = null;
+        form.value.facility_id = null;
+        form.value.facility = null;
+        return;
+    }
+
+    form.value.district_id = selected.id;
+    form.value.district = selected;
+
+    // Auto-select region if not already selected
+    if (selected.region && !form.value.region) {
+        const region = props.regions.find(r => r.name === selected.region);
+        if (region) {
+            form.value.region_id = region.id;
+            form.value.region = region;
+        }
+    }
+
+    // Clear facility
+    form.value.facility_id = null;
+    form.value.facility = null;
 };
 
 const handleFundSourceSelect = (selected) => {
@@ -305,20 +347,36 @@ const handleFundSourceSelect = (selected) => {
 
 const handleLocationSelect = (selected) => {
     if (!selected) { 
-        form.value.asset_location_id = null; 
-        form.value.asset_location = null; 
+        form.value.facility_id = null; 
+        form.value.facility = null; 
         form.value.sub_location = null; 
         form.value.sub_location_id = null; 
         subLocations.value = []; 
         return; 
     }
-    if (selected.isAddNew) { showLocationModal.value = true; return; }
-    form.value.asset_location_id = selected.id; 
-    form.value.asset_location = selected; 
+    form.value.facility_id = selected.id; 
+    form.value.facility = selected; 
     selectedLocationForSub.value = selected.id; 
     form.value.sub_location = null; 
     form.value.sub_location_id = null; 
     loadSubLocations(selected.id);
+
+    // Auto-select region and district if available from facility
+    if (selected.region) {
+        const region = props.regions.find(r => r.name === selected.region);
+        if (region) {
+            form.value.region_id = region.id;
+            form.value.region = region;
+        }
+    }
+    
+    if (selected.district) {
+        const district = props.districts.find(d => d.name === selected.district);
+        if (district) {
+            form.value.district_id = district.id;
+            form.value.district = district;
+        }
+    }
 };
 
 const handleSubLocationSelect = (selected) => {
@@ -327,7 +385,13 @@ const handleSubLocationSelect = (selected) => {
         form.value.sub_location = null; 
         return; 
     }
-    if (selected.isAddNew) { showSubLocationModal.value = true; return; }
+    if (selected.isAddNew) { 
+        const currentSelection = form.value.facility;
+        showSubLocationModal.value = true; 
+        form.value.facility = currentSelection;
+        form.value.facility_id = currentSelection?.id || form.value.facility_id;
+        return; 
+    }
     form.value.sub_location_id = selected.id; 
     form.value.sub_location = selected;
 };
@@ -421,7 +485,8 @@ const submit = async () => {
     const updateData = {
         // Asset-level fields
         region_id: form.value.region_id,
-        asset_location_id: form.value.asset_location_id,
+            district_id: form.value.district_id,
+            facility_id: form.value.facility_id,
         sub_location_id: form.value.sub_location_id,
         facility_id: form.value.facility_id || null,
         fund_source_id: form.value.fund_source_id,
@@ -530,27 +595,24 @@ const submit = async () => {
                                 </Multiselect>
                             </div>
                             <div>
+                                <label for="district" class="block text-xs font-medium text-gray-600 mb-0.5">District</label>
+                                <Multiselect v-model="form.district" :options="districtsOptions" :searchable="true" :close-on-select="true" :show-labels="false" :allow-empty="true" placeholder="District" track-by="id" label="name" class="multiselect-compact" @select="handleDistrictSelect" :disabled="!form.region">
+                                </Multiselect>
+                            </div>
+                            <div>
                                 <label for="location" class="block text-xs font-medium text-gray-600 mb-0.5">Location</label>
-                                <Multiselect v-model="form.asset_location" :options="locationOptions" :searchable="true" :close-on-select="true" :show-labels="false" :allow-empty="true" placeholder="Location" track-by="id" label="name" class="multiselect-compact" @select="handleLocationSelect">
+                                <Multiselect v-model="form.facility" :options="facilityOptions" :searchable="true" :close-on-select="true" :show-labels="false" :allow-empty="true" placeholder="Asset Location" track-by="id" label="name" class="multiselect-compact" @select="handleLocationSelect" :disabled="!form.district">
                                     <template v-slot:option="{ option }">
-                                        <div :class="{ 'add-new-option': option.isAddNew }"><span v-if="option.isAddNew" class="text-indigo-600 font-medium">+ Add New Location</span><span v-else>{{ option.name }}</span></div>
+                                        <span>{{ option.name }}</span>
+                                        <span v-if="option.district || option.region" class="text-gray-500 text-xs block">{{ [option.district, option.region].filter(Boolean).join(' · ') }}</span>
                                     </template>
                                 </Multiselect>
                             </div>
                             <div>
                                 <label for="sub_location" class="block text-xs font-medium text-gray-600 mb-0.5">Sub Location</label>
-                                <Multiselect v-model="form.sub_location" :options="[...subLocations, { id: 'new', name: '+ Add New Sub-location', isAddNew: true }]" :searchable="true" :close-on-select="true" :show-labels="false" :allow-empty="true" placeholder="Sub-location" track-by="id" label="name" :disabled="!form.asset_location_id" class="multiselect-compact" @select="handleSubLocationSelect">
+                                <Multiselect v-model="form.sub_location" :options="[...subLocations, { id: 'new', name: '+ Add New Sub-location', isAddNew: true }]" :searchable="true" :close-on-select="true" :show-labels="false" :allow-empty="true" placeholder="Sub-location" track-by="id" label="name" :disabled="!form.facility_id" class="multiselect-compact" @select="handleSubLocationSelect">
                                     <template v-slot:option="{ option }">
                                         <div :class="{ 'add-new-option': option.isAddNew }"><span v-if="option.isAddNew" class="text-indigo-600 font-medium">+ Add New Sub-location</span><span v-else>{{ option.name }}</span></div>
-                                    </template>
-                                </Multiselect>
-                            </div>
-                            <div>
-                                <label for="facility" class="block text-xs font-medium text-gray-600 mb-0.5">Facility (optional)</label>
-                                <Multiselect id="facility" v-model="form.facility" :options="facilityOptions" :searchable="true" :close-on-select="true" :show-labels="false" :allow-empty="true" placeholder="Facility" track-by="id" label="name" class="multiselect-compact" @select="handleFacilitySelect" @clear="handleFacilityClear">
-                                    <template v-slot:option="{ option }">
-                                        <span>{{ option.name }}</span>
-                                        <span v-if="option.district || option.region" class="text-gray-500 text-xs block">{{ [option.district, option.region].filter(Boolean).join(' · ') }}</span>
                                     </template>
                                 </Multiselect>
                             </div>
@@ -625,22 +687,7 @@ const submit = async () => {
             </div>
         </Modal>
 
-        <!-- New Location Modal -->
-        <Modal :show="showLocationModal" @close="showLocationModal = false">
-            <div class="p-6">
-                <h2 class="text-lg font-medium text-gray-900">Add New Location</h2>
-                <div class="mt-6">
-                    <label for="new_location" class="block text-sm font-medium text-gray-700">Location Name</label>
-                    <input id="new_location" type="text" 
-                            class="rounded-md border-gray-300 mt-1 block w-full shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
- v-model="newLocation" required />
-                </div>
-                <div class="mt-6 flex justify-end space-x-3">
-                    <SecondaryButton @click="showLocationModal = false" :disabled="isNewLocation">Cancel</SecondaryButton>
-                    <PrimaryButton :disabled="isNewLocation" @click="createLocation">{{ isNewLocation ? 'Waiting...' : 'Create new location' }}</PrimaryButton>
-                </div>
-            </div>
-        </Modal>
+        <!-- Location Modal Removed -->
 
         <!-- New Sub-Location Modal -->
         <Modal :show="showSubLocationModal" @close="showSubLocationModal = false">

@@ -92,17 +92,14 @@
                         <thead class="bg-gray-50">
                             <tr>
                                 <th
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 sticky left-0 bg-gray-50 z-10"
-                                    @click="sortBy('name')">
-                                    <div class="flex items-center">
-                                        Item
-                                        <svg v-if="sortField === 'name'" class="ml-1 h-4 w-4 text-gray-400"
-                                            :class="{ 'rotate-180': sortDirection === 'desc' }" fill="none"
-                                            stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
-                                        </svg>
-                                    </div>
+                                    class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-12"
+                                >
+                                    SN
+                                </th>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[260px] max-w-[320px]"
+                                >
+                                    Item
                                 </th>
 
                                                                  <!-- Dynamic Month Columns -->
@@ -117,9 +114,16 @@
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
-                            <template v-if="pivotData && pivotData.length > 0">
-                                <tr v-for="product in pivotData" :key="product.id" class="hover:bg-gray-50">
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white z-10">
+                            <template v-if="filteredPivotData && filteredPivotData.length > 0">
+                                <tr v-for="(product, index) in filteredPivotData" :key="product.id" class="hover:bg-gray-50">
+                                    <td
+                                        class="px-3 py-4 text-sm text-center text-gray-500"
+                                    >
+                                        {{ index + 1 }}
+                                    </td>
+                                    <td
+                                        class="px-6 py-4 text-sm font-medium text-gray-900 min-w-[260px] max-w-[320px]"
+                                    >
                                         {{ product.name }}
                                     </td>
 
@@ -130,13 +134,13 @@
                                      </td>
                                      <!-- AMC Data -->
                                      <td class="px-3 py-4 whitespace-nowrap text-sm text-center text-blue-900 font-bold bg-blue-50">
-                                         {{ formatNumber(product.amc || 0) }}
+                                         {{ product.amc === null || product.amc === undefined ? '-' : formatNumber(product.amc) }}
                                      </td>
                                 </tr>
                             </template>
                             <template v-else>
                                 <tr>
-                                                                     <td :colspan="2 + monthYears.length" class="px-6 py-4 text-center text-sm text-gray-500">
+                                                                     <td :colspan="3 + monthYears.length" class="px-6 py-4 text-center text-sm text-gray-500">
                                      No warehouse AMC data found.
                                  </td>
                                 </tr>
@@ -151,7 +155,7 @@
 
         <!-- Upload Modal -->
         <div v-if="showUploadModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" @click="closeUploadModal">
-            <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white" @click.stop>
+            <div class="relative top-20 mx-auto p-6 border w-full max-w-2xl shadow-lg rounded-xl bg-white" @click.stop>
                 <div class="mt-3">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="text-lg font-medium text-gray-900">
@@ -359,8 +363,6 @@ const props = defineProps({
 // Reactive variables
 const search = ref(props.filters.search || '');
 const year = ref(props.filters.year || new Date().getFullYear());
-const sortField = ref(props.filters.sort || 'name');
-const sortDirection = ref(props.filters.direction || 'asc');
 const templateYear = ref(new Date().getFullYear()); // Default to current year
 
 // Upload related variables
@@ -377,27 +379,15 @@ const progressInterval = ref(null);
 // Template modal variables
 const showTemplateModal = ref(false);
 
-// Watch for changes and apply filters
-watch([search, year], () => {
-    router.get(route('reports.warehouse-amc'), {
-        search: search.value || undefined,
-        year: year.value || undefined,
-        sort: sortField.value,
-        direction: sortDirection.value,
-    }, {
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-    });
-}, { deep: true });
+// Watch for year changes and apply filters (backend)
+watch(year, () => {
+    applyFilters();
+});
 
 // Methods
 const applyFilters = () => {
-    router.get(route('reports.warehouse-amc'), {
-        search: search.value || undefined,
+    router.get(route('inventories.warehouse-amc'), {
         year: year.value || undefined,
-        sort: sortField.value,
-        direction: sortDirection.value,
     }, {
         preserveState: true,
         preserveScroll: true,
@@ -405,17 +395,20 @@ const applyFilters = () => {
     });
 };
 
-
-
-const sortBy = (field) => {
-    if (sortField.value === field) {
-        sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
-    } else {
-        sortField.value = field;
-        sortDirection.value = 'asc';
+// Frontend-only filtering for item search
+const filteredPivotData = computed(() => {
+    if (!search.value || !props.pivotData) {
+        return props.pivotData || [];
     }
-    applyFilters();
-};
+    const term = search.value.toLowerCase();
+    return (props.pivotData || []).filter(product =>
+        (product.name || '').toLowerCase().includes(term)
+    );
+});
+
+
+
+// Sorting is disabled (no backend sorting needed)
 
 
 
@@ -425,7 +418,7 @@ const exportData = () => {
     if (search.value) params.append('search', search.value);
     if (year.value) params.append('year', year.value.toString());
 
-    window.open(route('reports.warehouse-amc.export') + '?' + params.toString(), '_blank');
+    window.open(route('inventories.warehouse-amc.export') + '?' + params.toString(), '_blank');
 };
 
 // Template Modal Functions
@@ -521,11 +514,15 @@ const uploadFile = async () => {
     try {
         const formData = new FormData();
         formData.append('file', selectedFile.value);
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        const headers = {};
+        if (csrfToken) headers['X-CSRF-TOKEN'] = csrfToken;
+        // Do not set Content-Type so browser sets multipart/form-data with boundary
 
-        const response = await axios.post(route('reports.warehouse-amc.import'), formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
+        const response = await axios.post(route('inventories.warehouse-amc.import'), formData, {
+            headers,
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
         });
 
         if (response.data.success) {
@@ -563,7 +560,7 @@ const uploadFile = async () => {
 const startProgressPolling = (id) => {
     progressInterval.value = setInterval(async () => {
         try {
-            const response = await axios.get(route('reports.warehouse-amc.import.status', { importId: id }));
+            const response = await axios.get(route('inventories.warehouse-amc.import.status', { importId: id }));
             
             if (response.data.success) {
                 const status = response.data.data;
@@ -598,7 +595,7 @@ const startProgressPolling = (id) => {
 };
 
 const downloadTemplate = () => {
-    const url = route('reports.warehouse-amc.template') + '?year=' + templateYear.value;
+    const url = route('inventories.warehouse-amc.template') + '?year=' + templateYear.value;
     window.open(url, '_blank');
     toast.success(`Template download started for year ${templateYear.value}!`);
     closeTemplateModal();

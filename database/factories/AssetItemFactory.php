@@ -5,7 +5,7 @@ namespace Database\Factories;
 use App\Models\Asset;
 use App\Models\AssetCategory;
 use App\Models\AssetType;
-use App\Models\AssetLocation;
+use App\Models\Facility;
 use App\Models\SubLocation;
 use App\Models\Region;
 use App\Models\User;
@@ -52,7 +52,7 @@ class AssetItemFactory extends Factory
             'serial_no' => $this->faker->optional()->regexify('[A-Z0-9]{8}'),
             'item_description' => $this->faker->optional()->sentence(),
             'person_assigned' => $this->faker->optional()->name(),
-            'asset_location_id' => AssetLocation::factory(),
+            'facility_id' => Facility::factory(),
             'assigned_to' => User::factory(),
             'region_id' => Region::factory(),
             'sub_location_id' => SubLocation::factory(),

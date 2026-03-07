@@ -4,305 +4,187 @@ namespace App\Imports;
 
 use App\Models\WarehouseAmc;
 use App\Models\Product;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
-use Maatwebsite\Excel\Concerns\ToModel;
+use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
-use Maatwebsite\Excel\Concerns\WithBatchInserts;
-use Maatwebsite\Excel\Concerns\WithValidation;
 use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
-use Maatwebsite\Excel\Concerns\WithEvents;
-use Maatwebsite\Excel\Events\AfterImport;
-use Maatwebsite\Excel\Concerns\SkipsOnFailure;
-use Maatwebsite\Excel\Events\BeforeImport;
 
-class WarehouseAmcImport implements 
-    ToModel, 
-    WithHeadingRow, 
-    WithChunkReading, 
-    WithBatchInserts, 
-    WithValidation, 
-    SkipsEmptyRows, 
-    SkipsOnFailure,
-    WithEvents,
-    ShouldQueue
+/**
+ * Import warehouse monthly consumption from Excel into warehouse_amcs table.
+ * Same pattern as facilities MonthlyConsumptionImport: Item column + month columns (Jan 2026, Feb 2026, ...).
+ * Empty or missing quantity → 0. Non-empty → update or create warehouse_amcs row.
+ */
+class WarehouseAmcImport implements
+    ToCollection,
+    WithHeadingRow,
+    WithChunkReading,
+    SkipsEmptyRows
 {
-    use InteractsWithQueue, Queueable;
-    protected $importedCount = 0;
-    protected $updatedCount = 0;
-    protected $skippedCount = 0;
-    protected $errors = [];
-    protected $productCache = [];
-        protected $importId;
-    protected $storedFilePath;
-    protected $monthYears = [];
+    /** @var array<string,string> heading_key => YYYY-MM */
+    protected array $monthColumns = [];
 
-    public function __construct(string $importId, string $storedFilePath = null)
+    protected string $importId;
+    protected ?string $storedFilePath;
+
+    public int $processedRows = 0;
+    public int $importedCount = 0;
+    public int $updatedCount = 0;
+    public array $errors = [];
+
+    public function __construct(string $importId, ?string $storedFilePath = null)
     {
         $this->importId = $importId;
         $this->storedFilePath = $storedFilePath;
-
-        // Get existing month years from database
-        $this->monthYears = WarehouseAmc::select('month_year')
-            ->distinct()
-            ->orderBy('month_year', 'desc')
-            ->pluck('month_year')
-            ->toArray();
     }
 
-    public function model(array $row)
+    public function collection(Collection $rows): void
     {
-        try {            
-            // Check if item field exists and has a value
-            if (!isset($row['item']) || empty(trim($row['item'] ?? ''))) {
-                $this->skippedCount++;
-                return null;
-            }
-
-            $itemName = trim($row['item']);
-
-            // Find the product by name
-            $product = Product::where('name', $itemName)->first();
-            
-            if (!$product) {
-                // Product doesn't exist, skip this row and continue
-                $this->errors[] = "Product not found: {$itemName} - Skipped";
-                $this->skippedCount++;
-                return null;
-            }
-
-            // Update progress in cache
-            Cache::increment($this->importId);
-
-            // Process each month column and create/update WarehouseAmc records
-            $processedMonths = 0;
-            
-            foreach ($row as $key => $value) {
-                        // Skip non-month columns
-        if (in_array($key, ['item', 'AMC'])) {
-            continue;
+        if ($rows->isEmpty()) {
+            return;
         }
 
-                // Convert formatted month back to YYYY-MM format
-                $monthYear = $this->parseMonthYear($key);
-                if (!$monthYear) {
-                    continue;
-                }
-                // Clean and validate quantity
-                $quantity = $this->cleanQuantity($value);
-                
-                // If quantity is null or empty, skip this month (don't update existing data)
-                if ($quantity === null) {
-                    continue;
-                }
-                
-                // Create or update WarehouseAmc record
-                $warehouseAmc = WarehouseAmc::updateOrCreate(
-                    [
-                        'product_id' => $product->id,
-                        'month_year' => $monthYear,
-                    ],
-                    [
-                        'quantity' => $quantity,
-                    ]
-                );
-
-                if ($warehouseAmc->wasRecentlyCreated) {
-                    $this->importedCount++;
-                } else {
-                    $this->updatedCount++;
-                }
-                
-                $processedMonths++;
-            }
-
-            // If no months were processed, count as skipped
-            if ($processedMonths === 0) {
-                $this->skippedCount++;
-                return null;
-            }
-
-            // Return null since we're handling the creation manually
-            return null;
-
-        } catch (\Exception $e) {
-            $this->errors[] = "Error processing row for '{$row['item']}': " . $e->getMessage();
-            $this->skippedCount++;
-            return null;
+        if (empty($this->monthColumns)) {
+            $this->detectMonthColumns($rows->first());
         }
-    }
 
-    public function rules(): array
-    {
-        return [
-            'item' => 'nullable|string|max:255', // Changed from required to nullable
-            'AMC' => 'nullable|string|max:255',
-        ];
-    }
-
-    /**
-     * Custom validation failure handling
-     */
-    public function onFailure(\Maatwebsite\Excel\Validators\Failure ...$failures)
-    {
-        foreach ($failures as $failure) {
-            $this->errors[] = "Row {$failure->row()}: {$failure->attribute()} - {$failure->errors()[0]}";
-            $this->skippedCount++;
+        foreach ($rows as $row) {
+            $this->processRow($row);
         }
-        
     }
 
     public function chunkSize(): int
     {
-        return 1000;
+        return 500;
     }
 
-    public function batchSize(): int
+    protected function detectMonthColumns($row): void
     {
-        return 100;
-    }
-
-    public function registerEvents(): array
-    {
-        return [
-            BeforeImport::class => function (BeforeImport $event) {
-                Log::info('=== WAREHOUSE AMC IMPORT STARTING ===', [
-                    'import_id' => $this->importId,
-                    'stored_file_path' => $this->storedFilePath
-                ]);
-            },
-            AfterImport::class => function (AfterImport $event) {
-                // Update cache with final results
-                $results = $this->getResults();
-                $message = "Import completed successfully. ";
-                if ($results['imported'] > 0) {
-                    $message .= "Created: {$results['imported']} new AMC records. ";
-                }
-                if ($results['updated'] > 0) {
-                    $message .= "Updated: {$results['updated']} existing AMC records. ";
-                }
-                if ($results['skipped'] > 0) {
-                    $message .= "Skipped: {$results['skipped']} rows. ";
-                }
-
-                Cache::put("warehouse_amc_import_{$this->importId}", [
-                    'status' => 'completed',
-                    'progress' => 100,
-                    'message' => trim($message),
-                    'results' => $results
-                ], 3600);
-                
-            },
-        ];
-    }
-
-    public function getResults()
-    {
-        return [
-            'imported' => $this->importedCount,
-            'updated' => $this->updatedCount,
-            'skipped' => $this->skippedCount,
-            'errors' => $this->errors,
-        ];
+        $array = is_array($row) ? $row : $row->toArray();
+        foreach ($array as $key => $value) {
+            if ($key === null || $key === '') {
+                continue;
+            }
+            $normalizedKey = is_string($key) ? trim(strtolower($key)) : (string) $key;
+            if (in_array($normalizedKey, ['item', 'items', 'product', 'amc'], true)) {
+                continue;
+            }
+            $monthYear = $this->parseMonthKey($normalizedKey);
+            if ($monthYear !== null) {
+                $this->monthColumns[$key] = $monthYear;
+            }
+        }
     }
 
     /**
-     * Parse month year from formatted header (e.g., "Feb 2025" -> "2025-02")
+     * Parse header key to YYYY-MM. Handles "jan 2026", "jan-2026", "jan_2026", "Jan 2026", etc.
      */
-    private function parseMonthYear($headerValue)
+    protected function parseMonthKey(string $key): ?string
     {
-        if (!$headerValue || trim($headerValue) === '') {
+        $clean = str_replace(['_', '-', '/'], ' ', $key);
+        $clean = preg_replace('/\s+/', ' ', $clean ?? '') ?? '';
+        $clean = trim($clean);
+        if ($clean === '') {
             return null;
         }
 
-        $headerValue = trim($headerValue);
-
-        // Handle the format "jan_2025", "feb_2025", etc.
-        if (preg_match('/^([a-z]{3})_(\d{4})$/i', $headerValue, $matches)) {
-            $monthAbbr = strtolower($matches[1]);
-            $year = $matches[2];
-            
-            // Map month abbreviations to numbers
-            $monthMap = [
-                'jan' => '01', 'feb' => '02', 'mar' => '03', 'apr' => '04',
-                'may' => '05', 'jun' => '06', 'jul' => '07', 'aug' => '08',
-                'sep' => '09', 'oct' => '10', 'nov' => '11', 'dec' => '12'
-            ];
-            
-            if (isset($monthMap[$monthAbbr])) {
-                $result = $year . '-' . $monthMap[$monthAbbr];
-                return $result;
-            }
-        }
-
-        // Try to parse various date formats
-        $formats = [
-            'M Y',      // Feb 2025
-            'F Y',      // February 2025
-            'Y-m',      // 2025-02
-            'm/Y',      // 02/2025
-            'm-Y',      // 02-2025
+        $monthMap = [
+            'jan' => 1, 'feb' => 2, 'mar' => 3, 'apr' => 4, 'may' => 5, 'jun' => 6,
+            'jul' => 7, 'aug' => 8, 'sep' => 9, 'oct' => 10, 'nov' => 11, 'dec' => 12,
         ];
 
-        foreach ($formats as $format) {
-            try {
-                $date = \DateTime::createFromFormat($format, $headerValue);
-                if ($date) {
-                    return $date->format('Y-m');
-                }
-            } catch (\Exception $e) {
-                continue;
+        $normalizeYear = static function (int $year): int {
+            if ($year < 100) {
+                return 2000 + $year;
             }
+            return $year;
+        };
+
+        if (preg_match('/^([a-z]+)\s+(\d{2}|\d{4})$/i', $clean, $m)) {
+            $monthName = strtolower(substr($m[1], 0, 3));
+            if (!isset($monthMap[$monthName])) {
+                return null;
+            }
+            $year = $normalizeYear((int) $m[2]);
+            return sprintf('%04d-%02d', $year, $monthMap[$monthName]);
         }
 
-        // If no format matches, try to extract year and month manually
-        if (preg_match('/(\w+)\s+(\d{4})/', $headerValue, $matches)) {
-            $monthName = $matches[1];
-            $year = $matches[2];
-            
-            $monthNumber = date('m', strtotime($monthName . ' 1'));
-            if ($monthNumber) {
-                return $year . '-' . str_pad($monthNumber, 2, '0', STR_PAD_LEFT);
+        if (preg_match('/^(\d{4})\s+(\d{1,2})$/', $clean, $m)) {
+            $year = (int) $m[1];
+            $month = (int) $m[2];
+            if ($month < 1 || $month > 12) {
+                return null;
             }
-        }
-
-        // Try to handle Excel's date format (e.g., "2025-01-01" -> "2025-01")
-        if (preg_match('/^(\d{4})-(\d{1,2})/', $headerValue, $matches)) {
-            $year = $matches[1];
-            $month = str_pad($matches[2], 2, '0', STR_PAD_LEFT);
-            return $year . '-' . $month;
+            return sprintf('%04d-%02d', $year, $month);
         }
 
         return null;
     }
 
-    /**
-     * Clean and validate quantity value
-     */
-    private function cleanQuantity($value)
+    protected function processRow($row): void
     {
-        // Return null for empty or null values
-        if ($value === null || $value === '' || trim($value) === '') {
-            return null;
+        $this->processedRows++;
+        $data = is_array($row) ? $row : $row->toArray();
+
+        $itemName = trim((string) ($data['item'] ?? $data['items'] ?? $data['product'] ?? ''));
+        if ($itemName === '') {
+            return;
         }
 
-        // Remove any non-numeric characters except decimal point and minus
-        $cleaned = preg_replace('/[^0-9.-]/', '', $value);
-        
+        $product = Product::where('name', $itemName)->first();
+        if (!$product) {
+            if (count($this->errors) < 20) {
+                $this->errors[] = "Product not found: {$itemName}";
+            }
+            return;
+        }
+
+        foreach ($this->monthColumns as $columnKey => $monthYear) {
+            if (!array_key_exists($columnKey, $data)) {
+                $quantity = 0;
+            } else {
+                $quantity = $this->cleanQuantity($data[$columnKey]);
+            }
+
+            $record = WarehouseAmc::updateOrCreate(
+                [
+                    'product_id' => $product->id,
+                    'month_year' => $monthYear,
+                ],
+                [
+                    'quantity' => (int) round($quantity),
+                ]
+            );
+
+            if ($record->wasRecentlyCreated) {
+                $this->importedCount++;
+            } else {
+                $this->updatedCount++;
+            }
+        }
+    }
+
+    protected function cleanQuantity($value): float
+    {
+        if ($value === null || $value === '' || (is_string($value) && trim($value) === '')) {
+            return 0.0;
+        }
+        $cleaned = preg_replace('/[^0-9.-]/', '', (string) $value);
         if ($cleaned === '' || $cleaned === '-') {
-            return null;
+            return 0.0;
         }
+        $q = (float) $cleaned;
+        return max(0.0, $q);
+    }
 
-        $quantity = (float) $cleaned;
-        
-        // Ensure non-negative
-        return max(0, $quantity);
+    public function getResults(): array
+    {
+        return [
+            'imported' => $this->importedCount,
+            'updated' => $this->updatedCount,
+            'skipped' => 0,
+            'errors' => $this->errors,
+        ];
     }
 }
-
-

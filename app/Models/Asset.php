@@ -35,8 +35,7 @@ class Asset extends Model
         'organization',
         'fund_source_id',
         'region_id',
-        'asset_location_id',
-        'sub_location_id',
+        'district_id',
         'facility_id',
         'submitted_by',
         'submitted_at',
@@ -97,9 +96,9 @@ class Asset extends Model
         return $this->belongsTo(Region::class, 'region_id');
     }
 
-    public function assetLocation(): BelongsTo
+    public function district(): BelongsTo
     {
-        return $this->belongsTo(AssetLocation::class, 'asset_location_id');
+        return $this->belongsTo(District::class, 'district_id');
     }
 
     public function subLocation(): BelongsTo

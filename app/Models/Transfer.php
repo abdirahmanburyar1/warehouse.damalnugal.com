@@ -9,10 +9,11 @@ use App\Models\Facility;
 use App\Models\Product;
 use App\Models\Inventory;
 use App\Models\User;
+use App\Traits\Auditable;
 
 class Transfer extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, Auditable;
     protected $fillable = [
         'transferID',
         'transfer_date',

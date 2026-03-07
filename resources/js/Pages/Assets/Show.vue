@@ -69,15 +69,19 @@
                         </div>
                         <div>
                             <p class="text-xs font-medium text-gray-500">Region</p>
-                            <p class="text-xs text-gray-900">{{ props.asset.region.name }}</p>
+                            <p class="text-xs text-gray-900">{{ props.asset.region?.name }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs font-medium text-gray-500">District</p>
+                            <p class="text-xs text-gray-900">{{ props.asset.district?.name }}</p>
                         </div>
                         <div>
                             <p class="text-xs font-medium text-gray-500">Asset Location</p>
-                            <p class="text-xs text-gray-900">{{ props.asset.asset_location.name }}</p>
+                            <p class="text-xs text-gray-900">{{ props.asset.facility?.name }}</p>
                         </div>
                         <div>
                             <p class="text-xs font-medium text-gray-500">Sub Location</p>
-                            <p class="text-xs text-gray-900">{{ props.asset.sub_location.name }}</p>
+                            <p class="text-xs text-gray-900">{{ props.asset.sub_location?.name }}</p>
                         </div>
                     </div>
                 </div>
@@ -221,7 +225,7 @@
                             <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">Type</th>
                             <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">Status</th>
                             <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">Assignee</th>
-                            <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">Original Value</th>
+                            <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">Value</th>
                             <th class="px-3 py-2 text-xs font-bold" style="color: #4F6FCB; border-bottom: 2px solid #B7C6E6;">History</th>
                         </tr>
                     </thead>

@@ -70,8 +70,12 @@
                          <p class="mt-1 text-sm text-gray-900">{{ assetItem?.asset?.region?.name || 'N/A' }}</p>
                      </div>
                      <div>
+                         <label class="block text-sm font-medium text-gray-500">District</label>
+                         <p class="mt-1 text-sm text-gray-900">{{ assetItem?.asset?.district?.name || 'N/A' }}</p>
+                     </div>
+                     <div>
                          <label class="block text-sm font-medium text-gray-500">Location</label>
-                         <p class="mt-1 text-sm text-gray-900">{{ assetItem?.asset?.asset_location?.name || 'N/A' }}</p>
+                         <p class="mt-1 text-sm text-gray-900">{{ assetItem?.asset?.facility?.name || 'N/A' }}</p>
                      </div>
                      <div>
                          <label class="block text-sm font-medium text-gray-500">Sub Location</label>
@@ -111,7 +115,7 @@
                         <p class="mt-1 text-sm text-gray-900">{{ assetItem?.assignee?.name || 'Unassigned' }}</p>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-500">Original Value</label>
+                        <label class="block text-sm font-medium text-gray-500">Value</label>
                         <p class="mt-1 text-sm text-gray-900">${{ assetItem?.original_value ? Number(assetItem.original_value).toLocaleString() : 'N/A' }}</p>
                     </div>
                     <div>

@@ -7,6 +7,7 @@ use App\Models\AssetItem;
 use App\Models\SubLocation;
 use App\Models\AssetLocation;
 use App\Models\Region;
+use App\Models\District;
 use App\Models\User;
 use App\Models\Assignee;
 use App\Models\AssetCategory;
@@ -39,6 +40,25 @@ class AssetController extends Controller
             });
         }
         
+        $hasFilters = $request->filled('search') || 
+                      $request->filled('region_id') || 
+                      $request->filled('location_id') || 
+                      $request->filled('district_id') || 
+                      $request->filled('fund_source_id') || 
+                      $request->filled('status') || 
+                      $request->filled('category_id') || 
+                      $request->filled('type_id') || 
+                      $request->filled('assignee_id') || 
+                      $request->filled('acquisition_from') || 
+                      $request->filled('acquisition_to') || 
+                      $request->filled('created_from') || 
+                      $request->filled('created_to');
+
+        // Only fetch assets if at least one filter is applied
+        if (!$hasFilters) {
+            $assetItems->whereRaw('1 = 0'); // Returns an empty result set
+        }
+
         if($request->filled('search')){
             $assetItems->where(function($query) use ($request) {
                 $query->whereLike('asset_tag', '%'.$request->search.'%')   
@@ -58,17 +78,13 @@ class AssetController extends Controller
 
         if($request->filled('location_id')){
             $assetItems->whereHas('asset', function($query) use ($request) {
-                $query->where('asset_location_id', $request->location_id);
+                $query->where('facility_id', $request->location_id);
             });
         }
 
-        if($request->filled('sub_location_ids') && is_array($request->sub_location_ids)){
+        if($request->filled('district_id')){
             $assetItems->whereHas('asset', function($query) use ($request) {
-                $query->whereIn('sub_location_id', $request->sub_location_ids);
-            });
-        } elseif($request->filled('sub_location_id')){
-            $assetItems->whereHas('asset', function($query) use ($request) {
-                $query->where('sub_location_id', $request->sub_location_id);
+                $query->where('district_id', $request->district_id);
             });
         }
 
@@ -81,15 +97,6 @@ class AssetController extends Controller
         // Status filter
         if ($request->filled('status')) {
             $assetItems->where('status', $request->status);
-        }
-
-        // Depreciation filter
-        if ($request->filled('depreciation_filter')) {
-            if ($request->depreciation_filter === 'with_depreciation') {
-                $assetItems->whereHas('depreciation');
-            } elseif ($request->depreciation_filter === 'without_depreciation') {
-                $assetItems->whereDoesntHave('depreciation');
-            }
         }
 
         // New filters
@@ -134,15 +141,14 @@ class AssetController extends Controller
         $assetItems->orderBy('created_at', 'desc');
 
         $assetItems = $assetItems->with([
-            'asset:id,asset_number,acquisition_date,fund_source_id,region_id,asset_location_id,sub_location_id',
+            'asset:id,asset_number,acquisition_date,fund_source_id,region_id,district_id,facility_id',
             'asset.fundSource:id,name',
             'asset.region:id,name',
-            'asset.assetLocation:id,name',
-            'asset.subLocation:id,name',
+            'asset.district:id,name',
+            'asset.facility:id,name',
             'category:id,name',
             'type:id,name',
-            'assignee:id,name',
-            'depreciation:id,asset_item_id,current_value,accumulated_depreciation,depreciation_method,depreciation_start_date'
+            'assignee:id,name'
         ])
             ->paginate($request->input('per_page', 10), ['*'], 'page', $request->input('page', 1))
             ->withQueryString();
@@ -155,15 +161,17 @@ class AssetController extends Controller
             });
         })->count();
 
-        $locations = AssetLocation::with('subLocations')->get();
+        $facilities = Facility::orderBy('name')->get(['id', 'name', 'district', 'region']);
+        $districts = District::orderBy('name')->get();
         $categories = AssetCategory::select('id','name')->get();
         $types = AssetType::select('id','name','asset_category_id')->get();
         $assignees = Assignee::select('id','name')->get();
         
         return inertia('Assets/Index', [
-            'locations' => $locations,
+            'facilities' => $facilities,
+            'districts' => $districts,
             'assets' => AssetItemResource::collection($assetItems),
-            'filters' => $request->only('page','per_page','search','region_id','location_id','sub_location_id','fund_source_id','category_id','type_id','assignee_id','acquisition_from','acquisition_to','created_from','created_to','status','depreciation_filter'),
+            'filters' => $request->only('page','per_page','search','region_id','district_id','location_id','sub_location_id','fund_source_id','category_id','type_id','assignee_id','acquisition_from','acquisition_to','created_from','created_to','status'),
             'assetsCount' => $count,
             'regions' => Region::get(),
             'fundSources' => FundSource::get(),
@@ -187,6 +195,7 @@ class AssetController extends Controller
         $categories = AssetCategory::all();
         $fundSources = FundSource::get();
         $regions = Region::get();
+        $districts = District::get();
         $types = AssetType::all();
         $users = User::select('id','name','email')->get();
         $assignees = Assignee::select('id','name')->orderBy('name')->get();
@@ -197,6 +206,7 @@ class AssetController extends Controller
             'categories' => $categories,
             'fundSources' => $fundSources,
             'regions' => $regions,
+            'districts' => $districts,
             'types' => $types,
             'users' => $users,
             'assignees' => $assignees,
@@ -222,9 +232,8 @@ class AssetController extends Controller
                     'acquisition_date' => 'required|date',
                     'fund_source_id' => 'required|exists:fund_sources,id',
                     'region_id' => 'required|exists:regions,id',
-                    'asset_location_id' => 'required|exists:asset_locations,id',
-                    'sub_location_id' => 'nullable|exists:sub_locations,id',
-                    'facility_id' => 'nullable|exists:facilities,id',
+                    'district_id' => 'required|exists:districts,id',
+                    'facility_id' => 'required|exists:facilities,id',
                 ]);
 
                 // Validate asset items array
@@ -257,10 +266,10 @@ class AssetController extends Controller
                     $validatedAsset['sub_location_id'] = null;
                 }
 
-                // Handle nullable facility_id
-                if (empty($validatedAsset['facility_id'])) {
-                    $validatedAsset['facility_id'] = null;
-                }
+        // Handle nullable facility_id
+        // if (empty($validatedAsset['facility_id'])) {
+        //     $validatedAsset['facility_id'] = null;
+        // }
 
                 // Create the main asset record
                 $asset = Asset::create($validatedAsset);
@@ -354,7 +363,7 @@ class AssetController extends Controller
     public function edit(Asset $asset)
     {
         // Load the asset with its actual relationships, filtered by organization through asset items
-        $asset = Asset::with(['region', 'assetLocation', 'subLocation', 'fundSource', 'facility'])
+        $asset = Asset::with(['region', 'district', 'fundSource', 'facility'])
             ->whereHas('assetItems', function($query) {
                 if (auth()->check() && auth()->user() && !empty(auth()->user()->organization)) {
                     $query->where('organization', auth()->user()->organization);
@@ -365,10 +374,11 @@ class AssetController extends Controller
         // Get the first asset item for additional details
         $assetItem = $asset->assetItems()->with(['category', 'type', 'assignee'])->first();
         
-        $locations = AssetLocation::orderBy('name')->get();
+        $locations = Facility::orderBy('name')->get(['id', 'name', 'district', 'region']);
         $categories = AssetCategory::orderBy('name')->get();
         $fundSources = FundSource::orderBy('name')->get();
         $regions = Region::orderBy('name')->get();
+        $districts = District::orderBy('name')->get();
         $types = AssetType::orderBy('name')->get();
         $assignees = Assignee::select('id','name')->orderBy('name')->get();
         $facilities = Facility::orderBy('name')->get(['id', 'name', 'district', 'region']);
@@ -380,6 +390,7 @@ class AssetController extends Controller
             'categories' => $categories,
             'fundSources' => $fundSources,
             'regions' => $regions,
+            'districts' => $districts,
             'types' => $types,
             'assignees' => $assignees,
             'facilities' => $facilities,
@@ -414,7 +425,7 @@ class AssetController extends Controller
                     'asset_item_data.asset_name' => 'required|string|max:255',
                     'asset_item_data.serial_number' => 'required|string|max:255',
                     'asset_item_data.original_value' => 'required|numeric|min:0',
-                    'asset_item_data.status' => 'required|string|in:functioning,not_functioning,pending_approval,in_use,maintenance,retired,disposed',
+                    'asset_item_data.status' => 'required|string|in:functioning,not_functioning,pending_approval,maintenance,disposed',
                     'asset_item_data.assignee_id' => 'nullable|exists:assignees,id',
                 ]);
 
@@ -459,7 +470,7 @@ class AssetController extends Controller
      */
     public function locationIndex()
     {
-        $locations = AssetLocation::all();
+        $locations = Facility::all();
         return Inertia::render('Assets/Locations/Index', [
             'locations' => $locations
         ]);
@@ -471,7 +482,7 @@ class AssetController extends Controller
     public function subLocationIndex()
     {
         $subLocations = SubLocation::with('location')->get();
-        $locations = AssetLocation::all();
+        $locations = Facility::all();
         return Inertia::render('Assets/SubLocations/Index', [
             'subLocations' => $subLocations,
             'locations' => $locations
@@ -480,7 +491,7 @@ class AssetController extends Controller
 
     public function getSubLocations($locationId)
     {
-        $subLocations = SubLocation::where('asset_location_id', $locationId)->get();
+        $subLocations = SubLocation::where('facility_id', $locationId)->get();
         return response()->json($subLocations);
     }
 
@@ -495,12 +506,12 @@ class AssetController extends Controller
         try {
             $request->validate([
                 'name' => 'required|string|max:255',
-                'asset_location_id' => 'required|exists:asset_locations,id'
+                'asset_location_id' => 'required|exists:facilities,id'
             ]);
             
             $subLocation = SubLocation::create([
                 'name' => $request->name,
-                'asset_location_id' => $request->asset_location_id
+                'facility_id' => $request->asset_location_id
             ]);
             
             return response()->json($subLocation, 201);
@@ -601,7 +612,7 @@ class AssetController extends Controller
             });
         
         $assets = $assets
-                      ->with(['region', 'assetLocation', 'subLocation'])
+                      ->with(['region', 'facility', 'subLocation'])
                       ->get(['id', 'asset_number', 'acquisition_date'])
                       ->map(function($asset) {
                           return [
@@ -609,7 +620,7 @@ class AssetController extends Controller
                               'asset_number' => $asset->asset_number,
                               'acquisition_date' => $asset->acquisition_date,
                               'region_name' => $asset->region?->name,
-                              'location_name' => $asset->assetLocation?->name,
+                              'location_name' => $asset->facility?->name,
                               'sub_location_name' => $asset->subLocation?->name,
                           ];
                       })
@@ -629,7 +640,7 @@ class AssetController extends Controller
                     'assetItems.assignee', 
                     'fundSource', 
                     'region', 
-                    'assetLocation', 
+                    'facility', 
                     'subLocation',
                     'submittedBy',
                     'reviewedBy',
@@ -682,7 +693,7 @@ class AssetController extends Controller
 
             // Update all asset items to approved status
             $asset->assetItems()->update([
-                'status' => 'in_use'
+                'status' => 'Functioning'
             ]);
 
             // Create history records
@@ -944,7 +955,7 @@ class AssetController extends Controller
                     ]);
 
                     $asset->assetItems()->update([
-                        'status' => 'in_use'
+                        'status' => 'functioning'
                     ]);
 
                     $approvedCount++;
@@ -994,20 +1005,20 @@ class AssetController extends Controller
                 'assignment_notes' => 'nullable|string',
                 'update_asset_location' => 'nullable|boolean',
                 'region_id' => 'nullable|exists:regions,id',
-                'asset_location_id' => 'nullable|exists:asset_locations,id',
-                'sub_location_id' => 'nullable|exists:sub_locations,id',
+                'district_id' => 'nullable|exists:districts,id',
+                'facility_id' => 'nullable|exists:facilities,id',
             ]);
 
             // For asset transfers, we typically don't want to change the asset's location
             // as it affects all asset items under that asset. Instead, we only update
             // the specific asset item's assignee and status.
             
-            // Only update asset location if explicitly requested (for bulk transfers)
+            // Only update asset location if explicitly requested
             if ($request->has('update_asset_location') && $request->update_asset_location) {                
                 $asset->update([
                     'region_id' => $request->region_id,
-                    'asset_location_id' => $request->asset_location_id,
-                    'sub_location_id' => $request->sub_location_id,
+                    'district_id' => $request->district_id,
+                    'facility_id' => $request->facility_id,
                 ]);
             }
 
@@ -1021,7 +1032,7 @@ class AssetController extends Controller
             if ($assetItem) {
                 $assetItem->update([
                     'assignee_id' => $request->assignee_id,
-                    'status' => 'in_use',
+                    'status' => 'functioning',
                 ]);
             }
 
@@ -1041,7 +1052,7 @@ class AssetController extends Controller
 
             return response()->json([
                 'message' => 'Asset transferred successfully',
-                'asset' => $asset->fresh(['assetItems.assignee', 'region', 'assetLocation', 'subLocation'])
+                'asset' => $asset->fresh(['assetItems.assignee', 'region', 'facility', 'subLocation'])
             ], 200);
         } catch (\Throwable $th) {
             return response()->json(['error' => 'Transfer failed: ' . $th->getMessage()], 500);
@@ -1060,7 +1071,8 @@ class AssetController extends Controller
                 'documents',
                 'assetItems.assetHistory.performer',
                 'region',
-                'assetLocation',
+                'district',
+                'facility',
                 'subLocation',
                 'fundSource',
                 'submittedBy',
@@ -1115,7 +1127,8 @@ class AssetController extends Controller
                     $query->orderBy('performed_at', 'desc');
                 },
                 'asset.region',
-                'asset.assetLocation',
+                'asset.district',
+                'asset.facility',
                 'asset.subLocation',
                 'asset.fundSource'
             ]);
@@ -1146,7 +1159,8 @@ class AssetController extends Controller
                     $query->orderBy('performed_at', 'desc');
                 },
                 'asset.region',
-                'asset.assetLocation',
+                'asset.district',
+                'asset.facility',
                 'asset.subLocation',
                 'asset.fundSource'
             ]);
