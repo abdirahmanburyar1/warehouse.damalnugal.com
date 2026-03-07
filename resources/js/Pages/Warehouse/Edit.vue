@@ -278,6 +278,7 @@ const ADD_NEW_DISTRICT_OPTION = "+ Add New District";
 
 // Form data
 const form = ref({
+    id: props.warehouse.id,
     name: props.warehouse.name,
     address: props.warehouse.address,
     manager_name: props.warehouse.manager_name,

@@ -64,6 +64,7 @@ class WarehouseController extends Controller
             'manager_phone' => 'nullable|string|max:50',
             'status' => 'string|max:50',
         ]);
+        dd($request->all());
 
             $warehouse = Warehouse::updateOrCreate(
                 ['id' => $request->id],
